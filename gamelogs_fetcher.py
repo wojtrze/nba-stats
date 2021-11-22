@@ -191,7 +191,7 @@ def get_gamelog_with_soup(player_id):
     #             '5c': 'NicolasClaxton'}
 
 def get_last_fetching_date():
-    return "2021-11-19"
+    return "2021-11-20"
 
 def update_gamelogs():
     last_fetching_date = get_last_fetching_date()
@@ -222,15 +222,15 @@ if __name__ == '__main__':
 
     # teams = teams_ids()
     teams = [
-             'bos',
-             'bkn',
-             'ny',
-             'phi',
-             'tor',
-             'chi',
-             'cle',
-             'det',
-             'ind',
+             # 'bos',
+             # 'bkn',
+             # 'ny',
+             # 'phi',
+             # 'tor',
+             # 'chi',
+             # 'cle',
+             # 'det',
+             # 'ind',
              'mil',
              'den',
              'min',
