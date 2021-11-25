@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 
 MINSLEEP = 1
-MAXSLEEP = 3
+MAXSLEEP = 2
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'}
 
 
@@ -191,7 +191,7 @@ def get_gamelog_with_soup(player_id):
     #             '5c': 'NicolasClaxton'}
 
 def get_last_fetching_date():
-    return "2021-11-20"
+    return "2021-11-23"
 
 def update_gamelogs():
     last_fetching_date = get_last_fetching_date()
@@ -222,15 +222,15 @@ if __name__ == '__main__':
 
     # teams = teams_ids()
     teams = [
-             # 'bos',
-             # 'bkn',
-             # 'ny',
-             # 'phi',
-             # 'tor',
-             # 'chi',
-             # 'cle',
-             # 'det',
-             # 'ind',
+             'bos',
+             'bkn',
+             'ny',
+             'phi',
+             'tor',
+             'chi',
+             'cle',
+             'det',
+             'ind',
              'mil',
              'den',
              'min',
