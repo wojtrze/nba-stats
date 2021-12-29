@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 
 MINSLEEP = 1
-MAXSLEEP = 2
+MAXSLEEP = 1
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'}
 
 
@@ -191,7 +191,7 @@ def get_gamelog_with_soup(player_id):
     #             '5c': 'NicolasClaxton'}
 
 def get_last_fetching_date():
-    return "2021-11-23"
+    return "2021-12-26"
 
 def update_gamelogs():
     last_fetching_date = get_last_fetching_date()
@@ -245,7 +245,7 @@ if __name__ == '__main__':
              'atl',
              'cha',
              'mia',
-             'orl',
+              'orl',
              'wsh',
              'dal',
              'hou',
@@ -255,25 +255,3 @@ if __name__ == '__main__':
 
     print(teams)
     update_gamelogs()
-
-
-
-
-
-
-
-    # print(team_page_url(teams_ids()[3]))
-    # df = pd.DataFrame(league_gamelogs)
-    # df.to_csv('all_nba_players.csv')
-    # # print(df)
-    # print(players_gamelogs(teams_stat_pages()[1]))
-    # print(get_game_boxscores('401365892', 'home'))
-
-    # b = scrap_gamelog_page(f"https://www.espn.com/nba/player/gamelog/_/id/4277919/type/nba/year/2020", season_start_yyyy='2020')
-    # a = player_gamelog('4277919')
-
-    # player_ids = ['4277919']  # get_all_players_ids
-    # all_players_data = pd.DataFrame()
-    # for player_id in player_ids:
-    #     all_players_data = pd.concat([all_players_data, player_gamelog(player_id)])
-    # print(all_players_data)

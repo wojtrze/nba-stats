@@ -43,7 +43,7 @@ headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/201
 
 # w offers z jsona szukam zakładów na ARP
 def game_betoffer_list(event_id,bet_type):
-    sleep(randint(2, 4))
+    sleep(randint(1, 3))
     url = f"https://eu-offering.kambicdn.org/offering/v2018/ub/betoffer/event/{event_id}.json?lang=pl_PL&market=PL&ncid=1685181683"
     resp = requests.get(url, headers)
     a = resp.json()
@@ -99,7 +99,7 @@ def game_betoffer_list(event_id,bet_type):
 
 
 def todays_games_list():
-    url = "https://pl.unibet-41.com/sportsbook-feeds/views/filter/basketball/nba/matches?includeParticipants=true&useCombined=true&ncid=1635861681"
+    url = "https://pl.unibet-42.com/sportsbook-feeds/views/filter/basketball/nba/matches?includeParticipants=true&useCombined=true&ncid=1635861681"
     resp = requests.get(url)
     a = resp.json()
     events = a['layout']['sections'][1]['widgets'][0]['matches']['events']
