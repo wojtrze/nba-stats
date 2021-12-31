@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-MINSLEEP = 1
+MINSLEEP = 0
 MAXSLEEP = 1
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'}
 
@@ -190,12 +190,15 @@ def get_gamelog_with_soup(player_id):
     #             '4pf': 'BruceBrown',
     #             '5c': 'NicolasClaxton'}
 
-def get_last_fetching_date():
-    return "2021-12-26"
+def get_last_fetching_date(team_id):
+    team_game_dates_df = pd.DataFrame()
+    team_game_dates_df = pd.read_csv(f'team-{team_id}.csv')
+    #team_game_dates_df['Date'] = pd.to_datetime(team_game_dates_df['Date'])
+    return team_game_dates_df['Date'].max()
 
 def update_gamelogs():
-    last_fetching_date = get_last_fetching_date()
     for team_id in teams:
+        last_fetching_date = get_last_fetching_date(team_id)
         team_gamelogs_df = pd.DataFrame()
         player_id_list = player_ids_for_team(team_id)
         print(f'for team {team_id} scrapping data for players: {player_id_list}')
@@ -207,8 +210,8 @@ def update_gamelogs():
             #current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
             try:
                 current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
-                print(current_players_gamelog[['OPP', 'Result', 'MIN', 'FG%', 'REB', 'AST',
-                                               'PTS', 'FGA', 'type', 'Date', 'player_name']])
+                print(current_players_gamelog[['OPP', 'MIN', 'FG%', 'REB', 'AST',
+                                               'PTS', 'type', 'Date', 'player_name']])
             except:
                 print("coś nie tak")
             team_gamelogs_df = pd.concat([team_gamelogs_df, current_players_gamelog])
@@ -245,13 +248,14 @@ if __name__ == '__main__':
              'atl',
              'cha',
              'mia',
-              'orl',
+             'orl',
              'wsh',
              'dal',
              'hou',
              'mem',
              'no',
-             'sa']
+             'sa'
+    ]
 
     print(teams)
     update_gamelogs()
