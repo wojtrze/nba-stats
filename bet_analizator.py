@@ -157,9 +157,9 @@ def this_season_analysis(bets):
     for b in bets:
         list_of_dicts.append(check_bet(b, desc="LG3", weight=0.35, seasons=[2021], last_x=3)) # ostatnie 4 mecze. priorytet 1.
         list_of_dicts.append(check_bet(b, desc="LG5", weight=0.20, seasons=[2021], last_x=5)) # ostatnie 4 mecze. priorytet 1.
-        list_of_dicts.append(check_bet(b, desc="LG5-GLOC", weight=0.35, seasons=[2021], location_sensitive=True, last_x=5)) # ostatnie 4 gry home/away dla bieżącego zakładu. priorytet 2. pokazuje wypływ home/away. do porównania z LG8 i LG4 priorytet 2
-        list_of_dicts.append(check_bet(b, desc="LG15", weight=0.10, seasons=[2021], last_x=15)) # ostatnie 10 meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
-        #list_of_dicts.append(check_bet(b, desc="LG10", weight=3, seasons=[2021], last_x=8)) # ostatnie osiem meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
+        list_of_dicts.append(check_bet(b, desc="LG5-GLOC", weight=0.25, seasons=[2021], location_sensitive=True, last_x=5)) # ostatnie 4 gry home/away dla bieżącego zakładu. priorytet 2. pokazuje wypływ home/away. do porównania z LG8 i LG4 priorytet 2
+        list_of_dicts.append(check_bet(b, desc="LG20", weight=0.20, seasons=[2021], last_x=20)) # ostatnie 10 meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
+        #list_of_dicts.append(check_bet(b, desc="LG3OPP", weight=0.15, seasons=[2021], last_x=3, direct=True)) # ostatnie osiem meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
         #list_of_dicts.append(check_bet(b, desc="LG12", weight=3, seasons=[2021], last_x=12)) # oczekiwania względem sezonu priorytet 4
     # todo można wyciągać jakieś wnioski z porównań
     # LG4-LOC vs LG4 - if there's no difference => players plays the same no matter the location.

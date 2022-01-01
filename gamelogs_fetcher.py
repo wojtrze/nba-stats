@@ -195,6 +195,7 @@ def get_last_fetching_date(team_id):
     team_game_dates_df = pd.read_csv(f'team-{team_id}.csv')
     #team_game_dates_df['Date'] = pd.to_datetime(team_game_dates_df['Date'])
     return team_game_dates_df['Date'].max()
+    #return "2021-10-18"
 
 def update_gamelogs():
     for team_id in teams:
@@ -214,9 +215,12 @@ def update_gamelogs():
                                                'PTS', 'type', 'Date', 'player_name']])
             except:
                 print("coś nie tak")
+                print(current_players_gamelog)
             team_gamelogs_df = pd.concat([team_gamelogs_df, current_players_gamelog])
         df = pd.DataFrame(team_gamelogs_df)
-        df.to_csv(f'team-{team_id}.csv', mode='a', header=False)
+        team_gamelogs_file = f'team-{team_id}.csv'
+        df.to_csv(team_gamelogs_file , mode='a', header=False)
+        #pd.read_csv(team_gamelogs_file).append(df).drop_duplicates().to_csv(team_gamelogs_file, index=False)
 
 if __name__ == '__main__':
     pd.set_option('display.max_columns', None)
@@ -256,6 +260,7 @@ if __name__ == '__main__':
              'no',
              'sa'
     ]
+
 
     print(teams)
     update_gamelogs()
