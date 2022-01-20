@@ -64,8 +64,9 @@ def scrap_gamelog_page(players_gamelog_url, season_start_yyyy):
     for pd_table in pandas_html:
         if 'Date' not in pd_table.columns:
             continue
+        # add to the filter value, that error occurs (application exit )
         filt = (~pd_table['Date'].str.contains(
-            'acquired|Finals|Play-In|Game|Conference|RISING|PRESEASON|january|february|march|april|may|june|july|august|september|october|november|december',
+            'acquired|Finals|Play-In|Game|Conference|RISING|PRESEASON|january|february|march|april|may|june|july|august|september|october|november|december|from',
             na=False, case=False))
         current_dataframe = pd_table[filt]
         filtered_gamelog = pd.concat([filtered_gamelog, current_dataframe])

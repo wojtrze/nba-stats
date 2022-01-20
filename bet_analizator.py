@@ -6,6 +6,7 @@ from pandasgui import show
 
 # import link as link
 import requests
+from bet_fetcher import *
 from bs4 import BeautifulSoup
 import pandas as pd
 
@@ -70,7 +71,7 @@ def all_nba_players():
         'no',
         'sa']
 
-    players = pd.DataFrame
+    players = pd.DataFrame()
     for team_id in teams:
         team_players = pd.read_csv(f'team-{team_id}.csv')
         players = pd.concat([players, team_players])
@@ -131,32 +132,32 @@ def check_bet(bet, desc="description", weight=1, seasons=None, location_sensitiv
     min_diff = min([abs(bet['line'] - lower_bound), abs(bet['line'] - upper_bound)])
     if is_in_percentiles:
         min_diff = 0 - min_diff
-    # over_under = todo
     uptolow = upper_bound - lower_bound
     offset_to_range = min_diff / uptolow
-    # print(f"betline {bet['line']} divides resultset to {} percent below")
+    # TODO: print(f"betline {bet['line']} divides resultset to {} percent below")
     game = f"{bet['away']} @ {bet['home']}"
     under_rating = weight*upper_offset
     over_rating = weight*lower_offset
     bet_date = bet['changed_date']
     over_line_count = player_df[(player_df[stats] > bet['line'])].shape[0]
     under_line_count = player_df[(player_df[stats] < bet['line'])].shape[0]
-    # with player_df[(player_df[stats] > bet['line'])] as over_df:
-    #     over_line_count = over_df.shape[0]
-    # with player_df[(player_df[stats] < bet['line'])] as under_df:
-    #     under_line_count = under_df.shape[0]
-    return {"player": player_name_to_check, "game": game, "type": bet['bet_type'], "betline": bet['line'], "desc": desc, "over_rtg": over_rating, "under_rtg": under_rating,
+
+    #returns partial scoring dict (bet analysis for certain part of games, e.g. Last 5 games home/away, vs opponent, etc.)
+    #returned partial scoring contains over/under_rtg, quantile range, bet_offset, bet data, over/under_count
+    #this is the place where all parameters to be taken into analysis of Prediction(scoring) and PredAc Predicdtion Assessment Accuracy
+    if type(bet) != dict:
+        bet = bet.to_dict()
+    return bet | {"player": player_name_to_check, "game": game, "type": bet['bet_type'], "betline": bet['line'], "desc": desc, "over_rtg": over_rating, "under_rtg": under_rating,
             "q20": lower_bound, "median": median_line, "q80": upper_bound, "under": lower_offset, "over": upper_offset, "range": uptolow,
             "offset_to_range": offset_to_range, "seasons": seasons, "location": location_sensitive, "direct": direct,
-            "last_x": last_x, "bet_date": bet_date, "over_count": over_line_count, "under_count": under_line_count}
-    # return f"{player_name_to_check:<17} betline: {bet['line']:<4} is_in_percentiles:{is_in_percentiles} ({lower_bound:.2f} - {upper_bound:.2f}) *** {min_diff:.2f}"
+            "last_x": last_x, "bet_date": bet_date, "over_count": over_line_count, "under_count": under_line_count, "date": bet['changed_date'][:10]}
 
 
 def this_season_analysis(bets):
     list_of_dicts = []
     for b in bets:
-        list_of_dicts.append(check_bet(b, desc="LG3", weight=0.35, seasons=[2021], last_x=3)) # ostatnie 4 mecze. priorytet 1.
-        list_of_dicts.append(check_bet(b, desc="LG5", weight=0.20, seasons=[2021], last_x=5)) # ostatnie 4 mecze. priorytet 1.
+        list_of_dicts.append(check_bet(b, desc="LG3", weight=0.25, seasons=[2021], last_x=3)) # ostatnie 4 mecze. priorytet 1.
+        list_of_dicts.append(check_bet(b, desc="LG5", weight=0.30, seasons=[2021], last_x=5)) # ostatnie 4 mecze. priorytet 1.
         list_of_dicts.append(check_bet(b, desc="LG5-GLOC", weight=0.25, seasons=[2021], location_sensitive=True, last_x=5)) # ostatnie 4 gry home/away dla bieżącego zakładu. priorytet 2. pokazuje wypływ home/away. do porównania z LG8 i LG4 priorytet 2
         list_of_dicts.append(check_bet(b, desc="LG20", weight=0.20, seasons=[2021], last_x=20)) # ostatnie 10 meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
         #list_of_dicts.append(check_bet(b, desc="LG3OPP", weight=0.15, seasons=[2021], last_x=3, direct=True)) # ostatnie osiem meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
@@ -175,6 +176,38 @@ def all_seasons_analysis(bets):
         list_of_dicts.append(check_bet(b, desc="LS2-GLOC", seasons=[2020, 2021], location_sensitive=True))
         list_of_dicts.append(check_bet(b, desc="LS2-OPP", seasons=[2020, 2021], direct=True))
     return list_of_dicts
+
+def players_in_bets(bets):
+    #players = game_players(bet['home'], bet['away'])
+    players = pd.DataFrame()
+    for bet in bets:
+        player_glogs_for_panda = players_by_bet(bet)
+        if bet["name_ESPN"] in players:
+            continue
+        players = pd.concat([players, player_glogs_for_panda])
+    players = players.drop_duplicates(subset=["Date", "player_id"])
+    return players[["player_name", "team", "OPP", "MIN",  "ARP", "ARP36", "FG%", "FGA", "FGM", "PTS", "PTS36","REB", "AST", "Date", "type"]]
+
+def bets_scoring_df(bets):
+    this_season_dict_list = this_season_analysis(bets) # 4 analizy l5g, l5g loc, etc.
+    partial_scores_df = pd.DataFrame(this_season_dict_list)
+    scoring_df = partial_scores_df.groupby(['player', 'type'], as_index=False).agg({'over_rtg': 'mean', 'under_rtg': 'mean', 'player': 'first', 'game': 'first', 'type': 'first', 'q20': 'mean', 'betline': 'first' , 'q80': 'mean', 'under_count': 'sum', 'over_count': 'sum', 'date': 'first' })
+    return scoring_df
+
+def players_by_bet(bet, seasons = None, location_sensitive = False, direct = False):
+    players = game_players(bet['home'], bet['away'])
+    player_name_to_check = bet['name_ESPN']
+    player_df = players[(players['player_name'] == player_name_to_check)]
+    player_df['ARP'] = player_df['AST'] + player_df['REB'] + player_df['PTS']
+
+    player_df['ARP36'] = player_df['ARP']/player_df['MIN']*36
+    player_df['PTS36'] = player_df['PTS']/player_df['MIN']*36
+    if seasons is not None:
+        player_df = player_df[player_df['season_id'].isin(seasons)]
+    if location_sensitive:
+        player_df = player_df[player_df['gametype'] == player_df['type']]
+    return player_df
+
 
 def check_scorings_accuracy(scoring_df):
     pass
@@ -195,37 +228,74 @@ def describe_with_insights_t(df):
 def player_desc_for_df(df, player_name):
     return df[df['player_name'] == player_name].describe(percentiles=[0.35, 0.5, 0.65])
 
-#
-# nba = game_players(home='sa', away='den')
-# player_to_check = "DejounteMurray"
-# nba = add_columns(nba)
-# nba['OPP'] = nba['OPP'].str.lower()
-# nba.drop(nba[nba['season_id'] == 2017].index, inplace=True)
-# direct = direct_matchups(nba)
-# home = nba[nba['gametype'] == 'home']
-# home_direct = direct[direct['gametype'] == 'home']
-# away = nba[nba['gametype'] == 'away']
-# away_direct = direct[direct['gametype'] == 'away']
-# hhaa = nba[nba['gametype'] == nba['type']]
-#
-#
-#
-#
-#
-# hhaa[(hhaa['player_name'] == player_to_check)].describe()
-#
-# h8 = direct[(direct['gametype'] == direct['type']) & (direct['gametype'] == 'home') & (
-#     direct.player_id.isin(home_8_rotation))]  # home team 8 rotation for games played at home
-#
-# a8 = direct[(direct['gametype'] == direct['type']) & (direct['gametype'] == 'away') & (
-#     direct.player_id.isin(away_8_rotation))]  # away team 8 rotation for games played away
-#
-#
-#
-#
-# direct[direct['player_name'] == player_to_check].describe(percentiles=[0.35, 0.5, 0.65])
-#
-# # players_df[(players_df['player_name'] == player_to_check) & (players_df['gametype'] == players_df['type'])].describe(
-# #     percentiles=[0.35, 0.5, 0.65])  # only home or away
-# hhaa[(hhaa['player_name'] == player_to_check)]['ARP'].hist(density=True, histtype='step')
-# direct_matchups(hhaa[(hhaa['player_name'] == player_to_check)])['ARP'].hist(density=True, histtype='step')
+
+def provide_stored_bet_results(b):
+    list_of_results = []
+    #b = stored_bets()  # .to_dict('records'), już nie pamiętam czemu
+    #all_players = all_nba_players() # fixme coś nie działa, a w ogole trzeba to przemyśleć
+    for index, row in b.iterrows():
+        all_players = game_players(row['home'], row['away'])
+        bet_analysis_dict = {}
+        bet_date = row['changed_date'][:10]
+        bet_player = row['name_ESPN']
+        bet_type = row['bet_type']
+        bet_line = row['line']
+        dfn = all_players[(all_players['player_name'] == bet_player)]
+        dfd = all_players[(all_players['Date'] == bet_date)]
+        player_df = all_players[(all_players['player_name'] == bet_player) & (all_players['Date'] == bet_date)]
+        if player_df.empty:
+            print(f"gamelog not found for {bet_player} on {bet_date} {row['away']}@{row['home']}")
+            continue
+        # jakiś wyjątek, jak nie ma playera
+        actual = 0
+        if bet_type == "PTS":
+            actual = player_df["PTS"]
+        if bet_type == "ARP":
+            actual = player_df["PTS"] + player_df["REB"] + player_df["AST"]
+        actual = int(actual)
+        if actual > bet_line:
+            result = "over"
+        else:
+            result = "under"
+        bet_result = row
+        # extend with result data
+        bet_result["diff"] = actual - bet_line
+        bet_result["actual"] = actual
+        bet_result["result"] = result
+        # zrób scoring i załącz do betu ratingi, ovr/undr
+        # bet_analysis_dict["ovr_rating"] = "na"
+        # bet_analysis_dict["undr_rating"] ="na"
+        # bet_analysis_dict["ovr_count"] ="na"
+        # bet_analysis_dict["undr_count"] ="na"
+        list_of_results.append(bet_result)
+
+    return list_of_results
+
+def provide_results_with_bet_scoring(list_of_results):
+    #parametr wejściowy ma w sobie wyniki list_of_results, bo to one służą do porównania względem scoringówn
+    #results and scoring important data
+    #list_of_scorings = bets_scoring_df(bets) # scoring + over under ratings dla każdego zakładu
+    list_of_results_with_scoring = this_season_analysis(list_of_results)
+    #FIXME złączyć wyniki zakładów ze scoringiem  określonym w
+    # for index, row in list_of_results.iterrows():
+    #     scored_bet_wit_result = row
+    #     this_season_analysis(bets)
+    # list_of_results_with_scoring = list_of_scorings + list_of_results
+    return list_of_results_with_scoring
+
+if __name__ == '__main__':
+    bets_df = stored_bets() # FIXME
+    bets = bets_df.to_dict('records')
+    #bets = all_today_bets()
+    #assessments = bets_scoring_df(bets)
+    #assessments - scoring, data, itp. Trzeba pobrać wyniki po dacie i sprawdzić wynik
+    #print(assessments)
+    bets = stored_bets()
+    #bets_scorings = this_season_analysis(bets)
+    bets_results = provide_stored_bet_results(bets)
+    scored_bets_results = provide_results_with_bet_scoring(bets_results)
+    print(scored_bets_results)
+
+    bets = stored_bets()
+    scored_bets_results = provide_results_with_bet_scoring(provide_stored_bet_results(bets))
+    show(pd.DataFrame(scored_bets_results))
