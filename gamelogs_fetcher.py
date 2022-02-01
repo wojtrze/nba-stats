@@ -118,7 +118,7 @@ def scrap_gamelog_page(players_gamelog_url, season_start_yyyy):
     filtered_gamelog['FTM'] = pd.to_numeric(filtered_gamelog['FTM'])
     filtered_gamelog['FTA'] = pd.to_numeric(filtered_gamelog['FTA'])
     filtered_gamelog['season_id'] = season_start_yyyy
-    print(f'Gamelog from {season_start_yyyy} fetched')
+    #print(f'Gamelog from {season_start_yyyy} fetched')
     season_start_date = "18-10-2021"
     filtered_gamelog = filtered_gamelog[filtered_gamelog['Date'] > season_start_date]
     return filtered_gamelog
@@ -203,16 +203,17 @@ def update_gamelogs():
         last_fetching_date = get_last_fetching_date(team_id)
         team_gamelogs_df = pd.DataFrame()
         player_id_list = player_ids_for_team(team_id)
-        print(f'for team {team_id} scrapping data for players: {player_id_list}')
+        #print(f'for team {team_id} scrapping data for players: {player_id_list}')
         for player_espn_id in player_id_list:
-            print(f'processing player: {player_espn_id} from {team_id}')
+            #print(f'processing player: {player_espn_id} from {team_id}')
             current_players_gamelog = player_gamelog_2021(player_espn_id)
             current_players_gamelog['team'] = team_id
             #filter out already updated for current season - maybe to try-except
             #current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
             try:
                 current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
-                print(current_players_gamelog[['OPP', 'MIN', 'FG%', 'REB', 'AST',
+                if not current_players_gamelog.empty:
+                    print(current_players_gamelog[['OPP', 'MIN', 'FG%', 'REB', 'AST',
                                                'PTS', 'type', 'Date', 'player_name']])
             except:
                 print("coś nie tak")
