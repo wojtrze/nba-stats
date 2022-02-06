@@ -118,7 +118,7 @@ def scrap_gamelog_page(players_gamelog_url, season_start_yyyy):
     filtered_gamelog['FTM'] = pd.to_numeric(filtered_gamelog['FTM'])
     filtered_gamelog['FTA'] = pd.to_numeric(filtered_gamelog['FTA'])
     filtered_gamelog['season_id'] = season_start_yyyy
-    #print(f'Gamelog from {season_start_yyyy} fetched')
+    # print(f'Gamelog from {season_start_yyyy} fetched')
     season_start_date = "18-10-2021"
     filtered_gamelog = filtered_gamelog[filtered_gamelog['Date'] > season_start_date]
     return filtered_gamelog
@@ -191,38 +191,41 @@ def get_gamelog_with_soup(player_id):
     #             '4pf': 'BruceBrown',
     #             '5c': 'NicolasClaxton'}
 
+
 def get_last_fetching_date(team_id):
     team_game_dates_df = pd.DataFrame()
     team_game_dates_df = pd.read_csv(f'team-{team_id}.csv')
-    #team_game_dates_df['Date'] = pd.to_datetime(team_game_dates_df['Date'])
+    # team_game_dates_df['Date'] = pd.to_datetime(team_game_dates_df['Date'])
     return team_game_dates_df['Date'].max()
-    #return "2021-10-18"
+    # return "2021-10-18"
+
 
 def update_gamelogs():
     for team_id in teams:
         last_fetching_date = get_last_fetching_date(team_id)
         team_gamelogs_df = pd.DataFrame()
         player_id_list = player_ids_for_team(team_id)
-        #print(f'for team {team_id} scrapping data for players: {player_id_list}')
+        # print(f'for team {team_id} scrapping data for players: {player_id_list}')
         for player_espn_id in player_id_list:
-            #print(f'processing player: {player_espn_id} from {team_id}')
+            # print(f'processing player: {player_espn_id} from {team_id}')
             current_players_gamelog = player_gamelog_2021(player_espn_id)
             current_players_gamelog['team'] = team_id
-            #filter out already updated for current season - maybe to try-except
-            #current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
+            # filter out already updated for current season - maybe to try-except
+            # current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
             try:
                 current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
                 if not current_players_gamelog.empty:
                     print(current_players_gamelog[['OPP', 'MIN', 'FG%', 'REB', 'AST',
-                                               'PTS', 'type', 'Date', 'player_name']])
+                                                   'PTS', 'type', 'Date', 'player_name']])
             except:
                 print("coś nie tak")
                 print(current_players_gamelog)
             team_gamelogs_df = pd.concat([team_gamelogs_df, current_players_gamelog])
         df = pd.DataFrame(team_gamelogs_df)
         team_gamelogs_file = f'team-{team_id}.csv'
-        df.to_csv(team_gamelogs_file , mode='a', header=False)
-        #pd.read_csv(team_gamelogs_file).append(df).drop_duplicates().to_csv(team_gamelogs_file, index=False)
+        df.to_csv(team_gamelogs_file, mode='a', header=False)
+        # pd.read_csv(team_gamelogs_file).append(df).drop_duplicates().to_csv(team_gamelogs_file, index=False)
+
 
 if __name__ == '__main__':
     pd.set_option('display.max_columns', None)
@@ -231,36 +234,36 @@ if __name__ == '__main__':
 
     # teams = teams_ids()
     teams = [
-             'bos',
-             'bkn',
-             'ny',
-             'phi',
-             'tor',
-             'chi',
-             'cle',
-             'det',
-             'ind',
-             'mil',
-             'den',
-             'min',
-             'okc',
-             'por',
-             'utah',
-             'gs',
-             'lac',
-             'lal',
-             'phx',
-             'sac',
-             'atl',
-             'cha',
-             'mia',
-             'orl',
-             'wsh',
-             'dal',
-             'hou',
-             'mem',
-             'no',
-             'sa'
+        'bos',
+        'bkn',
+        'ny',
+        'phi',
+        'tor',
+        'chi',
+        'cle',
+        'det',
+        'ind',
+        'mil',
+        'den',
+        'min',
+        'okc',
+        'por',
+        'utah',
+        'gs',
+        'lac',
+        'lal',
+        'phx',
+        'sac',
+        'atl',
+        'cha',
+        'mia',
+        'orl',
+        'wsh',
+        'dal',
+        'hou',
+        'mem',
+        'no',
+        'sa'
     ]
 
 

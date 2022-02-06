@@ -171,14 +171,14 @@ def this_season_analysis(bets):
     list_of_concatenated_bets_and_ratings = []
     for b in bets:
         list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG3", weight=1, seasons=[2021], last_x=3))  # ostatnie 4 mecze. priorytet 1.
-        list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG20", weight=1, seasons=[2021], last_x=20))  # ostatnie 4 mecze. priorytet 1.
+        list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG14", weight=1, seasons=[2021], last_x=14))  # ostatnie 4 mecze. priorytet 1.
         list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG7-GLOC", weight=1, seasons=[2021], location_sensitive=True,
                                                                          last_x=7))  # ostatnie 4 gry home/away dla bieżącego zakładu. priorytet 2. pokazuje wypływ home/away. do porównania z LG8 i LG4 priorytet 2
         # list_of_concatenated_bets_and_ratings.append(betline_based_analysis())  # how many times he went over the line, how many under (in last period)
         # list_of_concatenated_bets_and_ratings.append(bet_result_based_analysis())  # how many times bet results for him were over, how many under
         # list_of_concatenated_bets_and_ratings.append(form_tracking_analysis())  # wykres arp i pts uśredniony z 8-dniowych okresów
         # list_of_analysis_dicts.append(check_bet(b, desc="LG20", weight=1, seasons=[2021], last_x=20)) # ostatnie 10 meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
-        # list_of_analysis_dicts.append(check_bet(b, desc="LG3OPP", weight=0.15, seasons=[2021], last_x=3, direct=True)) # ostatnie osiem meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
+        list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG3OPP", weight=1, seasons=[2021], last_x=3, direct=True)) # ostatnie osiem meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
         # list_of_analysis_dicts.append(check_bet(b, desc="LG12", weight=3, seasons=[2021], last_x=12)) # oczekiwania względem sezonu priorytet 4
     return list_of_concatenated_bets_and_ratings
 
