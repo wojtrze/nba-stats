@@ -111,7 +111,7 @@ def todays_games_list():
         result.append(event_id)
     return result
 
-excluded_games =[1007972409, 1007972410, 1007972411, 1007972412, 1007972413]
+excluded_games =[1007972409, 1007972410, 1007972411, 1007972412, 1007972413, 1018412231]
 
 def all_today_bets():
     bet_type = ['ARP', 'PTS']  # do dodania jako parametr wejsciowy i podstawa wyboru, mapowania

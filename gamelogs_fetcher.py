@@ -8,8 +8,8 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-MINSLEEP = 0
-MAXSLEEP = 1
+MINSLEEP = 1
+MAXSLEEP = 2
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'}
 
 
@@ -66,7 +66,7 @@ def scrap_gamelog_page(players_gamelog_url, season_start_yyyy):
             continue
         # add to the filter value, that error occurs (application exit )
         filt = (~pd_table['Date'].str.contains(
-            'acquired|Finals|Play-In|Game|Conference|RISING|PRESEASON|january|february|march|april|may|june|july|august|september|october|november|december|from',
+            'acquired|Finals|Play-In|Game|Conference|RISING|PRESEASON|january|february|march|april|may|june|july|august|september|october|november|december|from|LeBron',
             na=False, case=False))
         current_dataframe = pd_table[filt]
         filtered_gamelog = pd.concat([filtered_gamelog, current_dataframe])
