@@ -5,7 +5,7 @@ from time import sleep
 from pandasgui import show
 from datetime import datetime, timedelta
 
-# import link as link
+# import link as links
 import requests
 from bet_fetcher import *
 from bs4 import BeautifulSoup
@@ -132,7 +132,7 @@ def percentile_analysis(bet, desc="description", weight=1, seasons=None, locatio
     if is_in_percentiles:
         min_diff = 0 - min_diff
     uptolow = upper_bound - lower_bound
-    offset_to_range = min_diff / uptolow
+    offset_to_range = 1 #min_diff / uptolow
     # TODO: print(f"betline {bet['line']} divides resultset to {} percent below")
     game = f"{bet['away']} @ {bet['home']}"
     under_rating = weight * upper_offset
@@ -170,15 +170,16 @@ def this_season_analysis(bets):
     # TODO put each analysis in the way that allow exclude, compare. is list of dicts the best available solution?
     list_of_concatenated_bets_and_ratings = []
     for b in bets:
-        list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG3", weight=1, seasons=[2021], last_x=3))  # ostatnie 4 mecze. priorytet 1.
-        list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG14", weight=1, seasons=[2021], last_x=14))  # ostatnie 4 mecze. priorytet 1.
-        list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG7-GLOC", weight=1, seasons=[2021], location_sensitive=True,
-                                                                         last_x=7))  # ostatnie 4 gry home/away dla bieżącego zakładu. priorytet 2. pokazuje wypływ home/away. do porównania z LG8 i LG4 priorytet 2
+        list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG3", weight=1, seasons=[2022], last_x=3))  # ostatnie 4 mecze. priorytet 1.
+        list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG7", weight=1, seasons=[2022], last_x=7))  # ostatnie 4 mecze. priorytet 1.
+        #list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG14", weight=1, seasons=[2021], last_x=14))  # ostatnie 4 mecze. priorytet 1.
+        #list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG7-GLOC", weight=1, seasons=[2021], location_sensitive=True,
+        #                                                                 last_x=7))  # ostatnie 4 gry home/away dla bieżącego zakładu. priorytet 2. pokazuje wypływ home/away. do porównania z LG8 i LG4 priorytet 2
         # list_of_concatenated_bets_and_ratings.append(betline_based_analysis())  # how many times he went over the line, how many under (in last period)
         # list_of_concatenated_bets_and_ratings.append(bet_result_based_analysis())  # how many times bet results for him were over, how many under
         # list_of_concatenated_bets_and_ratings.append(form_tracking_analysis())  # wykres arp i pts uśredniony z 8-dniowych okresów
         # list_of_analysis_dicts.append(check_bet(b, desc="LG20", weight=1, seasons=[2021], last_x=20)) # ostatnie 10 meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
-        list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG3OPP", weight=1, seasons=[2021], last_x=3, direct=True)) # ostatnie osiem meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
+        #list_of_concatenated_bets_and_ratings.append(percentile_analysis(b, desc="LG3OPP", weight=1, seasons=[2021], last_x=3, direct=True)) # ostatnie osiem meczy, żeby porównać to  L4G, czy jest duża różnica. Jak nie ma różnicy, to szacowanie jest pewniejsze. priorytet 3
         # list_of_analysis_dicts.append(check_bet(b, desc="LG12", weight=3, seasons=[2021], last_x=12)) # oczekiwania względem sezonu priorytet 4
     return list_of_concatenated_bets_and_ratings
 
@@ -240,6 +241,7 @@ def player_desc_for_df(df, player_name):
 
 
 def provide_stored_bet_results(b):
+    error_count =0
     list_of_results = []
     # b = stored_bets()  # .to_dict('records'), już nie pamiętam czemu
     # all_players = all_nba_players() # fixme coś nie działa, a w ogole trzeba to przemyśleć
@@ -258,15 +260,19 @@ def provide_stored_bet_results(b):
             player_df = all_players[(all_players['player_name'] == bet_player) & (all_players['Date'] == bet_date)]
             if player_df.empty:
                 # TODO: print(f"gamelog not found for {bet_player} on {bet_date} {row['away']}@{row['home']}")
+                print(f"no df for {bet_player} found during bets analysis")
+                error_count += 1
                 continue
-            print(f"gamelog issue")
         # jakiś wyjątek, jak nie ma playera
         actual = 0
         if bet_type == "PTS":
             actual = player_df["PTS"]
         if bet_type == "ARP":
             actual = player_df["PTS"] + player_df["REB"] + player_df["AST"]
-        actual = int(actual)
+        if isinstance(actual, pd.Series):
+            actual = int(actual.iloc[0])
+        else:
+            actual = int(actual)
         if actual > bet_line:
             result = "over"
         else:
@@ -300,8 +306,8 @@ def provide_results_with_bet_scoring(list_of_results):
 
 
 if __name__ == '__main__':
-    bets_df = stored_bets()  # FIXME
-    bets = bets_df.to_dict('records')
+    #bets_df = stored_bets()  # FIXME
+    #bets = bets_df.to_dict('records')
     # bets = all_today_bets()
     # assessments = bets_scoring_df(bets)
     # assessments - scoring, data, itp. Trzeba pobrać wyniki po dacie i sprawdzić wynik
