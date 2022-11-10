@@ -31,7 +31,7 @@ def game_players(home, away):
 
 
 def stored_bets():
-    return pd.read_csv("bets.csv")
+    return pd.read_csv("offers.csv")
 
 
 def all_nba_players():

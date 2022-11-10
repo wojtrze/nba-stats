@@ -87,26 +87,25 @@ def game_betoffer_list(event_id):
             continue
 
         bet_type = label_to_bet_type[bet_offer['criterion']['englishLabel']]
-
-        bet_outcome_id = bet_offer['outcomes'][0]['id']
-        player_name = bet_offer['outcomes'][0]['participant']
-        odds = bet_offer['outcomes'][0]['odds']
-        line = bet_offer['outcomes'][0]['line']
-        over_under = bet_offer['outcomes'][0]['englishLabel']
-        changed_date = bet_offer['outcomes'][0]['changedDate']
-
-        offer_dict = {"player": player_name,
-                      "player_ESPN": ''.join(player_name.split(',')[::-1]).strip(),
-                      "bet_type": bet_type,
-                      "odds": odds / 1000,
-                      "line": line / 1000,
-                      "over_under": over_under,
-                      "home": home,
-                      "away": away,
-                      "bet_id": bet_outcome_id,
-                      "changed_date": changed_date
-                      }
-        filtered_offers.append(offer_dict.copy())
+        closed_date = bet_offer['closed']
+        for bet_outcome in bet_offer['outcomes']:
+            bet_outcome_id = bet_outcome['id']
+            player_name = bet_outcome['participant']
+            odds = bet_outcome['odds']
+            line = bet_outcome['line']
+            over_under = bet_outcome['englishLabel']
+    
+            offer_dict = {"player_ESPN": ''.join(player_name.split(',')[::-1]).strip(),
+                          "bet_type": bet_type,
+                          "odds": odds / 1000,
+                          "line": line / 1000,
+                          "over_under": over_under,
+                          "home": home,
+                          "away": away,
+                          "bet_id": bet_outcome_id,
+                          "closed_date": closed_date
+                          }
+            filtered_offers.append(offer_dict.copy())
 
     return filtered_offers
 
