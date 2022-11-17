@@ -6,8 +6,8 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-MINSLEEP = 1
-MAXSLEEP = 2
+MINSLEEP = 0
+MAXSLEEP = 0
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'}
 
 
@@ -52,14 +52,15 @@ def player_gamelog_url(player_id):
     return f'https://www.espn.com/nba/player/gamelog/_/id/{player_id}'
 
 
-def scrap_gamelog_page(players_gamelog_url, season_start_yyyy):
-    # players_gamelog_url = f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}/type/nba/year/{season_start_yyyy}"
+def scrap_gamelog_page(player_id, season_start_yyyy):
     sleep(randint(MINSLEEP, MAXSLEEP))
+    players_gamelog_url = f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}/type/nba/year/{int(season_start_yyyy)+1}"
     pandas_html = pd.read_html(players_gamelog_url)
 
     # remove rubbish from each table
     filtered_gamelog = pd.DataFrame()
     for pd_table in pandas_html:
+        # only tables that contain 'Date' are valid gamelog columns
         if 'Date' not in pd_table.columns:
             continue
         # add to the filter value, that error occurs (application exit )
@@ -71,12 +72,16 @@ def scrap_gamelog_page(players_gamelog_url, season_start_yyyy):
     if len(filtered_gamelog) == 0:
         return filtered_gamelog
 
+
+
     # filtered_gamelog.reindex()
     filtered_gamelog[['FGM', 'FGA']] = filtered_gamelog['FG'].str.split('-', 1, expand=True)
-    filtered_gamelog[['3PM', '3PA']] = filtered_gamelog['3PT'].str.split('-', 1, expand=True)
-    filtered_gamelog[['FTM', 'FTA']] = filtered_gamelog['FT'].str.split('-', 1, expand=True)
     filtered_gamelog.drop('FG', axis=1, inplace=True)
+
+    filtered_gamelog[['3PM', '3PA']] = filtered_gamelog['3PT'].str.split('-', 1, expand=True)
     filtered_gamelog.drop('3PT', axis=1, inplace=True)
+
+    filtered_gamelog[['FTM', 'FTA']] = filtered_gamelog['FT'].str.split('-', 1, expand=True)
     filtered_gamelog.drop('FT', axis=1, inplace=True)
 
     filtered_gamelog['type'] = 'home'
@@ -85,22 +90,19 @@ def scrap_gamelog_page(players_gamelog_url, season_start_yyyy):
     filtered_gamelog['OPP'] = filtered_gamelog['OPP'].str.replace('vs', '')
     filtered_gamelog['OPP'] = filtered_gamelog['OPP'].str.replace('@', '')
 
+    # prepare dates
     filtered_gamelog[['Day', 'mm-dd']] = filtered_gamelog['Date'].str.split(' ', 1, expand=True)
     filtered_gamelog.drop('Date', axis=1, inplace=True)
     filtered_gamelog.drop('Day', axis=1, inplace=True)
-    # #filtered_gamelog.loc[int(str(filtered_gamelog['mm-dd']).str.split('/', 1, expand=True)[0]) > 8, 'year'] = f'{season_start_yyyy}'
-    # if int(filtered_gamelog['mm-dd'].str.split('/', 1, expand=True)[0]) < 8:
-    #     filtered_gamelog['mm-dd'] = filtered_gamelog['mm-dd'] + '/2020'
-    # filtered_gamelog['mm-dd'] = filtered_gamelog['mm-dd'] + '/2020'
     filtered_gamelog[['mm', 'dd']] = filtered_gamelog['mm-dd'].str.split('/', 1, expand=True)
     filtered_gamelog['mm'] = pd.to_numeric(filtered_gamelog['mm'])
     filtered_gamelog.loc[filtered_gamelog['mm'] >= 9, 'yyyy'] = f'/{season_start_yyyy}'
     filtered_gamelog.loc[filtered_gamelog['mm'] < 9, 'yyyy'] = f'/{int(season_start_yyyy) + 1}'
     filtered_gamelog['Date'] = filtered_gamelog['mm-dd'] + filtered_gamelog['yyyy']
-    # filtered_gamelog.loc[filtered_gamelog['mm-dd'].str.startswith(['1/', '2/', '3/', '4/', '5/', '6/', '7/', '8/'], na=False), 'mm-dd'] = filtered_gamelog['mm-dd']+ '/2021'
-
     filtered_gamelog['Date'] = pd.to_datetime(filtered_gamelog['Date'])
     filtered_gamelog.drop(['mm', 'mm-dd', 'dd', 'yyyy'], axis=1, inplace=True)
+
+    # prepare stats
     filtered_gamelog['MIN'] = pd.to_numeric(filtered_gamelog['MIN'])
     filtered_gamelog['REB'] = pd.to_numeric(filtered_gamelog['REB'])
     filtered_gamelog['AST'] = pd.to_numeric(filtered_gamelog['AST'])
@@ -117,8 +119,8 @@ def scrap_gamelog_page(players_gamelog_url, season_start_yyyy):
     filtered_gamelog['FTA'] = pd.to_numeric(filtered_gamelog['FTA'])
     filtered_gamelog['season_id'] = season_start_yyyy
     # print(f'Gamelog from {season_start_yyyy} fetched')
-    season_start_date = "19-10-2022"
-    filtered_gamelog = filtered_gamelog[filtered_gamelog['Date'] > season_start_date]
+    season_start_date = "19/10/2022"
+    filtered_gamelog = filtered_gamelog[filtered_gamelog['Date'] >= season_start_date]
     return filtered_gamelog
 
 
@@ -127,6 +129,8 @@ def retrieve_player_name(url):
     gamelog_response = requests.get(url, headers)
     bs_html = BeautifulSoup(gamelog_response.text, 'html.parser')
     player_name = bs_html.find_all("h1", {"class": "PlayerHeader__Name"})[0].text.strip()
+    # player_status= bs_html.find_all("h1", {"class": "ml0"})[0].text.strip()
+
     return player_name
 
 
@@ -138,7 +142,7 @@ def player_gamelog(player_id):
     # gamelog = pd.concat([gamelog, current_season_gamelog_1])
     current_season_gamelog_0 = scrap_gamelog_page(
         f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}/type/nba/year/2022", season_start_yyyy='2021')
-    gamelog = pd.concat([gamelog, current_season_gamelog_1])
+    gamelog = pd.concat([gamelog, current_season_gamelog_0])
     current_season_gamelog_1 = scrap_gamelog_page(
         f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}/type/nba/year/2021", season_start_yyyy='2020')
     gamelog = pd.concat([gamelog, current_season_gamelog_1])
@@ -157,13 +161,12 @@ def player_gamelog(player_id):
     return gamelog
 
 
-def player_gamelog_2021(player_id):
+def player_gamelog_for_season(player_id, season_start_yyyy='2022'):
     gamelog = pd.DataFrame()
-    current_season_gamelog = scrap_gamelog_page(
-        f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}/type/nba/year/2023", season_start_yyyy='2022')
+    current_season_gamelog = scrap_gamelog_page(player_id, season_start_yyyy)
     gamelog = current_season_gamelog
-    gamelog['player_id'] = player_id
-    gamelog['player_name'] = retrieve_player_name(f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}")
+    gamelog['player_id_ESPN'] = player_id
+    gamelog['player_name_ESPN'] = retrieve_player_name(f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}")
     return gamelog
 
 
@@ -197,8 +200,8 @@ def get_last_fetching_date(team_id):
     team_game_dates_df = pd.DataFrame()
     team_game_dates_df = pd.read_csv(f'team-{team_id}.csv')
     # team_game_dates_df['Date'] = pd.to_datetime(team_game_dates_df['Date'])
-    return team_game_dates_df['Date'].max()
-    # return "2021-10-18"
+    #return team_game_dates_df['Date'].max()
+    return "2022-10-18"
 
 
 def update_gamelogs():
@@ -209,10 +212,9 @@ def update_gamelogs():
         # print(f'for team {team_id} scrapping data for players: {player_id_list}')
         for player_espn_id in player_id_list:
             # print(f'processing player: {player_espn_id} from {team_id}')
-            current_players_gamelog = player_gamelog_2021(player_espn_id)
+            current_players_gamelog = player_gamelog_for_season(player_espn_id, season_start_yyyy='2022')
             current_players_gamelog['team'] = team_id
             # filter out already updated for current season - maybe to try-except
-            # current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
             try:
                 current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
                 if not current_players_gamelog.empty:
@@ -223,8 +225,8 @@ def update_gamelogs():
                 print(current_players_gamelog)
             team_gamelogs_df = pd.concat([team_gamelogs_df, current_players_gamelog])
         df = pd.DataFrame(team_gamelogs_df)
-        team_gamelogs_file = f'team-{team_id}.csv'
-        df.to_csv(team_gamelogs_file, mode='a', header=False)
+        team_gamelogs_file = f'2022-players-logs.csv'
+        df.to_csv(team_gamelogs_file, mode='a', header=True, index=False)
         # pd.read_csv(team_gamelogs_file).append(df).drop_duplicates().to_csv(team_gamelogs_file, index=False)
 
 

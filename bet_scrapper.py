@@ -41,7 +41,7 @@ headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/201
 
 
 def todays_games_list():
-    url = "https://pl.unibet-44.com/sportsbook-feeds/views/filter/basketball/nba/matches?includeParticipants=true&useCombined=true&ncid=1635861681"
+    url = "https://pl.unibet-45.com/sportsbook-feeds/views/filter/basketball/nba/matches?includeParticipants=true&useCombined=true&ncid=1635861681"
     resp = requests.get(url)
     a = resp.json()
     events = a['layout']['sections'][1]['widgets'][0]['matches']['events']
@@ -87,7 +87,11 @@ def game_betoffer_list(event_id):
             continue
 
         bet_type = label_to_bet_type[bet_offer['criterion']['englishLabel']]
-        closed_date = bet_offer['closed']
+        if 'closed' in bet_offer:
+            closed_date = bet_offer['closed']
+        else:
+            continue
+
         for bet_outcome in bet_offer['outcomes']:
             bet_outcome_id = bet_outcome['id']
             player_name = bet_outcome['participant']
