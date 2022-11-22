@@ -201,7 +201,7 @@ def get_last_fetching_date(team_id):
     team_game_dates_df = pd.read_csv(f'team-{team_id}.csv')
     # team_game_dates_df['Date'] = pd.to_datetime(team_game_dates_df['Date'])
     #return team_game_dates_df['Date'].max()
-    return "2022-10-18"
+    return "2022/10/18"
 
 
 def update_gamelogs():
@@ -216,10 +216,13 @@ def update_gamelogs():
             current_players_gamelog['team'] = team_id
             # filter out already updated for current season - maybe to try-except
             try:
+                if current_players_gamelog.empty:
+                    print("empty gamelog")
+                    continue
                 current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
                 if not current_players_gamelog.empty:
                     print(current_players_gamelog[['OPP', 'MIN', 'FG%', 'REB', 'AST',
-                                                   'PTS', 'type', 'Date', 'player_name']])
+                                                   'PTS', 'type', 'Date', 'player_name_ESPN']])
             except:
                 print("coś nie tak")
                 print(current_players_gamelog)
