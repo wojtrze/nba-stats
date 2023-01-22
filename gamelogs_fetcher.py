@@ -125,7 +125,7 @@ def scrap_gamelog_page(player_id, season_start_yyyy):
 
 
 def retrieve_player_name(url):
-    sleep(randint(1, 2))
+    sleep(randint(0, 1))
     gamelog_response = requests.get(url, headers)
     bs_html = BeautifulSoup(gamelog_response.text, 'html.parser')
     player_name = bs_html.find_all("h1", {"class": "PlayerHeader__Name"})[0].text.strip()
@@ -188,13 +188,6 @@ def get_gamelog_with_soup(player_id):
         l.append(row)
     return pd.DataFrame(l)
 
-    # def starting_lineup(date, game_id, team_id):
-    #     return {'1pg': 'KyrieIrving',
-    #             '2sg': 'JamesHarden',
-    #             '3sf': 'KevinDurant',
-    #             '4pf': 'BruceBrown',
-    #             '5c': 'NicolasClaxton'}
-
 
 def get_last_fetching_date(team_id):
     team_game_dates_df = pd.DataFrame()
@@ -221,8 +214,8 @@ def update_gamelogs():
                     continue
                 current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
                 if not current_players_gamelog.empty:
-                    print(current_players_gamelog[['OPP', 'MIN', 'FG%', 'REB', 'AST',
-                                                   'PTS', 'type', 'Date', 'player_name_ESPN']])
+                    print(current_players_gamelog[['OPP', 'MIN', 'REB', 'AST','FG%',
+                                                   'PTS', '3PM', 'type', 'Date', 'player_name_ESPN']])
             except:
                 print("coś nie tak")
                 print(current_players_gamelog)

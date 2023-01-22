@@ -1,11 +1,13 @@
 # game analysis
 import re
 from random import randint
-from time import sleep
+from time import sleep, strftime
 from pandasgui import show
 from datetime import datetime, timedelta
 
+
 # import link as links
+import requests
 import requests
 from bet_fetcher import *
 from bs4 import BeautifulSoup
@@ -248,8 +250,8 @@ def provide_stored_bet_results(b):
     for index, row in b.iterrows():
         all_players = game_players(row['home'], row['away'])
         bet_analysis_dict = {}
-        bet_date = row['changed_date'][:10]
-        bet_player = row['name_ESPN']
+        bet_date = (datetime.fromisoformat(row['closed_date'].replace('Z', '')) - timedelta(hours=6)).strftime('%Y-%m-%d')
+        bet_player = row['player_ESPN']
         bet_type = row['bet_type']
         bet_line = row['line']
         dfn = all_players[(all_players['player_name'] == bet_player)]
@@ -313,11 +315,14 @@ if __name__ == '__main__':
     # assessments - scoring, data, itp. Trzeba pobrać wyniki po dacie i sprawdzić wynik
     # print(assessments)
     bets = stored_bets()
+    # todays_bets = dataframe.loc[dataframe['closed_date'] > "2022-11-21"]
+    # todays_bets = bets[bets['closed_date'] > "2022-12-10"]
+
     # bets_scorings = this_season_analysis(bets)
     bets_results = provide_stored_bet_results(bets)
-    scored_bets_results = provide_results_with_bet_scoring(bets_results)
-    print(scored_bets_results)
+    #scored_bets_results = provide_results_with_bet_scoring(bets_results)
+    #print(scored_bets_results)
 
-    bets = stored_bets()
-    scored_bets_results = provide_results_with_bet_scoring(provide_stored_bet_results(bets))
-    show(pd.DataFrame(scored_bets_results))
+    #bets = stored_bets()
+    #scored_bets_results = provide_results_with_bet_scoring(provide_stored_bet_results(bets))
+    #show(pd.DataFrame(scored_bets_results))
