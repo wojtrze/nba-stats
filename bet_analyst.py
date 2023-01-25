@@ -245,7 +245,7 @@ class BetAssessment():
 # dodawanie reasonów zakończone, co dalej? todo
 
         #if len(reasons) > 3:
-        if len(reasons) >= 2 and "last_games" in str(reasons):
+        if len(reasons) >= 3 and "last_games" in str(reasons):
         #if "last_games" in str(reasons):
             # if len(reasons) > 1 and "Over" in str(reasons) and "Under" in str(reasons) and bet['bet_type'] in ['ARP', 'REB', 'AST', 'PTS', '3PM']:
             # if len(reasons) > 3 and bet['bet_type'] in ['ARP', 'REB', 'AST', 'PTS', '3PM']:
