@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import csv
 from bet_scrapper import all_today_bets, store_offers
+from lineup_fetcher import players_unlikely_to_play
 import datetime
 pd.options.mode.chained_assignment = None  # default='warn'
 threshold = {'PTS': 2.0,
@@ -29,6 +30,7 @@ class BetAssessment():
     temp_players_to_map = []
     gamelogs = pd.DataFrame()
     bets_resolved = pd.DataFrame()
+    doubtful_players = players_unlikely_to_play()
 
     def __init__(self, bets):
         self.bets = bets
@@ -209,6 +211,13 @@ class BetAssessment():
                       "code": "last_games"}
             reasons.append(reason)
 
+        # TODO: lineup-based reasons
+        game_doubtful_players = [d for d in self.doubtful_players if d['team'].upper() in [bet['home'].upper(), bet['away'].upper()]]
+
+        reason = {"over_under": "Info",
+                  "description": f"Game doubtful players: {game_doubtful_players}",
+                  "code": "info"}
+        reasons.append(reason)
         # bets_hits
         # fixme dodaj  ograniczenie daty do tych sprzed zamkniecia zakladu
         player_historical_bets = self.bets_resolved[self.bets_resolved['player_ESPN'] == bet['player_ESPN']]
@@ -245,7 +254,7 @@ class BetAssessment():
 # dodawanie reasonów zakończone, co dalej? todo
 
         #if len(reasons) > 3:
-        if len(reasons) >= 3 and "last_games" in str(reasons):
+        if len(reasons) >= 4 and "last_games" in str(reasons):
         #if "last_games" in str(reasons):
             # if len(reasons) > 1 and "Over" in str(reasons) and "Under" in str(reasons) and bet['bet_type'] in ['ARP', 'REB', 'AST', 'PTS', '3PM']:
             # if len(reasons) > 3 and bet['bet_type'] in ['ARP', 'REB', 'AST', 'PTS', '3PM']:
