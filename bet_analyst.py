@@ -1,5 +1,5 @@
 from typing import List
-
+from pandasgui import show
 import numpy as np
 import pandas as pd
 import csv
@@ -43,7 +43,13 @@ class BetAssessment():
 
     def assess_bets_from_list(self, bets_list: List[dict]):
         for bet in bets_list:
-            self.assess_bet_vs_player_gamelogs(bet)
+            reasons = self.assess_bet_vs_player_gamelogs(bet)
+            # f powyzej musi zwracac dict reasons i załączać go do betu
+            # at this point we have a dict of reasons for bet. We should create columns named as reason["code"] field (str), put there value of reason["over_under"] and then return it as a dataframe
+            for reason in reasons:
+                # Create a new column with the name of the "code" field
+                bet[reason["code"]] = reason["over_under"]
+        return bets_list
 
     def assess_bet_vs_historical_player_bets(self, bet):
         pass
@@ -254,7 +260,7 @@ class BetAssessment():
 # dodawanie reasonów zakończone, co dalej? todo
 
         #if len(reasons) > 3:
-        if len(reasons) >= 4 and "last_games" in str(reasons):
+        if "last_games" in str(reasons) and "quantiles" in str(reasons):
         #if "last_games" in str(reasons):
             # if len(reasons) > 1 and "Over" in str(reasons) and "Under" in str(reasons) and bet['bet_type'] in ['ARP', 'REB', 'AST', 'PTS', '3PM']:
             # if len(reasons) > 3 and bet['bet_type'] in ['ARP', 'REB', 'AST', 'PTS', '3PM']:
@@ -264,17 +270,13 @@ class BetAssessment():
             print(*reasons, sep='\n')
             gamelogs_df['diff'] = gamelogs_df[type] - bet['line']
             print(gamelogs_df[['Date', 'MIN', 'type', 'OPP', type, 'diff']].tail(9))
-            srednie = gamelogs_df.sort_values(by=['Date'], ascending=False).groupby(np.arange(len(gamelogs_df)) // 5).agg({'Date':'first', f"{type}":'mean', 'diff': 'mean'})
+            srednie = gamelogs_df.sort_values(by=['Date'], ascending=False).groupby(np.arange(len(gamelogs_df)) // 4).agg({'Date':'first', f"{type}":'mean', 'diff': 'mean'})
             print (srednie)
             srednie= None
             print("\n")
 
-        #at this point we have a dict of reasons for bet. We should create columns named as reason["code"] field (str), put there value of reason["over_under"] and then return it as a dataframe
-        for reason in reasons:
-            # Create a new column with the name of the "code" field
-            bet[reason["code"]] = reason["over_under"]
+        return reasons
 
-        return bet
 
 if __name__ == '__main__':
 
@@ -289,13 +291,15 @@ if __name__ == '__main__':
     # if you want to assess only todays offers:
     bets = all_today_bets()
     store_offers(bets)
+
     # if you want to assess  resolved offers:
-    # bets = pd.read_csv("offers_resolved.csv").to_dict("records")
-    #
+    #######bets = pd.read_csv("offers_resolved.csv").to_dict("records")
+
     assessment = BetAssessment(bets)
-    # # for each of bets asess_bet function puts reasons for bet
+
+    # for each of bets asess_bet function puts reasons for bet
     sure_bets = assessment.assess_bets_from_list(bets)
     print(assessment.temp_players_to_map)
+    dfx = pd.DataFrame(sure_bets)
+    show(dfx)
 
-    # show in pndasgui
-    # gui.show(sure_bets)
