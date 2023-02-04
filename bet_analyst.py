@@ -224,6 +224,7 @@ class BetAssessment():
                   "description": f"Game doubtful players: {game_doubtful_players}",
                   "code": "info"}
         reasons.append(reason)
+
         # bets_hits
         # fixme dodaj  ograniczenie daty do tych sprzed zamkniecia zakladu
         player_historical_bets = self.bets_resolved[self.bets_resolved['player_ESPN'] == bet['player_ESPN']]
@@ -255,9 +256,20 @@ class BetAssessment():
                           "code": "bets_hits"}
                 reasons.append(reason)
 
-
-
-# dodawanie reasonów zakończone, co dalej? todo
+        # averages
+        gamelogs_df['diff'] = gamelogs_df[type] - bet['line']
+        averages = gamelogs_df.sort_values(by=['Date'], ascending=False).groupby(np.arange(len(gamelogs_df)) // 4).agg(
+            {'Date': 'first', f"{type}": 'mean', 'diff': 'mean'})
+        if averages.iloc[0]["diff"] > 0.5:
+            reason = {"over_under": "Over",
+                      "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} over betline. vote for over.",
+                      "code": "averages"}
+        if averages.iloc[0]["diff"] < -0.5:
+            reason = {"over_under": "Under",
+                      "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} under betline. vote for under.",
+                      "code": "averages"}
+            reasons.append(reason)
+        # dodawanie reasonów zakończone, co dalej? todo
 
         #if len(reasons) > 3:
         if "last_games" in str(reasons) and "quantiles" in str(reasons):
@@ -272,7 +284,7 @@ class BetAssessment():
             print(gamelogs_df[['Date', 'MIN', 'type', 'OPP', type, 'diff']].tail(9))
             srednie = gamelogs_df.sort_values(by=['Date'], ascending=False).groupby(np.arange(len(gamelogs_df)) // 4).agg({'Date':'first', f"{type}":'mean', 'diff': 'mean'})
             print (srednie)
-            srednie= None
+            srednie = None
             print("\n")
 
         return reasons
