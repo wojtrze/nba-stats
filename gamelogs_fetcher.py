@@ -199,7 +199,6 @@ def get_last_fetching_date(team_id):
 
 def update_gamelogs():
     for team_id in teams:
-        last_fetching_date = get_last_fetching_date(team_id)
         team_gamelogs_df = pd.DataFrame()
         player_id_list = player_ids_for_team(team_id)
         # print(f'for team {team_id} scrapping data for players: {player_id_list}')
@@ -212,7 +211,6 @@ def update_gamelogs():
                 if current_players_gamelog.empty:
                     print("empty gamelog")
                     continue
-                current_players_gamelog = current_players_gamelog[current_players_gamelog['Date'] > last_fetching_date]
                 if not current_players_gamelog.empty:
                     print(current_players_gamelog[['OPP', 'MIN', 'REB', 'AST','FG%',
                                                    'PTS', '3PM', 'type', 'Date', 'player_name_ESPN']])
