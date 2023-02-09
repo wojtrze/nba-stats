@@ -258,17 +258,20 @@ class BetAssessment():
 
         # averages
         gamelogs_df['diff'] = gamelogs_df[type] - bet['line']
-        averages = gamelogs_df.sort_values(by=['Date'], ascending=False).groupby(np.arange(len(gamelogs_df)) // 4).agg(
-            {'Date': 'first', f"{type}": 'mean', 'diff': 'mean'})
-        if averages.iloc[0]["diff"] > 0.5:
-            reason = {"over_under": "Over",
-                      "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} over betline. vote for over.",
-                      "code": "averages"}
-        if averages.iloc[0]["diff"] < -0.5:
-            reason = {"over_under": "Under",
-                      "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} under betline. vote for under.",
-                      "code": "averages"}
-            reasons.append(reason)
+        try:
+            averages = gamelogs_df.sort_values(by=['Date'], ascending=False).groupby(np.arange(len(gamelogs_df)) // 4).agg(
+                {'Date': 'first', f"{type}": 'mean', 'diff': 'mean'})
+            if averages.iloc[0]["diff"] > 0.5:
+                reason = {"over_under": "Over",
+                          "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} over betline. vote for over.",
+                          "code": "averages"}
+            if averages.iloc[0]["diff"] < -0.5:
+                reason = {"over_under": "Under",
+                          "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} under betline. vote for under.",
+                          "code": "averages"}
+                reasons.append(reason)
+        except Exception as e:
+            print("An error occurred:", e)
         # dodawanie reasonów zakończone, co dalej? todo
 
         #if len(reasons) > 3:
@@ -305,7 +308,7 @@ if __name__ == '__main__':
     store_offers(bets)
 
     # if you want to assess  resolved offers:
-    #######bets = pd.read_csv("offers_resolved.csv").to_dict("records")
+    #bets = pd.read_csv("offers_resolved.csv").to_dict("records")
 
     assessment = BetAssessment(bets)
 
@@ -313,5 +316,6 @@ if __name__ == '__main__':
     sure_bets = assessment.assess_bets_from_list(bets)
     print(assessment.temp_players_to_map)
     dfx = pd.DataFrame(sure_bets)
+    #dfx.to_csv("assessed_bets.csv", index=False)
     show(dfx)
 
