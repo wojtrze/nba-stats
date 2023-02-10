@@ -321,4 +321,3 @@ if __name__ == '__main__':
     dfx = pd.DataFrame(sure_bets)
     #dfx.to_csv("assessed_bets.csv", index=False)
     show(dfx)
-
