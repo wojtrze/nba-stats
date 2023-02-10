@@ -13,6 +13,12 @@ threshold = {'PTS': 2.0,
              'AST': 1.4,
              '3PM': 0.6
              }
+significant_diff = {'PTS': 3.5,
+             'ARP': 4.5,
+             'REB': 1.5,
+             'AST': 1.5,
+             '3PM': 0.7
+             }
 
 UB_to_ESPN_player_name = {'J.Brown': 'JaylenBrown',
                           'D.Sabonis': 'DomantasSabonis',
@@ -77,12 +83,8 @@ class BetAssessment():
             bet_line = float(row['line'])
             player_df = player_gamelogs[player_gamelogs['Date'] == bet_date]
             if player_df.empty:
-                print(f"no df for {bet_player} on {bet_date} found during bets analys!!!!!!!!!!!!!!!!! ")
-                #print(player_gamelogs)
-                error_count += 1
+                print(f"no df for {bet_player} on {bet_date} found during bets analys. Player didn't play that day?")
                 continue
-            else:
-                positive_count += 1
 
             actual = 0
             player_df["ARP"] = float(player_df["PTS"]) + float(player_df["REB"]) + float(player_df["AST"])
@@ -261,11 +263,12 @@ class BetAssessment():
         try:
             averages = gamelogs_df.sort_values(by=['Date'], ascending=False).groupby(np.arange(len(gamelogs_df)) // 4).agg(
                 {'Date': 'first', f"{type}": 'mean', 'diff': 'mean'})
-            if averages.iloc[0]["diff"] > 0.5:
+            if averages.iloc[0]["diff"] > significant_diff[bet['bet_type']]:
                 reason = {"over_under": "Over",
                           "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} over betline. vote for over.",
                           "code": "averages"}
-            if averages.iloc[0]["diff"] < -0.5:
+                reasons.append(reason)
+            if averages.iloc[0]["diff"] < -significant_diff[bet['bet_type']]:
                 reason = {"over_under": "Under",
                           "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} under betline. vote for under.",
                           "code": "averages"}
@@ -275,7 +278,7 @@ class BetAssessment():
         # dodawanie reasonów zakończone, co dalej? todo
 
         #if len(reasons) > 3:
-        if "last_games" in str(reasons) and "quantiles" in str(reasons):
+        if "last_games" in str(reasons) and "averages" in str(reasons):
         #if "last_games" in str(reasons):
             # if len(reasons) > 1 and "Over" in str(reasons) and "Under" in str(reasons) and bet['bet_type'] in ['ARP', 'REB', 'AST', 'PTS', '3PM']:
             # if len(reasons) > 3 and bet['bet_type'] in ['ARP', 'REB', 'AST', 'PTS', '3PM']:
