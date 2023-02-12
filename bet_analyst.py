@@ -311,7 +311,7 @@ if __name__ == '__main__':
     store_offers(bets)
 
     # if you want to assess  resolved offers:
-    #bets = pd.read_csv("offers_resolved.csv").to_dict("records")
+    # bets = pd.read_csv("offers_resolved.csv").to_dict("records")
 
     assessment = BetAssessment(bets)
 
@@ -319,5 +319,5 @@ if __name__ == '__main__':
     sure_bets = assessment.assess_bets_from_list(bets)
     print(assessment.temp_players_to_map)
     dfx = pd.DataFrame(sure_bets)
-    #dfx.to_csv("assessed_bets.csv", index=False)
+    dfx.to_csv("on_date20230211.csv", index=False)
     show(dfx)
