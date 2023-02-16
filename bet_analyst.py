@@ -288,19 +288,19 @@ class BetAssessment():
 if __name__ == '__main__':
 
     # # part A: resolves bets from 'offers.csv and saves them to 'offers_resolved.csv'
-    # b = pd.read_csv("offers.csv").drop_duplicates(subset=['player_ESPN', 'bet_type', 'over_under', 'closed_date', 'line])
-    # ass = BetAssessment(b)
-    # bets_with_results_dict = ass.provide_stored_bet_results(b)
-    # bets_with_results_dict.to_csv("offers_resolved.csv", index=False)
+    b = pd.read_csv("offers.csv").drop_duplicates(subset=['player_ESPN', 'bet_type', 'over_under', 'closed_date', 'line'])
+    ass = BetAssessment(b)
+    bets_with_results_dict = ass.provide_stored_bet_results(b)
+    bets_with_results_dict.to_csv("offers_resolved.csv", index=False)
 
     # part B: fetches all today's bets for players, stores them in 'offers.csv'.
 
     # if you want to assess only todays offers:
-    bets = all_today_bets()
-    store_offers(bets)
+    # bets = all_today_bets()
+    # store_offers(bets)
 
     # if you want to assess  resolved offers:
-    #bets = pd.read_csv("offers_resolved.csv").to_dict("records")
+    bets = pd.read_csv("offers_resolved.csv").to_dict("records")
 
     assessment = BetAssessment(bets)
 
@@ -308,5 +308,5 @@ if __name__ == '__main__':
     sure_bets = assessment.assess_bets_from_list(bets)
     print(assessment.temp_players_to_map)
     dfx = pd.DataFrame(sure_bets)
-    # dfx.to_csv("all_assessed_bets20230212.csv", index=False)
+    dfx.to_csv("all_assessed_bets20230216.csv", index=False)
     show(dfx)
