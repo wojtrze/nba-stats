@@ -33,6 +33,8 @@ UB_to_ESPN_player_name = {'J.Brown': 'JaylenBrown',
 
 
 class BetAssessment():
+    blad =0
+    dobrze = 0
     temp_players_to_map = []
     gamelogs = pd.DataFrame()
     bets_resolved = pd.DataFrame()
@@ -159,7 +161,14 @@ class BetAssessment():
         # gamelogs_df = gamelogs_df[gamelogs_df["Date"] >= threshold_date]
 
         # leave games before bet closed date
-        gamelogs_df = gamelogs_df[gamelogs_df["Date"] < datetime.datetime.strptime(bet['closed_date'], "%Y-%m-%dT%H:%M:%SZ")]
+        #fixme bierze za dużo gier, bo nie uwzględnia daty zakładu tylko daty zamknięcia zakładu
+        timezone_difference = datetime.timedelta(hours=30)
+
+        gamelogs_df = gamelogs_df[gamelogs_df["Date"] < (datetime.datetime.strptime(bet['closed_date'], "%Y-%m-%dT%H:%M:%SZ")-timezone_difference)]
+        if gamelogs_df["OPP"].iloc[-1] in [bet["home"].upper(), bet["away"].upper()]:
+            self.blad +=1
+        else:
+            self.dobrze +=1
 
         # quantile-based reasons
         lower_bound = gamelogs_df[bet_type].quantile(0.3)
@@ -224,6 +233,8 @@ class BetAssessment():
         # bets_hits
         # fixme dodaj  ograniczenie daty do tych sprzed zamkniecia zakladu
         player_historical_bets = self.bets_resolved[self.bets_resolved['player_ESPN'] == bet['player_ESPN']]
+        # restrict to bets before bet closed date
+        player_historical_bets = player_historical_bets[player_historical_bets['closed_date'] < bet['closed_date']]
         # if not player_historical_bets.empty:
         player_historical_bets = player_historical_bets[player_historical_bets['bet_type'] == bet['bet_type']]
         # Count the number of hits for 'Under' bets
@@ -288,19 +299,19 @@ class BetAssessment():
 if __name__ == '__main__':
 
     # # part A: resolves bets from 'offers.csv and saves them to 'offers_resolved.csv'
-    b = pd.read_csv("offers.csv").drop_duplicates(subset=['player_ESPN', 'bet_type', 'over_under', 'closed_date', 'line'])
-    ass = BetAssessment(b)
-    bets_with_results_dict = ass.provide_stored_bet_results(b)
-    bets_with_results_dict.to_csv("offers_resolved.csv", index=False)
+    # b = pd.read_csv("offers.csv").drop_duplicates(subset=['player_ESPN', 'bet_type', 'over_under', 'closed_date', 'line'])
+    # ass = BetAssessment(b)
+    # bets_with_results_dict = ass.provide_stored_bet_results(b)
+    # bets_with_results_dict.to_csv("offers_resolved.csv", index=False)
 
     # part B: fetches all today's bets for players, stores them in 'offers.csv'.
 
     # if you want to assess only todays offers:
-    # bets = all_today_bets()
-    # store_offers(bets)
+    bets = all_today_bets()
+    store_offers(bets)
 
     # if you want to assess  resolved offers:
-    bets = pd.read_csv("offers_resolved.csv").to_dict("records")
+    # bets = pd.read_csv("offers_resolved.csv").to_dict("records")
 
     assessment = BetAssessment(bets)
 
@@ -308,5 +319,6 @@ if __name__ == '__main__':
     sure_bets = assessment.assess_bets_from_list(bets)
     print(assessment.temp_players_to_map)
     dfx = pd.DataFrame(sure_bets)
-    dfx.to_csv("all_assessed_bets20230216.csv", index=False)
+    # dfx.to_csv("all_assessed_bets20230217.csv", index=False)
     show(dfx)
+    # averages == over_under and last_games == over_under and quantiles != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"
