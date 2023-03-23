@@ -40,6 +40,7 @@ class BetAssessment():
     gamelogs = pd.DataFrame()
     bets_resolved = pd.DataFrame()
     doubtful_players = players_unlikely_to_play()
+    player_gamelogs = pd.DataFrame()
 
     def __init__(self, bets):
         self.bets = bets
@@ -123,60 +124,47 @@ class BetAssessment():
         pass
 
     def assess_bet_vs_player_gamelogs(self, bet: dict) -> list:
-        #ta funkcja powinna dołączać assessment do zakładu
-        #powinna być czuła na datę zakładu
         reasons = []
-        gamelogs_df = pd.DataFrame()
-        # handling of m
+        # handling of mapped names
         if bet['player_ESPN'] not in UB_to_ESPN_player_name:
-            gamelogs_df = self.gamelogs[self.gamelogs['player_name_ESPN'] == bet['player_ESPN']]
+            self.player_gamelogs = self.gamelogs[self.gamelogs['player_name_ESPN'] == bet['player_ESPN']]
         else:
             # when player name is not found, check mapped names
-            gamelogs_df = self.gamelogs[self.gamelogs['player_name_ESPN'] == UB_to_ESPN_player_name[bet['player_ESPN']]]
+            self.player_gamelogs = self.gamelogs[self.gamelogs['player_name_ESPN'] == UB_to_ESPN_player_name[bet['player_ESPN']]]
 
 
-        if gamelogs_df.empty:
-            #at thsi point we should have all gamelogs of player. If gamelog is empty, then #FIXME. something is wrong
+        if self.player_gamelogs.empty:
             self.temp_players_to_map.append(bet['player_ESPN'])
 
         # prepare data for analysis
-        gamelogs_df = gamelogs_df.drop_duplicates(subset=['Date'])
-        gamelogs_df = gamelogs_df.sort_values(by='Date')
+        self.player_gamelogs = self.player_gamelogs.drop_duplicates(subset=['Date'])
+        self.player_gamelogs = self.player_gamelogs.sort_values(by='Date')
 
         bet_type = bet['bet_type']
-        gamelogs_df['AST'] = pd.to_numeric(gamelogs_df['AST'])
-        gamelogs_df['REB'] = pd.to_numeric(gamelogs_df['REB'])
-        gamelogs_df['PTS'] = pd.to_numeric(gamelogs_df['PTS'])
-        gamelogs_df['3PM'] = pd.to_numeric(gamelogs_df['3PM'])
-        gamelogs_df['ARP'] = gamelogs_df['AST'] + gamelogs_df['REB'] + gamelogs_df['PTS']
+        self.player_gamelogs['AST'] = pd.to_numeric(self.player_gamelogs['AST'])
+        self.player_gamelogs['REB'] = pd.to_numeric(self.player_gamelogs['REB'])
+        self.player_gamelogs['PTS'] = pd.to_numeric(self.player_gamelogs['PTS'])
+        self.player_gamelogs['3PM'] = pd.to_numeric(self.player_gamelogs['3PM'])
+        self.player_gamelogs['ARP'] = self.player_gamelogs['AST'] + self.player_gamelogs['REB'] + self.player_gamelogs['PTS']
 
         # Convert the "Date" column to datetime
-        gamelogs_df["Date"] = pd.to_datetime(gamelogs_df["Date"])
-
-        # Calculate the current date and time
-        current_date = pd.Timestamp.now()
-        # Calculate the threshold date (30 days before the current date)
-        # threshold_date = current_date - datetime.timedelta(days=30)
-        # # trzeba #FIXME, możemy potrzebować więcej niż 30 dni np do oceny mediany, tu nie powinno być modyfikacji gamelogs_df. zaburza pozniejsze obliczenia
-        # # Removes rows with a "Date" older than the threshold date
-        # gamelogs_df = gamelogs_df[gamelogs_df["Date"] >= threshold_date]
+        self.player_gamelogs["Date"] = pd.to_datetime(self.player_gamelogs["Date"])
 
         # leave games before bet closed date
-        #fixme bierze za dużo gier, bo nie uwzględnia daty zakładu tylko daty zamknięcia zakładu
         timezone_difference = datetime.timedelta(hours=30)
+        self.player_gamelogs = self.player_gamelogs[self.player_gamelogs["Date"] < (datetime.datetime.strptime(bet['closed_date'], "%Y-%m-%dT%H:%M:%SZ")-timezone_difference)]
 
-        gamelogs_df = gamelogs_df[gamelogs_df["Date"] < (datetime.datetime.strptime(bet['closed_date'], "%Y-%m-%dT%H:%M:%SZ")-timezone_difference)]
-        if gamelogs_df.shape[0] < 4:
+        if self.player_gamelogs.shape[0] < 4:
             return reasons
 
-        if gamelogs_df["OPP"].iloc[-1] in [bet["home"].upper(), bet["away"].upper()]:
+        if self.player_gamelogs["OPP"].iloc[-1] in [bet["home"].upper(), bet["away"].upper()]:
             self.blad +=1
         else:
             self.dobrze +=1
 
         # quantile-based reasons
-        lower_bound = gamelogs_df[bet_type].quantile(0.40)
-        upper_bound = gamelogs_df[bet_type].quantile(0.60)
+        lower_bound = self.player_gamelogs[bet_type].quantile(0.40)
+        upper_bound = self.player_gamelogs[bet_type].quantile(0.60)
         if bet['over_under'] == 'Over' and bet['line'] < lower_bound:
             reason = {"over_under": "Over",
                       "description": f"Line is {(lower_bound - bet['line']):.2f} below 40% quantile. vote for over",
@@ -196,8 +184,8 @@ class BetAssessment():
             reasons.append(reason)
 
         # median-based reasons
-        median = gamelogs_df[bet_type].median()
-        mean = gamelogs_df.sort_values(by=bet_type, ascending=False).iloc[:-3].iloc[3:][bet_type].mean()
+        median = self.player_gamelogs[bet_type].median()
+        mean = self.player_gamelogs.sort_values(by=bet_type, ascending=False).iloc[:-3].iloc[3:][bet_type].mean()
 
         if bet['over_under'] == 'Under' and (bet['line'] - median > threshold[bet_type] or bet['line'] - mean > threshold[bet_type]):
             reason = {"over_under": "Under",
@@ -214,15 +202,15 @@ class BetAssessment():
         games_in_calculation = 8
         games_triggering = 6
         if bet['over_under'] == 'Over' and len(
-                gamelogs_df.tail(games_in_calculation)[gamelogs_df.tail(games_in_calculation)[bet_type] > bet['line']]) >= games_triggering:
+                self.player_gamelogs.tail(games_in_calculation)[self.player_gamelogs.tail(games_in_calculation)[bet_type] > bet['line']]) >= games_triggering:
             reason = {"over_under": "Over",
-                      "description": f"Last {games_in_calculation} games {len(gamelogs_df.tail(games_in_calculation)[gamelogs_df.tail(games_in_calculation)[bet_type] > bet['line']])} times over betline. vote for over.",
+                      "description": f"Last {games_in_calculation} games {len(self.player_gamelogs.tail(games_in_calculation)[self.player_gamelogs.tail(games_in_calculation)[bet_type] > bet['line']])} times over betline. vote for over.",
                       "code": "last_games"}
             reasons.append(reason)
         if bet['over_under'] == 'Under' and len(
-                gamelogs_df.tail(games_in_calculation)[gamelogs_df.tail(games_in_calculation)[bet_type] < bet['line']]) >= games_triggering:
+                self.player_gamelogs.tail(games_in_calculation)[self.player_gamelogs.tail(games_in_calculation)[bet_type] < bet['line']]) >= games_triggering:
             reason = {"over_under": "Under",
-                      "description": f"Last {games_in_calculation} games {len(gamelogs_df.tail(games_in_calculation)[gamelogs_df.tail(games_in_calculation)[bet_type] < bet['line']])} times under betline. vote for under.",
+                      "description": f"Last {games_in_calculation} games {len(self.player_gamelogs.tail(games_in_calculation)[self.player_gamelogs.tail(games_in_calculation)[bet_type] < bet['line']])} times under betline. vote for under.",
                       "code": "last_games"}
             reasons.append(reason)
 
@@ -268,9 +256,9 @@ class BetAssessment():
                 reasons.append(reason)
 
         # averages
-        gamelogs_df['diff'] = gamelogs_df[bet_type] - bet['line']
+        self.player_gamelogs['diff'] = self.player_gamelogs[bet_type] - bet['line']
         try:
-            averages = gamelogs_df.sort_values(by=['Date'], ascending=False).groupby(np.arange(len(gamelogs_df)) // 4).agg(
+            averages = self.player_gamelogs.sort_values(by=['Date'], ascending=False).groupby(np.arange(len(self.player_gamelogs)) // 4).agg(
                 {'Date': 'first', f"{bet_type}": 'mean', 'diff': 'mean'})
             if averages.iloc[0]["diff"] > significant_diff[bet['bet_type']]:
                 reason = {"over_under": "Over",
@@ -290,7 +278,7 @@ class BetAssessment():
             print(
                 f"{bet['away']}@{bet['home']}, {bet['player_ESPN']}, {bet['over_under']}, {bet['line']}, {bet['bet_type']} ({bet['odds']}), {lower_bound=}, {upper_bound=}, {mean=}, {median=}")
             print(*reasons, sep='\n')
-            print(gamelogs_df[['Date', 'MIN', 'type', 'OPP', bet_type, 'diff']].tail(9))
+            print(self.player_gamelogs[['Date', 'MIN', 'type', 'OPP', bet_type, 'diff']].tail(9))
             print(averages)
             averages = None
             print("\n")
@@ -328,10 +316,10 @@ if __name__ == '__main__':
         dfx.to_csv("all_assessed_bets20230320.csv", index=False)
         show(dfx)
 
-    resolve_bets()
-    analyze_all_bets()
-    #
-    # fetch_and_analyze_today_games()
+    # resolve_bets()
+    # analyze_all_bets()
+
+    fetch_and_analyze_today_games()
     #18:1
     # averages == over_under and last_games == over_under and quantiles != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"
 
