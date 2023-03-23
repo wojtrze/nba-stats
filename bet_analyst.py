@@ -28,7 +28,8 @@ UB_to_ESPN_player_name = {'J.Brown': 'JaylenBrown',
                           'NicolasClaxton': 'NicClaxton',
                           'TroyBrown': 'TroyBrown Jr.',
                           'C.LeVert': 'CarisLeVert',
-                          'CameronReddish': 'CamReddish'
+                          'CameronReddish': 'CamReddish',
+                          'NikolaJokić': 'NikolaJokic'
                           }
 
 
@@ -174,16 +175,16 @@ class BetAssessment():
             self.dobrze +=1
 
         # quantile-based reasons
-        lower_bound = gamelogs_df[bet_type].quantile(0.3)
-        upper_bound = gamelogs_df[bet_type].quantile(0.7)
+        lower_bound = gamelogs_df[bet_type].quantile(0.40)
+        upper_bound = gamelogs_df[bet_type].quantile(0.60)
         if bet['over_under'] == 'Over' and bet['line'] < lower_bound:
             reason = {"over_under": "Over",
-                      "description": f"Line is {(lower_bound - bet['line']):.2f} below 30% quantile. vote for over",
+                      "description": f"Line is {(lower_bound - bet['line']):.2f} below 40% quantile. vote for over",
                       "code": "quantiles"}
             reasons.append(reason)
         if bet['over_under'] == 'Under' and bet['line'] > upper_bound:
             reason = {"over_under": "Under",
-                      "description": f"Line is {(bet['line'] - upper_bound):.2f} above 70% quantile. vote for under",
+                      "description": f"Line is {(bet['line'] - upper_bound):.2f} above 60% quantile. vote for under",
                       "code": "quantiles"}
             reasons.append(reason)
 
@@ -324,13 +325,13 @@ if __name__ == '__main__':
         sure_bets = assessment.assess_bets_from_list(bets)
         print(assessment.temp_players_to_map)
         dfx = pd.DataFrame(sure_bets)
-        dfx.to_csv("all_assessed_bets20230307.csv", index=False)
+        dfx.to_csv("all_assessed_bets20230320.csv", index=False)
         show(dfx)
 
     resolve_bets()
     analyze_all_bets()
-
-    fetch_and_analyze_today_games()
+    #
+    # fetch_and_analyze_today_games()
     #18:1
     # averages == over_under and last_games == over_under and quantiles != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"
 
@@ -340,4 +341,4 @@ if __name__ == '__main__':
     # 16:4
     # quantiles == over_under and median != over_under and last_games == over_under and averages == over_under and not (bet_type in ["REB", "3PM", "PTS"] and over_under == "Under")
 
-
+# (averages == over_under and last_games == over_under and quantiles != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under") or (averages == over_under and last_games == over_under  and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under" and median == over_under and bets_hits == over_under) or (quantiles == over_under and median != over_under and last_games == over_under and averages == over_under and not (bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"))
