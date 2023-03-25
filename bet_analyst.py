@@ -314,8 +314,8 @@ if __name__ == '__main__':
         sure_bets = assessment.assess_bets_from_list(bets)
         print(assessment.temp_players_to_map)
         dfx = pd.DataFrame(sure_bets)
-        dfx.to_csv("all_assessed_bets20230320.csv", index=False)
-        show(dfx)
+        dfx.to_csv("all_assessed_bets20230325.csv", index=False)
+        #show(dfx)
 
     # resolve_bets()
     # analyze_all_bets()
