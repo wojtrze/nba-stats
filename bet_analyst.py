@@ -41,6 +41,7 @@ class BetAssessment():
     bets_resolved = pd.DataFrame()
     doubtful_players = players_unlikely_to_play()
     player_gamelogs = pd.DataFrame()
+    reasons =[]
 
     def __init__(self, bets):
         self.bets = bets
@@ -124,7 +125,7 @@ class BetAssessment():
         pass
 
     def assess_bet_vs_player_gamelogs(self, bet: dict) -> list:
-        reasons = []
+        self.reasons = []
         # handling of mapped names
         if bet['player_ESPN'] not in UB_to_ESPN_player_name:
             self.player_gamelogs = self.gamelogs[self.gamelogs['player_name_ESPN'] == bet['player_ESPN']]
@@ -155,7 +156,7 @@ class BetAssessment():
         self.player_gamelogs = self.player_gamelogs[self.player_gamelogs["Date"] < (datetime.datetime.strptime(bet['closed_date'], "%Y-%m-%dT%H:%M:%SZ")-timezone_difference)]
 
         if self.player_gamelogs.shape[0] < 4:
-            return reasons
+            return self.reasons
 
         if self.player_gamelogs["OPP"].iloc[-1] in [bet["home"].upper(), bet["away"].upper()]:
             self.blad +=1
@@ -169,19 +170,19 @@ class BetAssessment():
             reason = {"over_under": "Over",
                       "description": f"Line is {(lower_bound - bet['line']):.2f} below 40% quantile. vote for over",
                       "code": "quantiles"}
-            reasons.append(reason)
+            self.reasons.append(reason)
         if bet['over_under'] == 'Under' and bet['line'] > upper_bound:
             reason = {"over_under": "Under",
                       "description": f"Line is {(bet['line'] - upper_bound):.2f} above 60% quantile. vote for under",
                       "code": "quantiles"}
-            reasons.append(reason)
+            self.reasons.append(reason)
 
         # low odds reasons
         if bet['odds'] <= 1.73:
             reason = {"over_under": f"{bet['over_under']}",
                       "description": f"Bet odds is low: {bet['odds']=}. vote for {bet['over_under']}.",
                       "code": "low_odds"}
-            reasons.append(reason)
+            self.reasons.append(reason)
 
         # median-based reasons
         median = self.player_gamelogs[bet_type].median()
@@ -191,12 +192,12 @@ class BetAssessment():
             reason = {"over_under": "Under",
                       "description": f"Betline is {bet['line'] - median:.2f} below median. vote for under.",
                       "code": "median"}
-            reasons.append(reason)
+            self.reasons.append(reason)
         if bet['over_under'] == 'Over' and (median - bet['line'] > threshold[bet_type] or mean - bet['line'] > threshold[bet_type]):
             reason = {"over_under": "Over",
                       "description": f"Betline is {median - bet['line']:.2f} above median. vote for over.",
                       "code": "median"}
-            reasons.append(reason)
+            self.reasons.append(reason)
 
         # last game-based reasons
         games_in_calculation = 8
@@ -206,13 +207,13 @@ class BetAssessment():
             reason = {"over_under": "Over",
                       "description": f"Last {games_in_calculation} games {len(self.player_gamelogs.tail(games_in_calculation)[self.player_gamelogs.tail(games_in_calculation)[bet_type] > bet['line']])} times over betline. vote for over.",
                       "code": "last_games"}
-            reasons.append(reason)
+            self.reasons.append(reason)
         if bet['over_under'] == 'Under' and len(
                 self.player_gamelogs.tail(games_in_calculation)[self.player_gamelogs.tail(games_in_calculation)[bet_type] < bet['line']]) >= games_triggering:
             reason = {"over_under": "Under",
                       "description": f"Last {games_in_calculation} games {len(self.player_gamelogs.tail(games_in_calculation)[self.player_gamelogs.tail(games_in_calculation)[bet_type] < bet['line']])} times under betline. vote for under.",
                       "code": "last_games"}
-            reasons.append(reason)
+            self.reasons.append(reason)
 
         # TODO: lineup-based reasons
         game_doubtful_players = [d for d in self.doubtful_players if d['team'].upper() in [bet['home'].upper(), bet['away'].upper()]]
@@ -220,7 +221,7 @@ class BetAssessment():
         reason = {"over_under": "Info",
                   "description": f"Game doubtful players: {game_doubtful_players}",
                   "code": "info"}
-        reasons.append(reason)
+        self.reasons.append(reason)
 
         # bets_hits
         # fixme dodaj  ograniczenie daty do tych sprzed zamkniecia zakladu
@@ -247,13 +248,13 @@ class BetAssessment():
                 reason = {"over_under": "Under",
                           "description": f"Player has {under_hits}/{under_all_count} under bets hit. vote for under.",
                           "code": "bets_hits"}
-                reasons.append(reason)
+                self.reasons.append(reason)
         if over_all_count > 4:
             if over_hits / over_all_count > 0.65:
                 reason = {"over_under": "Over",
                           "description": f"Player has {over_hits}/{over_all_count} over bets hit. vote for over.",
                           "code": "bets_hits"}
-                reasons.append(reason)
+                self.reasons.append(reason)
 
         # averages
         self.player_gamelogs['diff'] = self.player_gamelogs[bet_type] - bet['line']
@@ -264,26 +265,26 @@ class BetAssessment():
                 reason = {"over_under": "Over",
                           "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} over betline. vote for over.",
                           "code": "averages"}
-                reasons.append(reason)
+                self.reasons.append(reason)
             if averages.iloc[0]["diff"] < -significant_diff[bet['bet_type']]:
                 reason = {"over_under": "Under",
                           "description": f"Last 4 games average of player is {averages.iloc[0]['diff']} under betline. vote for under.",
                           "code": "averages"}
-                reasons.append(reason)
+                self.reasons.append(reason)
         except Exception as e:
             print("An error occurred:", e)
 
         #if len(reasons) > 3:
-        if  "last_games" in str(reasons) and "averages" in str(reasons) and "quantiles" not in str(reasons):
+        if  "last_games" in str(self.reasons) and "averages" in str(self.reasons) and "quantiles" not in str(self.reasons):
             print(
                 f"{bet['away']}@{bet['home']}, {bet['player_ESPN']}, {bet['over_under']}, {bet['line']}, {bet['bet_type']} ({bet['odds']}), {lower_bound=}, {upper_bound=}, {mean=}, {median=}")
-            print(*reasons, sep='\n')
+            print(*self.reasons, sep='\n')
             print(self.player_gamelogs[['Date', 'MIN', 'type', 'OPP', bet_type, 'diff']].tail(9))
             print(averages)
             averages = None
             print("\n")
 
-        return reasons
+        return self.reasons
 
 
 if __name__ == '__main__':
