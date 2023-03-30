@@ -334,14 +334,14 @@ if __name__ == '__main__':
         sure_bets = assessment.assess_bets_from_list(bets)
         print(assessment.temp_players_to_map)
         dfx = pd.DataFrame(sure_bets)
-        dfx.to_csv("all_assessed_bets20230326.csv", index=False)
+        dfx.to_csv("all_assessed_bets20230329.csv", index=False)
         # show(dfx)
 
 
-    resolve_bets()
-    analyze_all_bets()
+    # resolve_bets()
+    # analyze_all_bets()
     #
-    # fetch_and_analyze_today_games()
+    fetch_and_analyze_today_games()
     # 18:1
     # averages == over_under and last_games == over_under and quantiles != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"
 
@@ -352,3 +352,6 @@ if __name__ == '__main__':
     # quantiles == over_under and median != over_under and last_games == over_under and averages == over_under and not (bet_type in ["REB", "3PM", "PTS"] and over_under == "Under")
 
 # (averages == over_under and last_games == over_under and quantiles != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under") or (averages == over_under and last_games == over_under  and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under" and median == over_under and bets_hits == over_under) or (quantiles == over_under and median != over_under and last_games == over_under and averages == over_under and not (bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"))
+
+
+# (averages == over_under and `last_games-6-8` == over_under and `quantiles-0.3-0.7` != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under") or (averages == over_under and `last_games-6-8` == over_under  and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under" and median == over_under and bets_hits == over_under) or (`quantiles-0.3-0.7` == over_under and median != over_under and `last_games-6-8` == over_under and averages == over_under and not (bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"))
