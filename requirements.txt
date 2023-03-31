@@ -1,4 +1,6 @@
-requests
-pandas
-pandasgui
-bs4
+requests~=2.27.1
+pandas~=1.4.2
+pandasgui~=0.2.13
+bs4~=0.0.1
+numpy~=1.22.3
+beautifulsoup4~=4.11.1
