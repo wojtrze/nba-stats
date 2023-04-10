@@ -5,11 +5,10 @@ import math
 from pandasgui import show
 
 if __name__ == "__main__":
-    df = pd.read_csv('all_assessed_bets20230329.csv')
+    df = pd.read_csv('all_assessed_bets20230409.csv')
     df = df.drop_duplicates(subset=['closed_date', 'player_ESPN', 'bet_type', 'line', 'over_under'], keep='first')
     # Define the columns to group by
-    group_cols = ['bet_type', 'over_under', 'quantiles_0_4_0_6', 'quantiles_0_3_0_7',
-                  'last_games_6_8', 'last_games_2_2', 'bets_hits', 'averages', 'median']
+    group_cols = ['bet_type', 'over_under', 'avg_diff_2_games'] #,'avg_diff_6_games','last_games_4_5','median','last_games_6_8','last_games_2_2','averages_2_games','averages_6_games','bets_hits']
 
     # group_cols = ['bet_type', 'over_under', 'bets_hits', 'averages', 'median']
 
@@ -26,7 +25,6 @@ if __name__ == "__main__":
                 return f'({col}.isnull())'
             else:
                 return f'({col} == "{val}")'
-
 
         query = ' & '.join([condition(col, val) for col, val in zip(group_cols, combo)])
         rows = df.query(query)
