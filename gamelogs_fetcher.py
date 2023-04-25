@@ -213,7 +213,7 @@ def update_gamelogs():
                     continue
                 if not current_players_gamelog.empty:
                     print(current_players_gamelog[['OPP', 'MIN', 'REB', 'AST','FG%',
-                                                   'PTS', '3PM', 'type', 'Date', 'player_name_ESPN']])
+                                                   'PTS', '3PM', 'type', 'Date', 'player_name_ESPN']].head(5))
             except:
                 print("coś nie tak")
                 print(current_players_gamelog)

@@ -346,32 +346,20 @@ if __name__ == '__main__':
         bets_with_results_dict.to_csv("offers_resolved.csv", index=False)
 
 
-    def analyze_all_bets():
+    def analyze_all_bets(start_date):
         # if you want to assess  resolved offers:
         bets = pd.read_csv("offers_resolved.csv").to_dict("records")
+        bets = [bet for bet in bets if bet['closed_date'] >= start_date]
         assessment = BetAssessment(bets)
         # for each of bets asess_bet function puts reasons for bet
-        sure_bets = assessment.assess_bets_from_list(bets)
+        assessed_bets = assessment.assess_bets_from_list(bets)
         print(assessment.temp_players_to_map)
-        dfx = pd.DataFrame(sure_bets)
-        dfx.to_csv("all_assessed_bets20230409.csv", index=False)
+        dfx = pd.DataFrame(assessed_bets)
+        dfx.to_csv("all_assessed_bets20230424.csv", index=False)
         # show(dfx)
 
 
-    resolve_bets()
-    analyze_all_bets()
+    # resolve_bets()
+    analyze_all_bets(start_date="2023-04-15")
     #
     fetch_and_analyze_today_games()
-    # 18:1
-    # averages == over_under and last_games == over_under and quantiles != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"
-
-    # 42:11
-    # averages == over_under and last_games == over_under  and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under" and median == over_under and bets_hits == over_under
-
-    # 16:4
-    # quantiles == over_under and median != over_under and last_games == over_under and averages == over_under and not (bet_type in ["REB", "3PM", "PTS"] and over_under == "Under")
-
-# (averages == over_under and last_games == over_under and quantiles != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under") or (averages == over_under and last_games == over_under  and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under" and median == over_under and bets_hits == over_under) or (quantiles == over_under and median != over_under and last_games == over_under and averages == over_under and not (bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"))
-
-
-# (averages == over_under and `last_games-6-8` == over_under and `quantiles-0.3-0.7` != over_under and median == over_under and bets_hits == over_under and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under") or (averages == over_under and `last_games-6-8` == over_under  and bet_type in ["REB", "3PM", "PTS"] and over_under == "Under" and median == over_under and bets_hits == over_under) or (`quantiles-0.3-0.7` == over_under and median != over_under and `last_games-6-8` == over_under and averages == over_under and not (bet_type in ["REB", "3PM", "PTS"] and over_under == "Under"))
