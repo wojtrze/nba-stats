@@ -41,7 +41,7 @@ headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/201
 
 
 def todays_games_list():
-    url = "https://pl.unibet-56.com/sportsbook-feeds/views/filter/basketball/nba/matches?includeParticipants=true&useCombined=true&ncid=1635861681"
+    url = "https://pl.unibet-57.com/sportsbook-feeds/views/filter/basketball/nba/matches?includeParticipants=true&useCombined=true&ncid=1635861681"
     resp = requests.get(url)
     a = resp.json()
     events = a['layout']['sections'][1]['widgets'][0]['matches']['events']

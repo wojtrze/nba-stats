@@ -302,11 +302,11 @@ class BetAssessment():
         self.reasons.append(reason)
 
         # if len(reasons) > 3:
-        if "last_games" in str(self.reasons) and "averages" in str(self.reasons) and "quantiles" not in str(self.reasons):
+        if "averages_2_games" in str(self.reasons) :
             print(
-                f"{bet['away']}@{bet['home']}, {bet['player_ESPN']}, {bet['over_under']}, {bet['line']}, {bet['bet_type']} ({bet['odds']})")
-            print(*self.reasons, sep='\n')
-            print(self.player_gamelogs[['Date', 'MIN', 'type', 'OPP', bet_type, 'diff']].tail(9))
+                f"{bet['player_ESPN']} {bet['over_under']}, {bet['line']} {bet['bet_type']} ({bet['odds']}), {bet['away']}@{bet['home']}, {bet['closed_date']}")
+            # print(*self.reasons.count(), sep='\n')
+            print(self.player_gamelogs[['Date', 'MIN', 'type', 'OPP', bet_type, 'diff']].tail(6))
             averages = None
             print("\n")
 
@@ -332,10 +332,10 @@ if __name__ == '__main__':
         bets = all_today_bets()
         store_offers(bets)
         assessment = BetAssessment(bets)
-        sure_bets = assessment.assess_bets_from_list(bets)
+        assessed_bets = assessment.assess_bets_from_list(bets)
         print(assessment.temp_players_to_map)
-        todays = pd.DataFrame(sure_bets)
-        show(todays)
+        todays_bets = pd.DataFrame(assessed_bets)
+        show(todays_bets)
 
 
     def resolve_bets():
@@ -355,11 +355,22 @@ if __name__ == '__main__':
         assessed_bets = assessment.assess_bets_from_list(bets)
         print(assessment.temp_players_to_map)
         dfx = pd.DataFrame(assessed_bets)
-        dfx.to_csv("all_assessed_bets20230424.csv", index=False)
-        # show(dfx)
+
+        dfx['trend'] = dfx['trend'].astype(float)
+        dfx['avg_diff_2_games'] = dfx['avg_diff_2_games'].astype(float)
+        dfx['avg_diff_5_games'] = dfx['avg_diff_5_games'].astype(float)
+
+        dfx.to_csv("all_assessed_bets20230425.csv", index=False)
+
+        bins = [-12, -9, -7, -5, -4, -3, -2, -1, -0.5, 0, 0.5, 1, 2, 3, 4, 5, 7, 12]
+        dfx['trend_bins'] = pd.cut(dfx['trend'], bins=bins)
+        dfx['avg_diff_2_games_bins'] = pd.cut(dfx['avg_diff_2_games'], bins=bins)
+        dfx['avg_diff_5_games_bins'] = pd.cut(dfx['avg_diff_5_games'], bins=bins)
+        show(dfx)
 
 
-    # resolve_bets()
-    analyze_all_bets(start_date="2023-04-15")
+    #resolve_bets()
+    #analyze_all_bets(start_date="2023-04-15")
+    #
     #
     fetch_and_analyze_today_games()
