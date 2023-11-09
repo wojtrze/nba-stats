@@ -11,10 +11,6 @@ MAXSLEEP = 0
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'}
 
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
-
 def get_game_boxscores(game_id, home_or_away):
     url = f'https://www.espn.com/nba/boxscore?gameId={game_id}'
     sleep(randint(MINSLEEP, MAXSLEEP))
@@ -54,7 +50,7 @@ def player_gamelog_url(player_id):
 
 def scrap_gamelog_page(player_id, season_start_yyyy):
     sleep(randint(MINSLEEP, MAXSLEEP))
-    players_gamelog_url = f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}/type/nba/year/{int(season_start_yyyy)+1}"
+    players_gamelog_url = f"https://www.espn.com/nba/player/gamelog/_/id/{player_id}/type/nba/year/{int(season_start_yyyy) + 1}"
     pandas_html = pd.read_html(players_gamelog_url)
 
     # remove rubbish from each table
@@ -71,8 +67,6 @@ def scrap_gamelog_page(player_id, season_start_yyyy):
         filtered_gamelog = pd.concat([filtered_gamelog, current_dataframe])
     if len(filtered_gamelog) == 0:
         return filtered_gamelog
-
-
 
     # filtered_gamelog.reindex()
     filtered_gamelog[['FGM', 'FGA']] = filtered_gamelog['FG'].str.split('-', 1, expand=True)
@@ -193,7 +187,7 @@ def get_last_fetching_date(team_id):
     team_game_dates_df = pd.DataFrame()
     team_game_dates_df = pd.read_csv(f'team-{team_id}.csv')
     # team_game_dates_df['Date'] = pd.to_datetime(team_game_dates_df['Date'])
-    #return team_game_dates_df['Date'].max()
+    # return team_game_dates_df['Date'].max()
     return "2022/10/18"
 
 
@@ -212,7 +206,7 @@ def update_gamelogs():
                     print("empty gamelog")
                     continue
                 if not current_players_gamelog.empty:
-                    print(current_players_gamelog[['OPP', 'MIN', 'REB', 'AST','FG%',
+                    print(current_players_gamelog[['OPP', 'MIN', 'REB', 'AST', 'FG%',
                                                    'PTS', '3PM', 'type', 'Date', 'player_name_ESPN']].head(5))
             except:
                 print("coś nie tak")
@@ -232,37 +226,36 @@ if __name__ == '__main__':
     # teams = teams_ids()
     teams = [
         'bos',
-        #'bkn',
+        'bkn',
         'ny',
         'phi',
-        # 'tor',
-        # 'chi',
-        #'cle',
-        # 'det',
-        # 'ind',
-        #'mil',
+        'tor',
+        'chi',
+        'cle',
+        'det',
+        'ind',
+        'mil',
         'den',
-        #'min',
-        # 'okc',
-        # 'por',
-        # 'utah',
+        'min',
+        'okc',
+        'por',
+        'utah',
         'gs',
-        #'lac',
+        'lac',
         'lal',
         'phx',
-        #'sac',
-        #'atl',
-        # 'cha',
+        'sac',
+        'atl',
+        'cha',
         'mia',
-        # 'orl',
-        # 'wsh',
-        # 'dal',
-        # 'hou',
-        # 'mem'
-        # 'no',
-        # 'sa'
+        'orl',
+        'wsh',
+        'dal',
+        'hou',
+        'mem'
+        'no',
+        'sa'
     ]
-
 
     print(teams)
     update_gamelogs()

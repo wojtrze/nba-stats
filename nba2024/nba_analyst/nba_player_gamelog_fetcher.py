@@ -10,8 +10,8 @@ import json
 import os
 
 # Constants
-MIN_SLEEP: int = 0
-MAX_SLEEP: int = 0
+MIN_SLEEP: int = 2
+MAX_SLEEP: int = 3
 BASE_URL: str = 'https://www.espn.com/nba'
 SEASONS: List[str] = ['2023', '2022', '2021', '2020', '2019', '2018']  # Add more seasons as needed
 SEASON_START_DATE = pd.to_datetime("2023-10-18").date()
@@ -62,6 +62,7 @@ def retrieve_player_name(url: str) -> str:
     time.sleep(random.randint(0, 1))
     soup = get_page_soup(url)
     player_name = soup.find_all("h1", {"class": "PlayerHeader__Name"})[0].text.strip()
+    logger.info(f"{player_name=} retrieved from page {url}")
     return player_name
 
 
@@ -72,8 +73,17 @@ def scrap_player_gamelog(player_id: str, season_start_yyyy: str) -> pd.DataFrame
 
     # Filter out invalid gamelog columns
     gamelog_data_extracted_from_raw = pd.DataFrame()
-    gamelog_data_extracted_from_raw = pd.concat([pd_table for pd_table in espn_raw_data_tables if 'Date' in pd_table.columns], ignore_index=True)
-
+    logger.info(f"length of gamelog_data_extracted_from_raw = {len(gamelog_data_extracted_from_raw)}")
+    data_tables_to_concat = [pd_table for pd_table in espn_raw_data_tables if 'Date' in pd_table.columns]
+    if not data_tables_to_concat:
+        logger.info("no data to concatenate")
+        return None
+    try:
+        gamelog_data_extracted_from_raw = pd.concat(data_tables_to_concat, ignore_index=True)
+        logger.info("data concatenated successfully")
+    except Exception as e:
+        logger.error("An error occured. No data to concatenate: {}".format(e))
+        gamelog_data_extracted_from_raw = None
     # Data cleaning and transformation
     cleaned_gamelog = clean_and_transform_gamelog(gamelog_data_extracted_from_raw)
     return cleaned_gamelog
@@ -104,11 +114,13 @@ def update_gamelogs():
         teams: List[str] = json.load(file)
 
     for team_id in teams:
+        logger.info(f"Looking into team {team_id}")
         team_gamelogs: pd.DataFrame = pd.DataFrame()
         player_ids: List[str] = player_ids_for_team(team_id)
 
         for player_id in player_ids:
-            current_players_gamelog: pd.DataFrame = player_gamelog_for_season(player_id, '2022')
+            logger.info(f"starting data collection for {player_id=} for {team_id=}")
+            current_players_gamelog: pd.DataFrame = player_gamelog_for_season(player_id, '2023')
             current_players_gamelog['team'] = team_id
             if not current_players_gamelog.empty:
                 logger.info(current_players_gamelog[['OPP', 'MIN', 'REB', 'AST', 'FG%', 'PTS', '3PM', 'Date', 'player_name_ESPN']].head(5))
@@ -124,6 +136,8 @@ def clean_and_transform_gamelog(gamelog_df):
     unwanted_keywords = ['acquired', 'Finals', 'Play-In', 'Game', 'Conference', 'RISING', 'PRESEASON',
                          'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september',
                          'october', 'november', 'december', 'from', 'LeBron', 'Canada Series']
+    if gamelog_df.empty:
+        logger.info("empty gamelog_df passed to transformation method")
     gamelog_df = gamelog_df[~gamelog_df['Date'].str.contains('|'.join(unwanted_keywords), na=False, case=False)]
 
     # Split 'FG' column into 'FGM' and 'FGA' columns
