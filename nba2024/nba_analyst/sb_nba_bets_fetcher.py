@@ -20,22 +20,22 @@ from selenium import webdriver
 
 def get_sb_games_ids_from_page(url) -> List[str]:
     driver_manager.install_chromedriver()
-    driver = webdriver.Chrome()
-    driver.get(url)
-    try:
-        accept_button = driver.find_element(By.ID, "onetrust-accept-btn-handler")
-        accept_button.click()
-        print("Clicked on 'Akceptuję wszystkie' button.")
-    except NoSuchElementException:
-        print("'Akceptuję wszystkie' button not found on the page.")
+    with webdriver.Chrome() as driver:
+        driver.get(url)
+        try:
+            accept_button = driver.find_element(By.ID, "onetrust-accept-btn-handler")
+            accept_button.click()
+            print("Clicked on 'Akceptuję wszystkie' button.")
+        except NoSuchElementException:
+            print("'Akceptuję wszystkie' button not found on the page.")
 
-    time.sleep(12)
-    elements = driver.find_elements(By.CLASS_NAME, 'event-row-container')
-    # Extract and print the ID of each element
+        time.sleep(12)
+        elements = driver.find_elements(By.CLASS_NAME, 'event-row-container')
+        # Extract and print the ID of each element
 
-    elements = [element.get_attribute('id').replace("event-", "") for element in elements]
-    # Close the WebDriver
-    driver.quit()
+        elements = [element.get_attribute('id').replace("event-", "") for element in elements]
+        # Close the WebDriver
+        driver.quit()
     return elements
 
 
