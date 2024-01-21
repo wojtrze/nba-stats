@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import time
 from typing import List, Union, Dict
@@ -11,57 +11,15 @@ import driver_manager
 from selenium.webdriver.common.by import By
 from selenium import webdriver
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 SUPERBET_URL = "https://superbet.pl/zaklady-bukmacherskie/koszykowka/usa/usa-nba/wszystko"
 
 
-def get_sb_games_info_from_page(url):
-    driver_manager.install_chromedriver()
-    with webdriver.Chrome() as driver:
-        driver.get(url)
-        try:
-            accept_button = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "onetrust-accept-btn-handler")))
-            accept_button.click()
-            logger.info("Clicked on 'Akceptuję wszystkie' button.")
-        except NoSuchElementException:
-            logger.info("'Akceptuję wszystkie' button not found on the page.")
-
-        time.sleep(6)
-        #WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, 'event-row-container')))
-
-        game_elements = driver.find_elements(By.CLASS_NAME, 'event-row-container')
-        logger.info(f"{len(game_elements)} game events were found on {url}")
-        games_info = []
-        current_datetime = datetime.now()
-        for el in game_elements:
-            game_info = extract_game_info(current_datetime, el)
-            games_info.append(game_info)
-
-        logger.info(f"{len(games_info)} game(s) found on superbet")
-
-        driver.quit()
-        return games_info
-
-
-def extract_game_info(current_datetime, el):
-    game_info = {"superbet_event_id": el.get_attribute("id").replace("event-", ""),
-                 "event_time": el.find_element(By.CLASS_NAME, "event-time").text.strip(),
-                 "home": el.find_element(By.XPATH, ".//*[@class='event-competitor__name e2e-event-team1-name']").text.strip(),
-                 "away": el.find_element(By.XPATH, ".//*[@class='event-competitor__name e2e-event-team2-name']").text.strip(),
-                 "odds": {
-                     "home_win": el.find_elements(By.XPATH, ".//*[@class='odd-button__odd-value-new e2e-odd-current-value']")[0].text.strip(),
-                     "away_win": el.find_elements(By.XPATH, ".//*[@class='odd-button__odd-value-new e2e-odd-current-value']")[1].text.strip(),
-                     "access_time": current_datetime.strftime("%Y-%m-%d %H:%M:%S")
-                 },
-                 }
-    return game_info
-
-
-def get_bets_by_game_id(game_info) -> List[Dict[str, Union[str, int]]]:
+def get_bets_by_game_id(superbet_event_id) -> List[Dict[str, Union[str, int]]]:
     game_url = "https://production-superbet-offer-pl.freetls.fastly.net/matches/byId"
-    params = {"matchIds": game_info["superbet_event_id"]}
+    params = {"matchIds": superbet_event_id}
 
     headers = {
         "authority": "production-superbet-offer-pl.freetls.fastly.net",
@@ -86,33 +44,105 @@ def get_bets_by_game_id(game_info) -> List[Dict[str, Union[str, int]]]:
         bets_for_game = response.json()["data"][0]["odds"]
     else:
         logger.info(f"Failed to fetch data. Status code: {response.status_code}")
+        raise Exception("sth wrong")
     return bets_for_game
 
 
 def filter_data(data, bet_type):
-    return [item for item in data if all(item.get(key) in value for key, value in bet_type.items())]
+    result = [item for item in data if all(item.get(key) in value for key, value in bet_type.items())]
+    return result
+
+
+def get_sb_games_info_from_page(url):
+    driver_manager.install_chromedriver()
+    games_info = []
+    with webdriver.Chrome() as driver:
+        driver.get(url)
+        try:
+            accept_button = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "onetrust-accept-btn-handler")))
+            accept_button.click()
+            logger.info("Clicked on 'Akceptuję wszystkie' button.")
+        except NoSuchElementException:
+            logger.info("'Akceptuję wszystkie' button not found on the page.")
+
+        time.sleep(8)
+        # driver.wait_until(lambda: driver.execute_script('return document.readyState === "complete"'))
+        # WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, 'event-row-container')))
+
+        game_elements = driver.find_elements(By.CLASS_NAME, 'event-row-container')
+        logger.info(f"{len(game_elements)} game events were found on {url}")
+
+        current_datetime = datetime.now()
+        for game_element in game_elements:
+            game_info = extract_game_info(current_datetime, game_element)
+            player_props = extract_player_props_from_game(current_datetime, game_element)
+            logger.info(f"{len(player_props)} props extracted for game {game_info['away']} at {game_info['home']}")
+            game_info['odds']['player_props'] = player_props
+            games_info.append(game_info)
+            time.sleep(4)
+
+    logger.info(f"{len(games_info)} game(s) extracted from superbet")
+
+    #driver.quit()
+    return games_info
+
+
+def extract_game_info(current_datetime, game_element):
+    adjusted_time = current_datetime - timedelta(hours=6)
+    # TODO exception handling
+    game_info = {"superbet_event_id": game_element.get_attribute("id").replace("event-", ""),
+                 "event_time": game_element.find_element(By.CLASS_NAME, "event-time").text.strip(),
+                 "home": game_element.find_element(By.XPATH, ".//*[@class='event-competitor__name e2e-event-team1-name']").text.strip(),
+                 "away": game_element.find_element(By.XPATH, ".//*[@class='event-competitor__name e2e-event-team2-name']").text.strip(),
+                 "odds": {
+                     "game_winner": {
+                         "home_win": game_element.find_elements(By.XPATH, ".//*[@class='odd-button__odd-value-new e2e-odd-current-value']")[0].text.strip(),
+                         "away_win": game_element.find_elements(By.XPATH, ".//*[@class='odd-button__odd-value-new e2e-odd-current-value']")[1].text.strip(),
+                         "access_time": adjusted_time.strftime("%Y-%m-%d %H:%M:%S"),
+                     },
+                     "total_teams_pts": {},
+                     "player_props": []
+                 }}
+    return game_info
+
+
+def extract_player_props_from_game(current_datetime, game_element):
+    # weź wszystkie
+    raw_props_for_game = get_bets_by_game_id(game_element.get_attribute("id").replace("event-", ""))
+    #raw_props_for_game = get_bets_by_game_id(game_element["superbet_event_id"])
+    bet_types = {
+        "pts": {"bgdi": [200949]},
+        "ast": {"bgdi": [200950]},
+        "reb": {"bgdi": [200951]},
+        "thr": {"bgdi": [200992]},
+        "stl": {"bgdi": [200984]},
+        "tov": {"bgdi": [200985]}
+    }
+    players_props_for_game=[]
+    for k,v in bet_types.items():
+        props_for_bet_type = filter_data(raw_props_for_game, v)
+        for prop in props_for_bet_type:
+            prop['bet_type'] = k
+        players_props_for_game = players_props_for_game + props_for_bet_type
+
+
+    # utilize props
+    return players_props_for_game
 
 
 def main():
-    games_ids = get_sb_games_info_from_page(SUPERBET_URL)
+    games_info = get_sb_games_info_from_page(SUPERBET_URL)
+    if len(games_info) == 0:
+        print("games not found!")
+    # wyciągnij dane z games info do dataframe
 
-    for id in games_ids:
-        json_data = get_bets_by_game_id(id)
 
-        bet_type = {
-            "pts": {"bgdi": [200949]},
-            "ast": {"bgdi": [200950]},
-            "reb": {"bgdi": [200951]},
-            "thr": {"bgdi": [200992]},
-            "stl": {"bgdi": [200984]},
-            "tov": {"bgdi": [200985]}
-        }
-
-        filtered_raw_data = filter_data(json_data, bet_type["pts"])
-
-        logger.info(f"Filtered Data contains {len(filtered_raw_data)} elements (bets)")
-        logger.info(filtered_raw_data)
-        time.sleep(1)
+    # for game_info in games_info:
+    #     all_game_bets = get_bets_by_game_id(game_info["superbet_event_id"])
+    #
+    #     logger.info(f"Filtered Data contains {len(all_game_bets)} elements (bets)")
+    #     logger.info(all_game_bets)
+    #     time.sleep(1)
 
 
 if __name__ == "__main__":
