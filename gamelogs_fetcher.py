@@ -188,7 +188,7 @@ def get_last_fetching_date(team_id):
     team_game_dates_df = pd.read_csv(f'team-{team_id}.csv')
     # team_game_dates_df['Date'] = pd.to_datetime(team_game_dates_df['Date'])
     # return team_game_dates_df['Date'].max()
-    return "2022/10/18"
+    return "2023/10/18"
 
 
 def update_gamelogs():

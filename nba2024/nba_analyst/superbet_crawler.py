@@ -10,6 +10,7 @@ import logging
 import driver_manager
 from selenium.webdriver.common.by import By
 from selenium import webdriver
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -83,7 +84,7 @@ def get_sb_games_info_from_page(url):
 
     logger.info(f"{len(games_info)} game(s) extracted from superbet")
 
-    #driver.quit()
+    # driver.quit()
     return games_info
 
 
@@ -109,7 +110,6 @@ def extract_game_info(current_datetime, game_element):
 def extract_player_props_from_game(current_datetime, game_element):
     # weź wszystkie
     raw_props_for_game = get_bets_by_game_id(game_element.get_attribute("id").replace("event-", ""))
-    #raw_props_for_game = get_bets_by_game_id(game_element["superbet_event_id"])
     bet_types = {
         "pts": {"bgdi": [200949]},
         "ast": {"bgdi": [200950]},
@@ -118,31 +118,48 @@ def extract_player_props_from_game(current_datetime, game_element):
         "stl": {"bgdi": [200984]},
         "tov": {"bgdi": [200985]}
     }
-    players_props_for_game=[]
-    for k,v in bet_types.items():
+    players_props_for_game = []
+    for k, v in bet_types.items():
         props_for_bet_type = filter_data(raw_props_for_game, v)
         for prop in props_for_bet_type:
             prop['bet_type'] = k
         players_props_for_game = players_props_for_game + props_for_bet_type
 
-
     # utilize props
     return players_props_for_game
+
+
+def create_props_dataframe(games_info):
+    props_list = []
+    for game_info in games_info:
+        for player_prop in game_info['odds']['player_props']:
+            prop_dict = {
+                'player': player_prop['spc']['player'],
+                'swish_player_id': player_prop['extra']['swish-player-id'],
+                'odds': player_prop['ov'],
+                'over_under': 'over' if player_prop['oo'] == 1 else 'under',
+                'bet_line': player_prop['spc']['total'],
+                'bet_type': player_prop['bet_type'],
+                'home': game_info['home'],
+                'away': game_info['away'],
+                'event_time': game_info['event_time']
+            }
+            props_list.append(prop_dict)
+
+    df = pd.DataFrame(props_list)
+    return df
 
 
 def main():
     games_info = get_sb_games_info_from_page(SUPERBET_URL)
     if len(games_info) == 0:
-        print("games not found!")
+        print("games not found")
+    else:
+        print(f"{len(games_info)} games  found")
+
+    a=create_props_dataframe(games_info)
+    print(a)
     # wyciągnij dane z games info do dataframe
-
-
-    # for game_info in games_info:
-    #     all_game_bets = get_bets_by_game_id(game_info["superbet_event_id"])
-    #
-    #     logger.info(f"Filtered Data contains {len(all_game_bets)} elements (bets)")
-    #     logger.info(all_game_bets)
-    #     time.sleep(1)
 
 
 if __name__ == "__main__":
