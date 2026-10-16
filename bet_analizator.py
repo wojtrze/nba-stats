@@ -17,6 +17,38 @@ from espn_scraper.storage import PLAYERS_FILE
 home_8_rotation = [4066218, 4065648, 4066211, 2990992, 3917376, 3032979, 4066354, 4397008]
 away_8_rotation = [3934719, 4433134, 3423, 2991230, 2578240, 4277843, 4431679, 3948153]
 
+NBA_TEAMS = [
+    'bos',
+    'bkn',
+    'ny',
+    'phi',
+    'tor',
+    'chi',
+    'cle',
+    'det',
+    'ind',
+    'mil',
+    'den',
+    'min',
+    'okc',
+    'por',
+    'utah',
+    'gs',
+    'lac',
+    'lal',
+    'phx',
+    'sac',
+    'atl',
+    'cha',
+    'mia',
+    'orl',
+    'wsh',
+    'dal',
+    'hou',
+    'mem',
+    'no',
+    'sa']
+
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option("expand_frame_repr", True)
@@ -46,7 +78,9 @@ def stored_bets():
 
 
 def all_nba_players():
-    return season_gamelogs()
+    # only players of the 30 NBA teams, without exhibition opponents
+    players = season_gamelogs()
+    return players[players['team'].isin(NBA_TEAMS)]
 
 
 # selects only direct matchups (player against current opponent team)
