@@ -7,6 +7,7 @@ from bet_scrapper import all_today_bets, store_offers
 from lineup_fetcher import players_unlikely_to_play
 import datetime
 
+GAMELOGS_FILE = 'data/2026/player_gamelogs.csv'
 pd.options.mode.chained_assignment = None  # default='warn'
 threshold = {'PTS': 2.0,
              'ARP': 2.1,
@@ -51,7 +52,7 @@ class BetAssessment():
             self.bets_resolved = pd.read_csv(file)
             self.bets_resolved = self.bets_resolved.drop_duplicates(subset=['over_under', 'player_ESPN', 'closed_date', 'bet_type'])
 
-        with open('2022-players-logs.csv', 'r') as file:
+        with open(GAMELOGS_FILE, 'r') as file:
             self.gamelogs = pd.read_csv(file)
 
     def assess_bets_from_list(self, bets_list: List[dict]):
@@ -71,7 +72,7 @@ class BetAssessment():
         error_count = 0
         positive_count = 0
         list_of_results = []
-        all_players = pd.read_csv(f'2022-players-logs.csv')
+        all_players = pd.read_csv(GAMELOGS_FILE)
         # b = stored_bets()  # .to_dict('records'), już nie pamiętam czemu
         # all_players = all_nba_players() # fixme coś nie działa, a w ogole trzeba to przemyśleć
         for index, row in b.iterrows():
