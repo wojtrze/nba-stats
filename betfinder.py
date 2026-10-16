@@ -1,6 +1,6 @@
 from bet_fetcher import *
 from bet_analizator import *
-from gamelogs_fetcher import *
+from espn_scraper import *
 
 
 def check_bet(bet, season_start_yyyy = None):
