@@ -1,0 +1,301 @@
+"""Pure pandas calculations behind the dashboard (no Streamlit), so they can be tested and reused."""
+import math
+from typing import Dict, Optional
+
+import numpy as np
+import pandas as pd
+
+STATS = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'ARP', 'MIN', 'STL', 'BLK', 'TO']
+# rule columns of assessed_bets.csv; each holds the rule's vote ('Over'/'Under') or NaN when it didn't vote
+RULES = ['quantiles', 'median', 'last_games', 'averages', 'bets_hits', 'low_odds']
+POSITION_GROUPS = {'G': 'G', 'PG': 'G', 'SG': 'G', 'F': 'F', 'SF': 'F', 'PF': 'F', 'C': 'C'}
+
+
+def add_combined_stats(logs: pd.DataFrame) -> pd.DataFrame:
+    """The combined bet types bookmakers offer: points+assists, points+rebounds, points+rebounds+assists."""
+    return logs.assign(PA=logs['PTS'] + logs['AST'], PR=logs['PTS'] + logs['REB'],
+                       ARP=logs['PTS'] + logs['REB'] + logs['AST'])
+
+
+def hit_rates(values: pd.Series, line: float) -> Dict[str, float]:
+    """Share of games over and under the line. Games exactly on a whole-number line are pushes and count for neither."""
+    n = len(values)
+    if n == 0:
+        return {'over': np.nan, 'under': np.nan, 'games': 0}
+    return {'over': (values > line).sum() / n, 'under': (values < line).sum() / n, 'games': n}
+
+
+def line_percentile(values: pd.Series, line: float) -> float:
+    """Where the line sits in the player's results, 0-100 (50 = at the median). Ties count half."""
+    if len(values) == 0:
+        return np.nan
+    return 100 * ((values < line).mean() + 0.5 * (values == line).mean())
+
+
+def percentile_band(values: pd.Series, lower: float = 0.30, upper: float = 0.70):
+    """The band betfinder.check_bet tests the line against."""
+    return values.quantile(lower), values.quantile(upper)
+
+
+def trend(values: pd.Series, games: int = 5) -> float:
+    """Average game-to-game change over the last `games` games (same idea as bet_analyst's trend_rule)."""
+    last = values.tail(games)
+    return last.diff().mean() if len(last) > 1 else np.nan
+
+
+def player_summary(games: pd.DataFrame, stat: str, line: Optional[float] = None) -> Dict:
+    """Key numbers for one player and stat. `games` must be sorted by date, oldest first."""
+    values = games[stat]
+    summary = {'games': len(values), 'avg': values.mean(), 'median': values.median(),
+               'avg_last5': values.tail(5).mean(), 'avg_last10': values.tail(10).mean(),
+               'trend5': trend(values), 'min_avg_last5': games['MIN'].tail(5).mean(),
+               'min_avg': games['MIN'].mean()}
+    summary['p30'], summary['p70'] = percentile_band(values) if len(values) else (np.nan, np.nan)
+    if line is not None:
+        season, last10, last5 = hit_rates(values, line), hit_rates(values.tail(10), line), hit_rates(values.tail(5), line)
+        summary.update(over=season['over'], under=season['under'], over_last10=last10['over'],
+                       under_last10=last10['under'], over_last5=last5['over'], under_last5=last5['under'],
+                       percentile=line_percentile(values, line),
+                       in_band=summary['p30'] <= line <= summary['p70'])
+    return summary
+
+
+def splits(games: pd.DataFrame, stat: str, line: Optional[float] = None) -> pd.DataFrame:
+    """Average (and hit rate over the line) by home/away, starter/bench, rest and minutes."""
+    g = games.assign(
+        location=games['type'].str.capitalize(),
+        role=np.where(games['starter'], 'Starter', 'Bench'),
+        rest=np.select([games['rest_days'] == 1, games['rest_days'] >= 2], ['Back-to-back', '1+ days rest'], 'First game'),
+        minutes=pd.cut(games['MIN'], [-1, 19, 29, 35, 60], labels=['<20 min', '20-29 min', '30-35 min', '36+ min']),
+    )
+    rows = []
+    for split in ['location', 'role', 'rest', 'minutes']:
+        for value, part in g.groupby(split, observed=True):
+            row = {'split': split, 'value': value, 'games': len(part), 'avg': part[stat].mean(), 'median': part[stat].median()}
+            if line is not None:
+                row['over %'] = 100 * hit_rates(part[stat], line)['over']
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def teammates(logs: pd.DataFrame, player_id) -> pd.DataFrame:
+    """Players who appeared in the same game for the same team, with the number of shared games."""
+    own = logs.loc[logs['player_id_ESPN'] == player_id, ['game_id', 'team']]
+    shared = logs.merge(own, on=['game_id', 'team'])
+    shared = shared[shared['player_id_ESPN'] != player_id]
+    return (shared.groupby(['player_id_ESPN', 'player_display_name']).size().rename('shared_games')
+            .reset_index().sort_values('shared_games', ascending=False))
+
+
+def stint_games(logs: pd.DataFrame, player_id, teammate_id) -> pd.DataFrame:
+    """The player's games from the teammate's first to last game on the same team (per season), flagged
+    `teammate_played`. Games before the teammate joined or after they left don't count as 'out'."""
+    player = logs[logs['player_id_ESPN'] == player_id]
+    mate = logs[(logs['player_id_ESPN'] == teammate_id) & (logs['MIN'] > 0)]
+    together = mate.merge(player[['game_id', 'team']], on=['game_id', 'team'])
+    if together.empty:
+        return player.iloc[0:0].assign(teammate_played=pd.Series(dtype=bool))
+    windows = mate.groupby(['season_id', 'team'])['Date'].agg(['min', 'max']).reset_index()
+    windows = windows.merge(together[['season_id', 'team']].drop_duplicates())
+    games = player.merge(windows, on=['season_id', 'team'])
+    games = games[(games['Date'] >= games['min']) & (games['Date'] <= games['max'])].drop(columns=['min', 'max'])
+    return games.assign(teammate_played=games['game_id'].isin(mate['game_id']))
+
+
+def with_without(logs: pd.DataFrame, player_id, teammate_id, stat: str) -> pd.DataFrame:
+    """The player's numbers in games the teammate played vs missed (within the teammate's stint)."""
+    games = stint_games(logs, player_id, teammate_id)
+    if games.empty:
+        return pd.DataFrame()
+    return (games.groupby('teammate_played')
+            .agg(games=(stat, 'size'), avg=(stat, 'mean'), median=(stat, 'median'), minutes=('MIN', 'mean'),
+                 shots=('FGA', 'mean'))
+            .rename(index={True: 'Teammate played', False: 'Teammate out'}))
+
+
+def team_rotation(logs: pd.DataFrame, team: str, min_games: int = 5, min_minutes: float = 10) -> pd.DataFrame:
+    """Players who play regularly for the team and are still on it (their latest game was for this team).
+    Index: player id. Sorted by minutes per game."""
+    latest = logs.sort_values('Date').groupby('player_id_ESPN').tail(1).set_index('player_id_ESPN')['team']
+    current = latest[latest == team].index
+    games = logs[(logs['team'] == team) & logs['player_id_ESPN'].isin(current)]
+    rotation = games.groupby('player_id_ESPN').agg(
+        name=('player_display_name', 'last'), position=('position', 'last'), games=('game_id', 'size'),
+        mpg=('MIN', 'mean'), starts=('starter', 'sum'), last_game=('Date', 'max'))
+    rotation = rotation[(rotation['games'] >= min_games) & (rotation['mpg'] >= min_minutes)]
+    return rotation.sort_values('mpg', ascending=False)
+
+
+def starting_lineup(logs: pd.DataFrame, team: str, how: str = 'last', last_n: int = 10) -> list:
+    """Starters of the team's last game ('last'), or the 5 most frequent starters of its last `last_n` games."""
+    games = logs[logs['team'] == team]
+    if games.empty:
+        return []
+    if how == 'last':
+        last_game = games.loc[games['Date'] == games['Date'].max(), 'game_id'].iloc[-1]
+        return games[(games['game_id'] == last_game) & games['starter']]['player_id_ESPN'].tolist()
+    recent = games.drop_duplicates('game_id').sort_values('Date')['game_id'].tail(last_n)
+    starts = games[games['game_id'].isin(recent) & games['starter']]
+    return starts['player_id_ESPN'].value_counts().head(5).index.tolist()
+
+
+def with_without_matrix(logs: pd.DataFrame, row_ids, col_ids, stat: str) -> Dict[str, pd.DataFrame]:
+    """For every (row player, column teammate) pair: the row player's average with and without the teammate.
+    Returns DataFrames 'with', 'without', 'n_with', 'n_without' and 'delta' (= without - with)."""
+    out = {k: pd.DataFrame(np.nan, index=list(row_ids), columns=list(col_ids))
+           for k in ['with', 'without', 'n_with', 'n_without', 'delta']}
+    for r in row_ids:
+        for c in col_ids:
+            if r == c:
+                continue
+            games = stint_games(logs, r, c)
+            played, missed = games.loc[games['teammate_played'], stat], games.loc[~games['teammate_played'], stat]
+            out['with'].loc[r, c], out['without'].loc[r, c] = played.mean(), missed.mean()
+            out['n_with'].loc[r, c], out['n_without'].loc[r, c] = len(played), len(missed)
+    out['delta'] = out['without'] - out['with']
+    return out
+
+
+def lineup_scenario(logs: pd.DataFrame, team: str, starters, out, available, stat: str,
+                    shrink: float = 5, matrix: Optional[Dict[str, pd.DataFrame]] = None) -> pd.DataFrame:
+    """Tonight's estimate for each starter and available bench player, given who is out.
+
+    - usual: the player's average for this team
+    - exact: average in team games where every starter played and every out player missed
+    - estimate: usual + sum over out players of their with/without change, shrunk toward 0 by
+      n_without / (n_without + shrink), so a couple of games without someone can't swing it much
+    """
+    starters, out, available = list(starters), list(out), list(available)
+    players = starters + [p for p in available if p not in starters and p not in out]
+    if matrix is None:
+        matrix = with_without_matrix(logs, players, out, stat) if out else None
+    team_logs = logs[logs['team'] == team]
+    played_by_game = team_logs[team_logs['MIN'] > 0].groupby('game_id')['player_id_ESPN'].agg(set)
+    # each out player only counts as 'missed' inside their stint on the team
+    stints = team_logs[team_logs['player_id_ESPN'].isin(out) & (team_logs['MIN'] > 0)] \
+        .groupby(['player_id_ESPN', 'season_id'])['Date'].agg(['min', 'max'])
+    game_info = team_logs.drop_duplicates('game_id').set_index('game_id')[['Date', 'season_id']]
+
+    def matches(game_id) -> bool:
+        present = played_by_game.get(game_id, set())
+        if not set(starters) <= present:
+            return False
+        date, season = game_info.loc[game_id, 'Date'], game_info.loc[game_id, 'season_id']
+        for o in out:
+            if o in present:
+                return False
+            if (o, season) not in stints.index or not stints.loc[(o, season), 'min'] <= date <= stints.loc[(o, season), 'max']:
+                return False
+        return True
+
+    exact_games = {g for g in game_info.index if matches(g)}
+    rows = []
+    for p in players:
+        games = team_logs[team_logs['player_id_ESPN'] == p]
+        exact = games[games['game_id'].isin(exact_games)]
+        change, evidence = 0.0, []
+        for o in out:
+            n = matrix['n_without'].loc[p, o]
+            d = matrix['delta'].loc[p, o]
+            if n and not np.isnan(d):
+                change += d * n / (n + shrink)
+                evidence.append(n)
+        usual = games[stat].mean()
+        support = min(evidence) if evidence else (len(games) if not out else 0)
+        rows.append({'player_id_ESPN': p, 'name': games['player_display_name'].iloc[-1] if len(games) else str(p),
+                     'role': 'Starter' if p in starters else 'Bench', 'games': len(games), 'usual': usual,
+                     'exact match': exact[stat].mean() if len(exact) else np.nan, 'exact games': len(exact),
+                     'estimate': usual + change, 'change': change, 'usual MIN': games['MIN'].mean(),
+                     'exact MIN': exact['MIN'].mean() if len(exact) else np.nan,
+                     'confidence': 'high' if support >= 10 else 'medium' if support >= 4 else 'low'})
+    return pd.DataFrame(rows)
+
+
+def wilson_interval(hits: int, n: int, z: float = 1.96):
+    """95% confidence interval of a hit rate; wide for small samples."""
+    if n == 0:
+        return np.nan, np.nan
+    p = hits / n
+    centre = (p + z * z / (2 * n)) / (1 + z * z / n)
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return centre - half, centre + half
+
+
+def roi(is_hit: pd.Series, odds: pd.Series) -> float:
+    """Return per unit staked, betting 1 unit on every bet: +0.05 means +5%."""
+    if len(is_hit) == 0:
+        return np.nan
+    return float((np.where(is_hit, odds, 0.0) - 1).mean())
+
+
+def _rate_row(part: pd.DataFrame) -> Dict:
+    hits, n = int(part['is_hit'].sum()), len(part)
+    low, high = wilson_interval(hits, n)
+    return {'bets': n, 'hit %': 100 * hits / n if n else np.nan, 'ci low %': 100 * low, 'ci high %': 100 * high,
+            'ROI %': 100 * roi(part['is_hit'], part['odds']), 'avg odds': part['odds'].mean()}
+
+
+def rule_stats(bets: pd.DataFrame) -> pd.DataFrame:
+    """For each rule: bets where it voted with the bet's direction vs against it."""
+    rows = []
+    for rule in RULES:
+        for relation, mask in (('agrees', bets[rule] == bets['over_under']),
+                               ('disagrees', bets[rule].notna() & (bets[rule] != bets['over_under']))):
+            if mask.any():
+                rows.append({'rule': rule, 'vote': relation, **_rate_row(bets[mask])})
+    return pd.DataFrame(rows)
+
+
+def vote_pattern(bets: pd.DataFrame) -> pd.DataFrame:
+    """Per bet: how many rules agree/disagree with its direction, and the pattern as text ('+' agree, '-' against)."""
+    agree = pd.DataFrame({r: bets[r] == bets['over_under'] for r in RULES})
+    against = pd.DataFrame({r: bets[r].notna() & (bets[r] != bets['over_under']) for r in RULES})
+    pattern = pd.Series('', index=bets.index)
+    for r in RULES:
+        pattern = pattern + np.where(agree[r], f'+{r} ', np.where(against[r], f'-{r} ', ''))
+    return bets.assign(agree=agree.sum(axis=1), against=against.sum(axis=1),
+                       net=agree.sum(axis=1) - against.sum(axis=1),
+                       pattern=pattern.str.strip().replace('', '(no votes)'))
+
+
+def grouped_rates(bets: pd.DataFrame, by, min_bets: int = 1) -> pd.DataFrame:
+    rows = [{**dict(zip([by] if isinstance(by, str) else by, key if isinstance(key, tuple) else (key,))), **_rate_row(part)}
+            for key, part in bets.groupby(by, observed=True)]
+    df = pd.DataFrame(rows)
+    return df[df['bets'] >= min_bets] if not df.empty else df
+
+
+def team_ratings(games: pd.DataFrame) -> pd.DataFrame:
+    """Per team: record, points for/against, a pace proxy and points per 100 possessions."""
+    sides = []
+    for side, other in (('home', 'away'), ('away', 'home')):
+        s = pd.DataFrame({
+            'team': games[side], 'pts': games[f'{side}_score'], 'opp_pts': games[f'{other}_score'],
+            'poss': games[f'{side}_FGA'] + 0.44 * games[f'{side}_FTA'] + games[f'{side}_TO'] - games[f'{side}_OREB'],
+            'opp_poss': games[f'{other}_FGA'] + 0.44 * games[f'{other}_FTA'] + games[f'{other}_TO'] - games[f'{other}_OREB'],
+            'location': side})
+        sides.append(s)
+    t = pd.concat(sides)
+    t['win'] = t['pts'] > t['opp_pts']
+    t['pace'] = (t['poss'] + t['opp_poss']) / 2
+    out = t.groupby('team').agg(games=('win', 'size'), wins=('win', 'sum'), pts=('pts', 'mean'),
+                                opp_pts=('opp_pts', 'mean'), pace=('pace', 'mean'),
+                                poss=('poss', 'sum'), opp_poss=('opp_poss', 'sum'),
+                                pts_total=('pts', 'sum'), opp_total=('opp_pts', 'sum'))
+    out['losses'] = out['games'] - out['wins']
+    out['off_rtg'] = 100 * out['pts_total'] / out['poss']
+    out['def_rtg'] = 100 * out['opp_total'] / out['opp_poss']
+    out['net_rtg'] = out['off_rtg'] - out['def_rtg']
+    home = t[t['location'] == 'home'].groupby('team')['win'].agg(['sum', 'size'])
+    out['home'] = home['sum'].astype(int).astype(str) + '-' + (home['size'] - home['sum']).astype(int).astype(str)
+    return (out[['games', 'wins', 'losses', 'home', 'pts', 'opp_pts', 'pace', 'off_rtg', 'def_rtg', 'net_rtg']]
+            .sort_values('net_rtg', ascending=False))
+
+
+def allowed_by_position(logs: pd.DataFrame, stat: str) -> pd.DataFrame:
+    """Per defending team: the stat its opponents' guards / forwards / centers produce per game, combined."""
+    df = logs.assign(defense=logs['OPP'].str.lower(), group=logs['position'].map(POSITION_GROUPS))
+    per_game = df.groupby(['defense', 'game_id', 'group'])[stat].sum().unstack('group', fill_value=0)
+    table = per_game.groupby('defense').mean()
+    table['games'] = per_game.groupby('defense').size()
+    return table.reindex(columns=['G', 'F', 'C', 'games'])

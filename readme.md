@@ -11,6 +11,7 @@ Tools for NBA player-prop betting analysis. The project:
 | Path | What it does |
 |---|---|
 | `espn_scraper/` | Scrapes games and player game logs from ESPN's JSON API into `data/<season>/` (2024/25, 2025/26 and the current 2026/27). Run on demand; only new games are added. |
+| `dashboard/` | Browser dashboard (Streamlit): today's props, player deep-dive, lineup lab, teams & matchups, rule backtest, data status. |
 | `superbet_fetcher.py` | Fetches today's NBA over/under player props from Superbet (PTS, AST, REB, 3PM, PTS+AST, PTS+REB). |
 | `betfinder.py` | Takes today's Superbet props and checks whether each line falls between the player's 30th and 70th percentile. |
 | `bet_analyst.py` | Rule engine (`BetAssessment`): each rule votes Over or Under for a bet. Also resolves past offers against actual results. |
@@ -95,7 +96,24 @@ Dates are US Eastern dates, the same ones ESPN uses for its schedule. `--since`,
 
 To add a new season, add its start year and ESPN calendar dates to `SEASONS` in `espn_scraper/__init__.py`, and update `CURRENT_SEASON`.
 
-### 2. See today's Superbet offers
+### 2. Dashboard in the browser
+
+```
+streamlit run dashboard/app.py
+```
+
+Opens `http://localhost:8501` with six pages:
+
+- **Today's props:** every Superbet line for the next 36 hours next to the player's average, hit rate over/under the line (season and last 10), where the line sits in their results, and the edge versus the odds' implied probability. Click a row to open the player. A line checker works even when Superbet has no props (preseason).
+- **Player:** game-log chart with the line and a 5-game average, hit rates, splits (home/away, starter/bench, back-to-back, minutes), results against each opponent, and with/without a chosen teammate.
+- **Lineup lab:** pick a team's starting five (default: their last game's starters, or the most frequent starters of the last 10 games) and who's out. A heatmap shows how each player's stat changes when each rotation teammate doesn't play; the scenario table turns the absences into an estimate per player (the exact-match average from games with the same starters and absences, plus a sample-size-weighted estimate).
+- **Teams & matchups:** points/rebounds/assists each defense allows to guards, forwards and centers compared with the league average, plus offensive/defensive ratings and pace.
+- **Rule backtest:** how `bet_analyst.py`'s rules did on the stored 2022/23 bets (`assessed_bets.csv`): hit rate and ROI per rule, by number of agreeing rules, by rule combination (with confidence intervals), by odds and bet type.
+- **Data status:** stored games per season, an "Update stats" button that runs the scraper, and data-quality checks.
+
+The sidebar picks the seasons and game types (preseason, regular, play-in, playoffs) the pages use. Unit tests for the calculations: `python -m pytest dashboard`.
+
+### 3. See today's Superbet offers
 
 ```
 python superbet_fetcher.py
@@ -108,7 +126,7 @@ Prints each NBA game starting in the next 36 hours with its number of player pro
  'home': 'tor', 'away': 'lac', 'bet_type': 'PTS', ...}
 ```
 
-### 3. Check today's lines against the statistics
+### 4. Check today's lines against the statistics
 
 Update the statistics first (step 1), then:
 
@@ -124,7 +142,7 @@ For each line it prints whether the line falls between the player's 30th and 70t
 
 A line outside that range is more interesting: the bookmaker's line is unusually low or high compared with the player's results. "no gamelogs found" means the player has no games in the data yet, or their Superbet name maps to a different ESPN name.
 
-### 4. Use the data in your own code
+### 5. Use the data in your own code
 
 ```python
 import pandas as pd
@@ -143,7 +161,7 @@ print(check_bet({'name_ESPN': 'RJBarrett', 'home': 'tor', 'away': 'lac',
                  'bet_type': 'PTS', 'line': 18.5}))
 ```
 
-### 5. Rule-based assessment (`bet_analyst.py`)
+### 6. Rule-based assessment (`bet_analyst.py`)
 
 `BetAssessment` scores a bet with these rules, using only games played before the bet closed:
 
