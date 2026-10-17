@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 from zoneinfo import ZoneInfo
 
-from . import SEASON_ID
-from .schedule import SEASON_TYPES
+from . import team_code
+from .schedule import season_type_name
 
 log = logging.getLogger(__name__)
 
@@ -58,15 +58,16 @@ def parse_summary(summary: dict) -> Tuple[Dict, List[Dict]]:
     header = summary["header"]
     competition = header["competitions"][0]
     game_id = header["id"]
-    season_type = SEASON_TYPES.get(header["season"]["type"], str(header["season"]["type"]))
+    season_id = header["season"]["year"] - 1   # ESPN year is the year the season ends
     game_date = game_date_eastern(summary)
 
     sides = {}
     for c in competition["competitors"]:
-        sides[c["homeAway"]] = {"team": c["team"]["abbreviation"].lower(), "score": _num(c.get("score"))}
+        sides[c["homeAway"]] = {"team": team_code(c["team"]), "score": _num(c.get("score"))}
     home, away = sides["home"], sides["away"]
+    season_type = season_type_name(header["season"]["type"], home["team"], away["team"])
 
-    game = {'game_id': game_id, 'date': game_date, 'season_id': SEASON_ID, 'season_type': season_type,
+    game = {'game_id': game_id, 'date': game_date, 'season_id': season_id, 'season_type': season_type,
             'home': home["team"], 'away': away["team"], 'home_score': home["score"], 'away_score': away["score"]}
     for team in summary["boxscore"]["teams"]:
         side = team["homeAway"]
@@ -79,7 +80,7 @@ def parse_summary(summary: dict) -> Tuple[Dict, List[Dict]]:
 
     players = []
     for team in summary["boxscore"]["players"]:
-        team_abbr = team["team"]["abbreviation"].lower()
+        team_abbr = team_code(team["team"])
         side = "home" if team_abbr == home["team"] else "away"
         own, opp = sides[side], sides["away" if side == "home" else "home"]
         result = f"{'W' if own['score'] > opp['score'] else 'L'}{own['score']}-{opp['score']}"
@@ -87,9 +88,13 @@ def parse_summary(summary: dict) -> Tuple[Dict, List[Dict]]:
         keys = block["keys"]
         for athlete in block["athletes"]:
             info = athlete["athlete"]
+            name = info.get("displayName") or info.get("shortName", "?")
             if athlete.get("didNotPlay") or not athlete.get("stats"):
-                log.info("DNP %s (%s) in game %s: %s", info["displayName"], team_abbr, game_id,
-                         athlete.get("reason", ""))
+                log.info("DNP %s (%s) in game %s: %s", name, team_abbr, game_id, athlete.get("reason", ""))
+                continue
+            if "id" not in info or "displayName" not in info:
+                # ESPN occasionally lists unregistered players (e.g. two-way signings) without id or full name
+                log.warning("Skipping player %r without ESPN id/name in game %s (%s)", name, game_id, team_abbr)
                 continue
             s = dict(zip(keys, athlete["stats"]))
             fgm, fga = _split(s.get('fieldGoalsMade-fieldGoalsAttempted'))
@@ -101,7 +106,7 @@ def parse_summary(summary: dict) -> Tuple[Dict, List[Dict]]:
                 'REB': _num(s.get('rebounds')), 'AST': _num(s.get('assists')), 'BLK': _num(s.get('blocks')),
                 'STL': _num(s.get('steals')), 'PF': _num(s.get('fouls')), 'TO': _num(s.get('turnovers')),
                 'PTS': _num(s.get('points')), 'FGM': fgm, 'FGA': fga, '3PM': tpm, '3PA': tpa, 'FTM': ftm, 'FTA': fta,
-                'type': side, 'Date': game_date, 'season_id': SEASON_ID,
+                'type': side, 'Date': game_date, 'season_id': season_id,
                 'player_id_ESPN': info["id"], 'player_name_ESPN': info["displayName"].replace(" ", ""),
                 'team': team_abbr, 'game_id': game_id, 'season_type': season_type,
                 'starter': athlete.get("starter", False),

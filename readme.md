@@ -10,7 +10,7 @@ Tools for NBA player-prop betting analysis. The project:
 
 | Path | What it does |
 |---|---|
-| `espn_scraper/` | Scrapes 2026/27 games and player game logs from ESPN's JSON API into `data/2026/`. Run on demand; only new games are added. |
+| `espn_scraper/` | Scrapes games and player game logs from ESPN's JSON API into `data/<season>/` (2024/25, 2025/26 and the current 2026/27). Run on demand; only new games are added. |
 | `superbet_fetcher.py` | Fetches today's NBA over/under player props from Superbet (PTS, AST, REB, 3PM, PTS+AST, PTS+REB). |
 | `betfinder.py` | Takes today's Superbet props and checks whether each line falls between the player's 30th and 70th percentile. |
 | `bet_analyst.py` | Rule engine (`BetAssessment`): each rule votes Over or Under for a bet. Also resolves past offers against actual results. |
@@ -25,8 +25,8 @@ Tools for NBA player-prop betting analysis. The project:
 
 | File | Content |
 |---|---|
-| `data/2026/games.csv` | One row per game: date, season type, teams, score, team totals. |
-| `data/2026/player_gamelogs.csv` | One row per player per game (players who didn't play are skipped). |
+| `data/<season>/games.csv` | One row per game: date, season type, teams, score, team totals. Seasons are named by their start year: `data/2024` = 2024/25, `data/2025` = 2025/26, `data/2026` = 2026/27. |
+| `data/<season>/player_gamelogs.csv` | One row per player per game (players who didn't play are skipped). |
 | `2022-players-logs.csv` | Player game logs from earlier seasons, same columns. |
 | `offers.csv`, `offers_resolved.csv`, `assessed_bets.csv`, `bets.csv` | Historical bookmaker offers, their results and rule assessments. |
 | `season_ratings/` | Team ratings for seasons 2018–2022. |
@@ -44,7 +44,7 @@ game_id, season_type, starter, position, OREB, DREB, PLUS_MINUS, player_display_
 - `Result` is from the player's team's point of view, e.g. `L106-144`.
 - `type` is `home` or `away`.
 - `season_id` is the year the season starts (`2026` for 2026/27).
-- `season_type` is `pre`, `regular`, `playin` or `post`.
+- `season_type` is `pre`, `regular`, `playin`, `post` or `allstar`. ESPN labels All-Star games as regular season; the scraper tags them `allstar` so they don't mix into regular-season stats.
 
 ## Installation
 
@@ -68,26 +68,32 @@ All commands are run from the repository root.
 python -m espn_scraper
 ```
 
-This adds every finished 2026/27 game that isn't stored yet, then prints a summary:
+This adds every finished game of the current season (2026/27) that isn't stored yet, then prints a summary:
 
 ```
-Added 7 games, 202 player lines. 12 games not final yet.
+2026/27: added 7 games, 202 player lines. 12 games not final yet.
 ```
 
 - Games that haven't finished are skipped and picked up on the next run.
-- After the first run it only checks the days since the last stored game, so a daily update takes a few seconds.
+- `data/<season>/checked_through.txt` records the last date up to which every game is stored. Each run starts from the day after it, so a daily update takes a few seconds.
 - Running it twice in a row is safe; nothing is duplicated.
+- If ESPN's game summary returns 404 (it happens for a few games), the box score is rebuilt from ESPN's core API instead (`espn_scraper/core_api.py`). This is slower, about a minute per game, but gives the same data.
+- Postponed and cancelled games are skipped; a makeup game is picked up on the date it's actually played.
+- Players ESPN lists without an id or name are skipped with a warning, so in those games the players' points don't add up to the team score.
 
 Other options:
 
 ```
+python -m espn_scraper --season 2025                           # a past season (2025/26); seasons are named by start year
 python -m espn_scraper --since 2026-10-01 --until 2026-10-15   # check a specific date range
-python -m espn_scraper --game 401898398                        # re-scrape one game (ESPN game id)
-python -m espn_scraper --rebuild                               # delete data/2026 and scrape the whole season again
+python -m espn_scraper --game 401898398                        # re-scrape one game (ESPN game id), any season
+python -m espn_scraper --rebuild                               # delete the season's data and scrape it again
 python -m espn_scraper -v                                      # verbose: also log players who didn't play, with the reason
 ```
 
-Dates are US Eastern dates, the same ones ESPN uses for its schedule.
+Dates are US Eastern dates, the same ones ESPN uses for its schedule. `--since`, `--until` and `--rebuild` apply to the season chosen with `--season` (default: current).
+
+To add a new season, add its start year and ESPN calendar dates to `SEASONS` in `espn_scraper/__init__.py`, and update `CURRENT_SEASON`.
 
 ### 2. See today's Superbet offers
 
@@ -127,6 +133,10 @@ from bet_analizator import all_nba_players, game_players
 logs = all_nba_players()                     # all players of the 30 NBA teams
 regular = logs[logs['season_type'] == 'regular']
 celtics_vs_sixers = game_players('bos', 'phi')
+
+# the analysis code uses the current season; load past seasons explicitly
+from espn_scraper.storage import load_player_gamelogs
+three_seasons = load_player_gamelogs([2024, 2025, 2026])
 
 from betfinder import check_bet
 print(check_bet({'name_ESPN': 'RJBarrett', 'home': 'tor', 'away': 'lac',

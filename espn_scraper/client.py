@@ -21,7 +21,11 @@ _session.headers.update({
 
 def get_json(endpoint: str, **params) -> dict:
     """GET {BASE_URL}/{endpoint} with a polite delay and exponential backoff on errors."""
-    url = f"{BASE_URL}/{endpoint}"
+    return get_url(f"{BASE_URL}/{endpoint}", **params)
+
+
+def get_url(url: str, **params) -> dict:
+    """GET an absolute ESPN API url (e.g. a core-API $ref) with delay and backoff."""
     for attempt in range(1, RETRIES + 1):
         time.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
         try:
