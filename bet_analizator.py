@@ -12,21 +12,62 @@ import requests
 from bet_fetcher import *
 from bs4 import BeautifulSoup
 import pandas as pd
+from espn_scraper.storage import PLAYERS_FILE
 
 home_8_rotation = [4066218, 4065648, 4066211, 2990992, 3917376, 3032979, 4066354, 4397008]
 away_8_rotation = [3934719, 4433134, 3423, 2991230, 2578240, 4277843, 4431679, 3948153]
+
+NBA_TEAMS = [
+    'bos',
+    'bkn',
+    'ny',
+    'phi',
+    'tor',
+    'chi',
+    'cle',
+    'det',
+    'ind',
+    'mil',
+    'den',
+    'min',
+    'okc',
+    'por',
+    'utah',
+    'gs',
+    'lac',
+    'lal',
+    'phx',
+    'sac',
+    'atl',
+    'cha',
+    'mia',
+    'orl',
+    'wsh',
+    'dal',
+    'hou',
+    'mem',
+    'no',
+    'sa']
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option("expand_frame_repr", True)
 
 
+def season_gamelogs():
+    # player gamelogs scraped by espn_scraper; 'player_name' is the column name the code below expects
+    gamelogs = pd.read_csv(PLAYERS_FILE)
+    gamelogs['player_name'] = gamelogs['player_name_ESPN']
+    return gamelogs
+
+
 # returns df with player gamelogs for home and away team
 def game_players(home, away):
-    home_df = pd.read_csv(f'team-{home}.csv')
+    gamelogs = season_gamelogs()
+    home_df = gamelogs[gamelogs['team'] == home].copy()
     home_df['gametype'] = 'home'
     home_df['gameopp'] = away.upper()
-    away_df = pd.read_csv(f'team-{away}.csv')
+    away_df = gamelogs[gamelogs['team'] == away].copy()
     away_df['gametype'] = 'away'
     away_df['gameopp'] = home.upper()
     return pd.concat([home_df, away_df])
@@ -37,44 +78,9 @@ def stored_bets():
 
 
 def all_nba_players():
-    teams = [
-        'bos',
-        'bkn',
-        'ny',
-        'phi',
-        'tor',
-        'chi',
-        'cle',
-        'det',
-        'ind',
-        'mil',
-        'den',
-        'min',
-        'okc',
-        'por',
-        'utah',
-        'gs',
-        'lac',
-        'lal',
-        'phx',
-        'sac',
-        'atl',
-        'cha',
-        'mia',
-        'orl',
-        'wsh',
-        'dal',
-        'hou',
-        'mem',
-        'no',
-        'sa']
-
-    players = pd.DataFrame()
-    for team_id in teams:
-        team_players = pd.read_csv(f'team-{team_id}.csv')
-        players = pd.concat([players, team_players])
-    # TODO data objects introduction
-    return players
+    # only players of the 30 NBA teams, without exhibition opponents
+    players = season_gamelogs()
+    return players[players['team'].isin(NBA_TEAMS)]
 
 
 # selects only direct matchups (player against current opponent team)
