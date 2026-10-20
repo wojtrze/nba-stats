@@ -117,6 +117,8 @@ Opens `http://localhost:8501` with seven pages:
 - **Rule backtest:** how `bet_analyst.py`'s rules did on the stored 2022/23 bets (`assessed_bets.csv`): hit rate and ROI per rule, by number of agreeing rules, by rule combination (with confidence intervals), by odds and bet type.
 - **Data status:** stored games per season, an "Update stats" button that runs the scraper, the RotoWire/Superbet snapshot files with a "Take snapshot now" button, today's names that don't match an ESPN player, and data-quality checks.
 
+Every table marks where each column comes from, with an icon in the header and a matching tint on the column: 💰 orange = Superbet, 📋 blue = RotoWire, 📊 green = calculated from the scraped ESPN stats (including edges that compare those numbers with Superbet's odds). Hover a header for what the number means. The columns that decide a bet (pick, edge, odds) come first after the player, bet and line; the rest are grouped by source. Sources and their colours are defined in `dashboard/glossary.py` (`SOURCES`), so a new data source is one entry there.
+
 The sidebar picks the seasons and game types (preseason, regular, play-in, playoffs) the pages use. Unit tests: `python -m pytest dashboard tests` (the feed parsers are tested against pages saved in `tests/fixtures/`).
 
 ### 3. See today's Superbet offers and RotoWire lineups

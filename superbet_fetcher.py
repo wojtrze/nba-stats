@@ -154,8 +154,10 @@ def main_lines(game_odds: List[Dict]) -> List[Dict]:
     """For each event and market, the line whose two prices are closest to each other (the book's main line)."""
     pairs: Dict[tuple, Dict[str, Dict]] = {}
     for row in game_odds:
-        # a spread line is identified by the home handicap, so both sides of one line share a key
-        key_line = row['line'] if row['market'] != 'SPREAD' or row['side'] == 'home' else -row['line']
+        # a spread line is identified by the home handicap, so both sides of one line share a key; the
+        # moneyline has no line (None, or NaN after a round trip through pandas, which never equals itself)
+        line = None if row['line'] is None or row['line'] != row['line'] else row['line']
+        key_line = line if row['market'] != 'SPREAD' or row['side'] == 'home' else -line
         pairs.setdefault((row['event_id'], row['market'], key_line), {})[row['side']] = row
     best: Dict[tuple, tuple] = {}
     for (event_id, market, _), sides in pairs.items():

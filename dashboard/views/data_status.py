@@ -9,11 +9,12 @@ from loaders import (games, name_resolver, player_logs, rotowire_lineups, season
                      superbet_offers, today_props)
 from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS
 from espn_scraper.storage import snapshot_file
+from glossary import column_config
 
 st.title("Data status")
 
-st.dataframe(season_status(), hide_index=True, width='stretch')
-st.caption("'checked through' = the last date up to which every game is stored; the next update starts the day after.")
+status = season_status()
+st.dataframe(status, hide_index=True, width='stretch', column_config=column_config(status.columns))
 
 if st.button(f"Update stats for {season_label(CURRENT_SEASON)}", type="primary"):
     with st.spinner("Scraping new games from ESPN..."):
@@ -36,7 +37,10 @@ for name in ['rotowire_lineups', 'superbet_props', 'superbet_game_odds']:
         rows.append({'file': path, 'rows': len(fetched), 'snapshots': fetched.nunique(), 'last': fetched.max()})
     else:
         rows.append({'file': path, 'rows': 0, 'snapshots': 0, 'last': None})
-st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
+snapshots = pd.DataFrame(rows)
+st.dataframe(snapshots, hide_index=True, width='stretch',
+             column_config=column_config(snapshots.columns,
+                                         tips={'last': "When the newest snapshot was fetched (UTC)"}))
 if st.button("Take snapshot now", help="Runs daily_snapshot.py: appends today's RotoWire lineups and Superbet offers"):
     with st.spinner("Fetching RotoWire and Superbet..."):
         result = subprocess.run([sys.executable, "daily_snapshot.py"], capture_output=True, text=True)
@@ -56,7 +60,9 @@ if unmatched:
     st.warning(f"{len(unmatched)} names from today's sources don't match a player in the game logs. Players without "
                f"a game yet (rookies, long injuries) are expected here; for others add an entry to OVERRIDES in "
                f"name_resolver.py.")
-    st.dataframe(pd.DataFrame(unmatched), hide_index=True, width='stretch')
+    unmatched = pd.DataFrame(unmatched)
+    st.dataframe(unmatched, hide_index=True, width='stretch',
+                 column_config=column_config(unmatched.columns, tips={'team': "Team, or the game for Superbet names"}))
 else:
     st.success("Every RotoWire and Superbet name matches a player in the game logs.")
 

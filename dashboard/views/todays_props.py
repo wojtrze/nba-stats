@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from glossary import column_config, source_legend, tinted
 from loaders import filtered_logs, rotowire_lineups, sidebar_filters, superbet_offers, today_props
 from metrics import STATS, absence_adjustments, hit_rates, line_percentile, percentile_band, rotowire_team
 
@@ -88,9 +89,13 @@ else:
     game_filter = f[0].multiselect("Games", sorted(table['game'].unique()))
     type_filter = f[1].multiselect("Bet types", sorted(table['bet_type'].unique()),
                                    default=[t for t in ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP']
-                                            if t in set(table['bet_type'])])
-    min_games = f[2].number_input("Min games", 0, 100, 5)
-    outside = f[3].toggle("Only lines outside the 30–70% band")
+                                            if t in set(table['bet_type'])],
+                                   help="PA = points+assists, PR = points+rebounds, RA = rebounds+assists, "
+                                        "ARP = points+rebounds+assists. Shooting, fouls, steals, blocks and "
+                                        "turnovers are left out by default.")
+    min_games = f[2].number_input("Min games", 0, 100, 5, help="Hide players with fewer games in the data")
+    outside = f[3].toggle("Only lines outside the 30–70% band",
+                          help="Lines below the player's 30th or above their 70th percentile")
     hide_out = f[4].toggle("Hide players RotoWire lists as out", value=True)
     shown = table[table['games'] >= min_games]
     if game_filter:
@@ -103,21 +108,26 @@ else:
         shown = shown[~shown['RotoWire'].str.startswith(('Out', 'OFS'))]
     shown = shown.sort_values('edge pp', ascending=False).reset_index(drop=True)
 
-    st.caption(f"{len(shown)} of {len(table)} lines. Edge = the best side's hit rate minus the probability implied "
-               f"by its odds (1/odds). It's a hint, not a prediction: small samples swing a lot. "
-               f"RotoWire = tonight's expected role (✔ = confirmed lineup); adj avg = avg plus the player's usual "
-               f"change when RotoWire's out teammates miss games. Click a row to open the player.")
-    columns = ['game', 'name', 'RotoWire', 'bet_type', 'line', 'over_odds', 'under_odds', 'games', 'avg', 'adj avg',
-               'avg L5', 'over %', 'under %', 'over % L10', 'under % L10', 'percentile', 'in band', 'best side',
-               'edge pp', 'min L5']
-    shown = shown.assign(signal=np.select([shown['edge pp'] >= 10, shown['edge pp'] <= -10], ['🟢', '🔴'], ''))
-    columns.insert(columns.index('edge pp'), 'signal')
-    fmt = st.column_config.NumberColumn
-    config = ({c: fmt(format='%.1f') for c in ['avg', 'adj avg', 'avg L5', 'min L5']}
-              | {c: fmt(format='%.0f') for c in ['over %', 'under %', 'over % L10', 'under % L10', 'percentile']}
-              | {c: fmt(format='%.2f') for c in ['over_odds', 'under_odds']} | {'edge pp': fmt(format='%+.1f')})
-    event = st.dataframe(shown[columns], hide_index=True, width='stretch', height=600, column_config=config,
-                         on_select='rerun', selection_mode='single-row')
+    st.caption(f"{len(shown)} of {len(table)} lines, best edge first. Hover a column header for what it means. "
+               f"The edge is a hint, not a prediction: with few games it swings a lot. Click a row to open the player.")
+    st.caption(source_legend())
+    # who/what -> the decision -> tonight's lineup -> the player's numbers -> both sides' odds
+    columns = ['name', 'game', 'bet_type', 'line',
+               'best side', 'signal', 'edge pp', 'pick odds',
+               'RotoWire',
+               'adj avg', 'avg', 'avg L5', 'percentile', 'in band',
+               'over %', 'under %', 'over % L10', 'under % L10', 'games', 'min L5',
+               'over_odds', 'under_odds']
+    shown = shown.assign(signal=np.select([shown['edge pp'] >= 10, shown['edge pp'] <= -10], ['🟢', '🔴'], ''),
+                         **{'pick odds': np.where(shown['best side'] == 'Over', shown['over_odds'],
+                                                  np.where(shown['best side'] == 'Under', shown['under_odds'], np.nan))})
+    formats = {'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'over %': '%.0f',
+               'under %': '%.0f', 'over % L10': '%.0f', 'under % L10': '%.0f', 'percentile': '%.0f',
+               'over_odds': '%.2f', 'under_odds': '%.2f', 'pick odds': '%.2f', 'edge pp': '%+.1f', 'games': '%d',
+               'line': '%g'}
+    event = st.dataframe(tinted(shown[columns], formats), hide_index=True, width='stretch', height=600,
+                         column_config=column_config(columns, formats), on_select='rerun',
+                         selection_mode='single-row')
     if event.selection.rows:
         row = shown.iloc[event.selection.rows[0]]
         if row['player_id'] is not None and pd.notna(row['player_id']):
@@ -142,11 +152,14 @@ if pid is not None:
     rates, last10 = hit_rates(values, line), hit_rates(values.tail(10), line)
     p30, p70 = percentile_band(values)
     m = st.columns(4)
-    m[0].metric("Games", len(values))
-    m[1].metric("Over / Under (all)", f"{100 * rates['over']:.0f}% / {100 * rates['under']:.0f}%")
-    m[2].metric("Over / Under (last 10)", f"{100 * last10['over']:.0f}% / {100 * last10['under']:.0f}%")
+    m[0].metric("Games", len(values), help="Games in the sidebar's seasons and game types")
+    m[1].metric("Over / Under (all)", f"{100 * rates['over']:.0f}% / {100 * rates['under']:.0f}%",
+                help="Share of games above / below the line. Games exactly on a whole-number line count for neither.")
+    m[2].metric("Over / Under (last 10)", f"{100 * last10['over']:.0f}% / {100 * last10['under']:.0f}%",
+                help="The same for the last 10 games")
     m[3].metric("30–70% band", f"{p30:.1f} – {p70:.1f}", "line inside" if p30 <= line <= p70 else "line outside",
-                delta_color="off")
+                delta_color="off", help="The player's 30th to 70th percentile. A line outside it looks unusually "
+                                        "low or high for this player.")
     if c[3].button("Open player page"):
         st.session_state['player_preset'] = {'player_id': pid, 'stat': stat, 'line': line}
         st.switch_page("views/player.py")

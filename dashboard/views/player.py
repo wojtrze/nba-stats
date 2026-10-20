@@ -3,10 +3,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from glossary import STAT_HELP, column_config, source_legend
 from loaders import filtered_logs, player_logs, season_label, sidebar_filters
 from metrics import STATS, player_summary, splits, teammates, with_without
 
 st.title("Player")
+st.caption(source_legend(['stats']) + " — every number on this page comes from the scraped ESPN game logs")
 seasons, season_types = sidebar_filters()
 logs = filtered_logs(seasons, season_types)
 if logs.empty:
@@ -32,8 +34,9 @@ if pre and pre['player_id'] in names:
 c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
 player_id = c1.selectbox("Player", options, format_func=names.get, key='player_id', index=None,
                          placeholder="Type a name...")
-stat = c2.selectbox("Stat", STATS, key='player_stat')
-use_line = c4.toggle("Compare with a line", key='player_use_line')
+stat = c2.selectbox("Stat", STATS, key='player_stat', format_func=lambda s: f"{s} – {STAT_HELP[s]}")
+use_line = c4.toggle("Compare with a line", key='player_use_line',
+                     help="Show how often the player went over / under a bookmaker's line")
 line = c3.number_input("Line", min_value=0.0, step=0.5, key='player_line', disabled=not use_line)
 line = line if use_line else None
 if player_id is None:
@@ -51,19 +54,30 @@ if link.button(f"Open {games['team'].iloc[-1].upper()} in Lineup lab"):
 
 # --- summary cards ---
 cards = st.columns(6)
-cards[0].metric("Average", f"{s['avg']:.1f}", f"{s['avg_last5'] - s['avg']:+.1f} last 5", help="Season average; delta = last-5 average minus season average")
-cards[1].metric("Median", f"{s['median']:.1f}")
-cards[2].metric("30–70% band", f"{s['p30']:.1f} – {s['p70']:.1f}", help="betfinder.py checks whether the line falls inside this band")
-cards[3].metric("Trend (last 5)", f"{s['trend5']:+.1f}" if not np.isnan(s['trend5']) else "–", help="Average game-to-game change")
-cards[4].metric("Minutes", f"{s['min_avg']:.1f}", f"{s['min_avg_last5'] - s['min_avg']:+.1f} last 5")
+cards[0].metric("Average", f"{s['avg']:.1f}", f"{s['avg_last5'] - s['avg']:+.1f} last 5",
+                help="Average in the games shown. The small number = last-5-game average minus this average "
+                     "(green = in form lately).")
+cards[1].metric("Median", f"{s['median']:.1f}", help="Middle value: half the games were above, half below. Less "
+                                                      "affected by one huge or tiny game than the average.")
+cards[2].metric("30–70% band", f"{s['p30']:.1f} – {s['p70']:.1f}",
+                help="30th to 70th percentile: the middle 40% of the player's games. A line outside it looks "
+                     "unusually low or high (betfinder.py uses this band).")
+cards[3].metric("Trend (last 5)", f"{s['trend5']:+.1f}" if not np.isnan(s['trend5']) else "–",
+                help="Average change from one game to the next over the last 5 games (+ = rising)")
+cards[4].metric("Minutes", f"{s['min_avg']:.1f}", f"{s['min_avg_last5'] - s['min_avg']:+.1f} last 5",
+                help="Average minutes. The small number = last-5 minutes minus this average; a drop in minutes "
+                     "usually means fewer stats.")
 if line is not None:
     cards[5].metric("Line percentile", f"{s['percentile']:.0f}", "inside band" if s['in_band'] else "outside band",
-                    delta_color="off", help="Share of games below the line (50 = at the median)")
+                    delta_color="off", help="Share of games below the line: 50 = at the median, 80 = the player "
+                                            "went over it only 20% of the time")
     h = st.columns(3)
     for col, label, over, under in ((h[0], "Last 5", s['over_last5'], s['under_last5']),
                                     (h[1], "Last 10", s['over_last10'], s['under_last10']),
                                     (h[2], "All shown games", s['over'], s['under'])):
-        col.metric(f"{label}: Over / Under {line}", f"{100 * over:.0f}% / {100 * under:.0f}%")
+        col.metric(f"{label}: Over / Under {line}", f"{100 * over:.0f}% / {100 * under:.0f}%",
+                   help="Share of games above / below the line. Games exactly on a whole-number line count for "
+                        "neither side.")
 
 # --- game log chart ---
 colors = np.where(games['season_type'] == 'pre', '#9aa5b1', '#1f77b4')
@@ -87,13 +101,25 @@ st.plotly_chart(fig, width='stretch')
 left, right = st.columns(2)
 with left:
     st.subheader("Splits")
-    st.dataframe(splits(games, stat, line).round(1), hide_index=True, width='stretch')
+    split_table = splits(games, stat, line)
+    st.dataframe(split_table, hide_index=True, width='stretch',
+                 column_config=column_config(split_table.columns,
+                                             formats={'avg': '%.1f', 'median': '%.1f', 'over %': '%.0f'},
+                                             tips={'avg': f"Average {stat} in these games",
+                                                   'games': "Games in this group",
+                                                   'value': "Group: home/away, starter/bench, rest before the "
+                                                            "game, or minutes played"}))
 
     st.subheader("Against each opponent (all seasons)")
     every = player_logs()
     every = every[(every['player_id_ESPN'] == player_id) & every['season_type'].isin(season_types)]
-    vs = every.groupby('OPP').agg(games=(stat, 'size'), avg=(stat, 'mean'), last=('Date', 'max')).round({'avg': 1})
-    st.dataframe(vs.sort_values('last', ascending=False), width='stretch', height=250)
+    vs = every.groupby('OPP').agg(games=(stat, 'size'), avg=(stat, 'mean'), last=('Date', 'max'))
+    st.dataframe(vs.sort_values('last', ascending=False), width='stretch', height=250,
+                 column_config=column_config(['games', 'avg', 'last'], formats={'avg': '%.1f'},
+                                             tips={'avg': f"Average {stat} against this opponent, every stored "
+                                                          f"season", 'games': "Games against this opponent"})
+                 | {'last': st.column_config.DateColumn(help="Most recent game against this opponent",
+                                                        format='YYYY-MM-DD')})
 
 with right:
     st.subheader("With / without a teammate")
@@ -111,7 +137,11 @@ with right:
         ww = with_without(logs, player_id, mate, stat)
         if ww.empty or len(ww) < 2:
             st.caption("The teammate didn't miss any of the player's games in this period, so there's nothing to compare.")
-        st.dataframe(ww.round(1), width='stretch')
+        st.dataframe(ww, width='stretch',
+                     column_config=column_config(ww.columns, formats={c: '%.1f' for c in ['avg', 'median', 'minutes',
+                                                                                         'shots']},
+                                                 tips={'avg': f"Average {stat}", 'median': f"Median {stat}",
+                                                       'games': "Games in this group"}))
         st.caption("Only games from the teammate's first to last game on this team count, so a trade doesn't show as 'out'.")
 
 st.subheader("Game log")
@@ -119,5 +149,6 @@ cols = ['Date', 'OPP', 'type', 'Result', 'season_type', 'starter', 'MIN', 'PTS',
         'STL', 'BLK', 'TO', 'FGM', 'FGA', '3PA', 'FTM', 'FTA', 'PLUS_MINUS', 'rest_days']
 table = games[cols].sort_values('Date', ascending=False)
 st.dataframe(table, hide_index=True, width='stretch',
-             column_config={'Date': st.column_config.DateColumn(format='YYYY-MM-DD')})
+             column_config=column_config(cols) | {'Date': st.column_config.DateColumn(help="Game date (US Eastern)",
+                                                                                     format='YYYY-MM-DD')})
 st.download_button("Download CSV", table.to_csv(index=False), file_name=f"{games['player_name_ESPN'].iloc[0]}_{stat}.csv")

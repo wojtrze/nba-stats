@@ -94,3 +94,8 @@ def test_name_resolver_prefers_team_and_initial_fallback():
     assert r.resolve('Nic Claxton', 'bkn') == 3
     assert r.resolve('Derrick Jones', 'lac') == 4
     assert r.resolve('Nobody Here', 'lac') is None
+
+
+def test_main_lines_keep_moneyline_after_pandas_round_trip(event):
+    rows = pd.DataFrame(event_game_odds(event)).to_dict('records')     # moneyline line None -> NaN
+    assert {r['side'] for r in main_lines(rows) if r['market'] == 'ML'} == {'home', 'away'}

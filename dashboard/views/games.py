@@ -1,7 +1,9 @@
+import numpy as np
 import pandas as pd
 import streamlit as st
 
 from espn_scraper import CURRENT_SEASON
+from glossary import column_config, source_legend, tinted
 from loaders import games, player_logs, rotowire_lineups, season_label, superbet_offers, today_game_odds
 from metrics import absence_impact, blended_ratings, game_projection, market_edges, rotowire_team
 from superbet_fetcher import main_lines
@@ -25,11 +27,15 @@ with top[1].expander("Settings"):
                                     help="This season counts n / (n + this) against last season's ratings")
     regress = s[0].slider("Regress last season to average", 0.0, 1.0, 0.3, 0.1,
                           help="Rosters change over the summer; 0 = use last season's ratings as they were")
-    home_court = s[1].number_input("Home court (pts)", 0.0, 6.0, 1.5, 0.5)
+    home_court = s[1].number_input("Home court (pts)", 0.0, 6.0, 1.5, 0.5,
+                                   help="Points the home team gains just from playing at home, split half to the "
+                                        "home score and half off the away score")
     shrink = s[2].number_input("Absence shrink", 0, 30, 5,
                                help="Each absence's effect is weighted by n / (n + shrink), n = games missed")
-    out_max = s[3].selectbox("Count as out", [0, 25, 50], index=1, format_func=lambda v: f"≤ {v}% to play")
-    all_lines = s[4].toggle("Show every line", help="Otherwise only Superbet's main line of each market")
+    out_max = s[3].selectbox("Count as out", [0, 25, 50], index=1, format_func=lambda v: f"≤ {v}% to play",
+                             help="RotoWire players with at most this chance to play are treated as out")
+    all_lines = s[4].toggle("Show every line", help="Otherwise only Superbet's main line of each market (the "
+                                                    "line where both sides have the closest odds)")
 
 odds = today_game_odds()
 if odds.empty:
@@ -77,58 +83,84 @@ for event_id, game_odds in odds.groupby('event_id', sort=False):
     best = edges.loc[edges['edge pp'].idxmax()]
     start = pd.to_datetime(game_odds['start_time'].iloc[0]).tz_convert('Europe/Warsaw')
     label = f"{away.upper()} @ {home.upper()}"
+    # the decision first, then the projection behind it, then where the inputs stand
     summary.append({'game': label, 'start (PL)': start.strftime('%a %H:%M'),
-                    'RotoWire': '✔' if home in set(lineups['team']) else '',
+                    'best bet': describe(best), 'best edge pp': best['edge pp'], 'best odds': best['odds'],
                     'proj score': f"{projection['away_pts']:.0f} – {projection['home_pts']:.0f}",
                     'proj margin (home)': projection['margin'], 'proj total': projection['total'],
-                    'best bet': describe(best), 'best edge pp': best['edge pp']})
+                    'RotoWire': '✔' if home in set(lineups['team']) else ''})
     details.append((label, start, home, away, projection, edges, absences))
 
 st.subheader("Overview")
-fmt = st.column_config.NumberColumn
-st.dataframe(pd.DataFrame(summary), hide_index=True, width='stretch',
-             column_config={'proj margin (home)': fmt(format='%+.1f'), 'proj total': fmt(format='%.1f'),
-                            'best edge pp': fmt(format='%+.1f')})
-st.caption("Edge = the model's chance minus the chance implied by the odds (1/odds), in percentage points. "
-           "Superbet's margin is roughly 2-3 pp per side, so small edges are noise; early in the season the model "
-           "is mostly last season's ratings.")
+overview = pd.DataFrame(summary)
+overview_formats = {'proj margin (home)': '%+.1f', 'proj total': '%.1f', 'best edge pp': '%+.1f', 'best odds': '%.2f'}
+st.caption(source_legend())
+st.dataframe(tinted(overview, overview_formats, sources={'best odds': 'superbet'}), hide_index=True, width='stretch',
+             column_config=column_config(overview.columns, overview_formats,
+                                         tips={'RotoWire': "✔ = RotoWire already lists this game's lineups and "
+                                                           "injuries, so absences are in the projection",
+                                               'best odds': "Superbet's odds for the best bet"},
+                                         sources={'best odds': 'superbet'}))
+st.caption("Hover a column header for what it means; expand a game below for every market. Superbet's margin is "
+           "about 2–3 pp per side, so small edges are noise.")
 
 for label, start, home, away, projection, edges, absences in details:
     with st.expander(f"{label} · {start.strftime('%a %H:%M')} · projected {away.upper()} {projection['away_pts']:.0f} – "
                      f"{projection['home_pts']:.0f} {home.upper()}"):
         cols = st.columns(2)
         for col, team, side in ((cols[0], away, 'Away'), (cols[1], home, 'Home')):
-            col.markdown(f"**{side}: {team.upper()}** — ORtg {ratings.loc[team, 'off_rtg']:.1f}, "
-                         f"DRtg {ratings.loc[team, 'def_rtg']:.1f}, pace {ratings.loc[team, 'pace']:.1f}")
+            col.markdown(f"**{side}: {team.upper()}** — 📊 ORtg {ratings.loc[team, 'off_rtg']:.1f}, "
+                         f"DRtg {ratings.loc[team, 'def_rtg']:.1f}, pace {ratings.loc[team, 'pace']:.1f}",
+                         help="📊 Calculated from the scraped games: points scored / allowed per 100 possessions "
+                              "and possessions per game, this season blended with last season")
             listed = lineups[lineups['team'] == team]
             if listed.empty:
-                col.caption("Not on RotoWire's page (yet).")
+                col.caption("📋 Not on RotoWire's page (yet).")
             else:
                 starters = listed[listed['role'] == 'starter']
-                col.caption(f"RotoWire {listed['lineup_status'].iloc[0] or ''} lineup: "
+                col.caption(f"📋 RotoWire {listed['lineup_status'].iloc[0] or ''} lineup: "
                             + ", ".join(f"{r['pos']} {r['name']}" for _, r in starters.iterrows()))
                 may_not = listed[listed['role'] == 'may_not_play']
                 if len(may_not):
-                    col.caption("May not play: " + ", ".join(f"{r['name']} ({r['injury']}, {r['play_pct']:.0f}%)"
+                    col.caption("📋 May not play: " + ", ".join(f"{r['name']} ({r['injury']}, {r['play_pct']:.0f}%)"
                                                              for _, r in may_not.iterrows()))
             rows = [{'out': str(names.get(p, p)), 'games missed': imp['n_without'], 'team pts change': imp['pts_for'],
                      'opp pts change': imp['pts_against']} for p, imp in absences[team]]
             if rows:
-                col.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch',
-                              column_config={c: fmt(format='%+.1f') for c in ['team pts change', 'opp pts change']})
+                absence_table = pd.DataFrame(rows)
+                absence_formats = {'team pts change': '%+.1f', 'opp pts change': '%+.1f', 'games missed': '%d'}
+                col.dataframe(tinted(absence_table, absence_formats), hide_index=True, width='stretch',
+                              column_config=column_config(absence_table.columns, absence_formats))
         m = st.columns(4)
-        m[0].metric("Projected margin (home)", f"{projection['margin']:+.1f}")
-        m[1].metric("Projected total", f"{projection['total']:.1f}")
-        m[2].metric(f"{home.upper()} points", f"{projection['home_pts']:.1f}")
-        m[3].metric(f"{away.upper()} points", f"{projection['away_pts']:.1f}")
-        table = edges.assign(market=edges['market'].map(MARKET_LABELS),
-                             signal=pd.cut(edges['edge pp'], [-100, -5, 5, 100], labels=['🔴', '', '🟢']))
-        table = table.sort_values(['market', 'line', 'side'])
-        st.dataframe(table[['market', 'team', 'side', 'line', 'odds', 'implied %', 'model %', 'fair odds', 'signal',
-                            'edge pp']], hide_index=True, width='stretch',
-                     column_config={'implied %': fmt(format='%.0f'), 'model %': fmt(format='%.0f'),
-                                    'fair odds': fmt(format='%.2f'), 'odds': fmt(format='%.2f'),
-                                    'edge pp': fmt(format='%+.1f')})
+        m[0].metric("Projected margin (home)", f"{projection['margin']:+.1f}",
+                    help=f"{home.upper()} points minus {away.upper()} points. Negative = {away.upper()} favoured.")
+        m[1].metric("Projected total", f"{projection['total']:.1f}", help="Both teams' projected points combined")
+        m[2].metric(f"{home.upper()} points", f"{projection['home_pts']:.1f}",
+                    help="Pace × (own ORtg + opponent's DRtg − league average) / 100, + half the home-court edge, "
+                         "+ the effect of missing players")
+        m[3].metric(f"{away.upper()} points", f"{projection['away_pts']:.1f}",
+                    help="Pace × (own ORtg + opponent's DRtg − league average) / 100, − half the home-court edge, "
+                         "+ the effect of missing players")
+        # markets in MARKET_LABELS order (moneyline first), then by line
+        table = edges.assign(order=edges['market'].map(list(MARKET_LABELS).index),
+                             market=edges['market'].map(MARKET_LABELS), team=edges['team'].fillna('').str.upper(),
+                             signal=np.select([edges['edge pp'] >= 5, edges['edge pp'] <= -5], ['🟢', '🔴'], ''))
+        table = table.sort_values(['order', 'line', 'side'])
+        # a moneyline has no line: show it as text so the empty cell reads '–' rather than 'None'
+        table['line'] = [('–' if pd.isna(v) else f"{v:+g}" if m == 'Handicap' else f"{v:g}")
+                         for v, m in zip(table['line'], table['market'])]
+        # outcome -> verdict -> Superbet's price -> the model's price
+        market_cols = ['market', 'team', 'side', 'line', 'signal', 'edge pp', 'odds', 'implied %', 'model %',
+                       'fair odds']
+        market_formats = {'implied %': '%.0f', 'model %': '%.0f', 'fair odds': '%.2f', 'odds': '%.2f',
+                          'edge pp': '%+.1f'}
+        st.dataframe(tinted(table[market_cols], market_formats), hide_index=True, width='stretch',
+                     column_config=column_config(
+                         market_cols, formats=market_formats,
+                         tips={'line': "Handicap: the team's handicap (+1.5 = still wins the bet if it loses by 1). "
+                                       "Totals: the points line. Empty for the moneyline.",
+                               'signal': "🟢 model edge of +5 pp or more, 🔴 −5 pp or less",
+                               'edge pp': "model % − implied %, in percentage points"}))
         b = st.columns(2)
         for i, team in enumerate((away, home)):
             if b[i].button(f"Open {team.upper()} in Lineup lab", key=f"lab_{label}_{team}"):

@@ -2,20 +2,21 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from glossary import column_config
 from loaders import assessed_bets
 from metrics import RULES, grouped_rates, rule_stats, vote_pattern
 
 st.title("Rule backtest")
 st.warning("This uses `assessed_bets.csv`: Unibet offers from Nov 2022 – Feb 2023, scored with bet_analyst.py's rules "
-           "at the time. It shows whether the rules had an edge back then, not on today's Superbet lines.
-
-"
+           "at the time. It shows whether the rules had an edge back then, not on today's Superbet lines.\n\n"
            "Some rules show 70–85% hit rates at ~1.9 odds, which is too good to be true. That usually means the data "
            "leaks information from after the bet (e.g. lines offered close to or during the game, or `bets_hits` "
            "counting results that came later). Treat these numbers as an upper bound until offers are re-tested "
            "on clean data.", icon="⚠️")
 
 bets = vote_pattern(assessed_bets())
+RATE_FORMATS = {'hit %': '%.1f', 'ci low %': '%.1f', 'ci high %': '%.1f', 'ROI %': '%+.1f', 'avg odds': '%.2f',
+                'bets': '%d'}
 
 # --- filters ---
 f = st.columns(4)
@@ -38,10 +39,11 @@ if bets.empty:
 total = grouped_rates(bets.assign(all='all'), 'all').iloc[0]
 breakeven = 100 / bets['odds'].mean()
 m = st.columns(4)
-m[0].metric("Bets", f"{int(total['bets']):,}")
-m[1].metric("Hit rate (all)", f"{total['hit %']:.1f}%")
+m[0].metric("Bets", f"{int(total['bets']):,}", help="Bets matching the filters")
+m[1].metric("Hit rate (all)", f"{total['hit %']:.1f}%", help="Share of those bets that won")
 m[2].metric("Break-even at avg odds", f"{breakeven:.1f}%", help=f"100 / average odds ({bets['odds'].mean():.2f})")
-m[3].metric("ROI betting everything", f"{total['ROI %']:+.1f}%")
+m[3].metric("ROI betting everything", f"{total['ROI %']:+.1f}%",
+            help="Profit per 100 units staked if you had bet 1 unit on every bet shown")
 
 # --- per rule ---
 st.subheader("Each rule: following it vs going against it")
@@ -54,7 +56,7 @@ fig.update_layout(height=380, yaxis_range=[30, 70], margin=dict(t=20))
 st.plotly_chart(fig, width='stretch')
 st.caption("'agrees' = bets in the direction the rule voted. Error bars are 95% confidence intervals: "
            "if a bar's interval crosses the break-even line, the rule's edge isn't proven.")
-st.dataframe(stats.round(1), hide_index=True, width='stretch')
+st.dataframe(stats, hide_index=True, width='stretch', column_config=column_config(stats.columns, RATE_FORMATS))
 
 # --- agreement ---
 st.subheader("How many rules agree")
@@ -65,7 +67,9 @@ fig = px.bar(net, x='net', y='hit %', text=net['bets'].map('{:,}'.format),
 fig.add_hline(y=breakeven, line_dash='dash')
 fig.update_layout(height=320, yaxis_range=[30, 75], margin=dict(t=20))
 left.plotly_chart(fig, width='stretch')
-right.dataframe(grouped_rates(bets, ['agree', 'against']).round(1), hide_index=True, width='stretch', height=320)
+agreement = grouped_rates(bets, ['agree', 'against'])
+right.dataframe(agreement, hide_index=True, width='stretch', height=320,
+                column_config=column_config(agreement.columns, RATE_FORMATS))
 
 # --- combinations ---
 st.subheader("Rule combinations")
@@ -73,7 +77,8 @@ min_bets = st.slider("Minimum bets per combination", 10, 500, 50, 10)
 combos = grouped_rates(bets, 'pattern', min_bets).sort_values('ci low %', ascending=False)
 st.caption(f"{len(combos)} combinations with at least {min_bets} bets, sorted by the lower end of the 95% interval "
            f"(the most reliably good first). '+rule' = it voted for the bet's side, '-rule' = against.")
-st.dataframe(combos.round(1), hide_index=True, width='stretch', height=400)
+st.dataframe(combos, hide_index=True, width='stretch', height=400,
+             column_config=column_config(combos.columns, RATE_FORMATS))
 
 # --- bins ---
 st.subheader("Hit rate by odds and by line vs actual")
