@@ -54,9 +54,9 @@ if link.button(f"Open {games['team'].iloc[-1].upper()} in Lineup lab"):
 
 # --- summary cards ---
 cards = st.columns(6)
-cards[0].metric("Average", f"{s['avg']:.1f}", f"{s['avg_last5'] - s['avg']:+.1f} last 5",
-                help="Average in the games shown. The small number = last-5-game average minus this average "
-                     "(green = in form lately).")
+cards[0].metric("Average", f"{s['avg']:.1f}", f"{s['avg_last5'] - s['avg']:+.1f} {stat} per game in the last 5 games vs this average",
+                help="Average in the games shown. The small text = how much more (+) or less (−) the player "
+                     "averaged over the last 5 games (green = in form lately).")
 cards[1].metric("Median", f"{s['median']:.1f}", help="Middle value: half the games were above, half below. Less "
                                                       "affected by one huge or tiny game than the average.")
 cards[2].metric("30–70% band", f"{s['p30']:.1f} – {s['p70']:.1f}",
@@ -64,9 +64,9 @@ cards[2].metric("30–70% band", f"{s['p30']:.1f} – {s['p70']:.1f}",
                      "unusually low or high (betfinder.py uses this band).")
 cards[3].metric("Trend (last 5)", f"{s['trend5']:+.1f}" if not np.isnan(s['trend5']) else "–",
                 help="Average change from one game to the next over the last 5 games (+ = rising)")
-cards[4].metric("Minutes", f"{s['min_avg']:.1f}", f"{s['min_avg_last5'] - s['min_avg']:+.1f} last 5",
-                help="Average minutes. The small number = last-5 minutes minus this average; a drop in minutes "
-                     "usually means fewer stats.")
+cards[4].metric("Minutes", f"{s['min_avg']:.1f}", f"{s['min_avg_last5'] - s['min_avg']:+.1f} min per game in the last 5 games vs this average",
+                help="Average minutes. The small text = how many more (+) or fewer (−) minutes the player got over "
+                     "the last 5 games; a drop in minutes usually means fewer stats.")
 if line is not None:
     cards[5].metric("Line percentile", f"{s['percentile']:.0f}", "inside band" if s['in_band'] else "outside band",
                     delta_color="off", help="Share of games below the line: 50 = at the median, 80 = the player "

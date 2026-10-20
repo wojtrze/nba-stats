@@ -51,7 +51,7 @@ HELP = STAT_HELP | {
 
     # Games
     'start (PL)': "Tip-off, Polish time", 'proj score': "Projected score, away – home",
-    'proj margin (home)': "Projected home points minus away points (negative = away team favoured)",
+    'proj winner': "Team the projection favours and by how many points",
     'proj total': "Projected combined points",
     'best bet': "The market outcome with the biggest model edge in this game",
     'best edge pp': "Model chance minus the chance implied by Superbet's odds (1/odds) for the best bet, in "
@@ -91,9 +91,9 @@ HELP = STAT_HELP | {
     # Teams
     'G': "Allowed to opponents' guards, per game", 'F': "Allowed to opponents' forwards, per game",
     'C': "Allowed to opponents' centers, per game",
-    'G vs avg': "Allowed to guards minus the league average (+ = soft matchup for guards' Overs)",
-    'F vs avg': "Allowed to forwards minus the league average (+ = soft matchup for forwards' Overs)",
-    'C vs avg': "Allowed to centers minus the league average (+ = soft matchup for centers' Overs)",
+    'G vs avg': "How much more (+) or less (−) this defense allows to guards than the average NBA defense (+ = soft matchup for guards' Overs)",
+    'F vs avg': "How much more (+) or less (−) this defense allows to forwards than the average NBA defense (+ = soft matchup for forwards' Overs)",
+    'C vs avg': "How much more (+) or less (−) this defense allows to centers than the average NBA defense (+ = soft matchup for centers' Overs)",
     'wins': "Wins", 'losses': "Losses", 'home': "Home record (wins-losses)", 'pts': "Points scored per game",
     'opp_pts': "Points allowed per game", 'pace': "Possessions per game (both teams averaged)",
     'off_rtg': "Offensive rating: points scored per 100 possessions",
@@ -124,7 +124,9 @@ HELP = STAT_HELP | {
 LABELS = {
     'bet_type': "bet", 'best side': "pick", 'over_odds': "over odds", 'under_odds': "under odds", 'season_type': "game type",
     'PLUS_MINUS': "+/-", 'rest_days': "rest days", 'type': "home/away", 'off_rtg': "ORtg", 'def_rtg': "DRtg",
-    'net_rtg': "net rtg", 'opp_pts': "opp pts", 'over_under': "side", 'odds_bin': "odds", 'ARP': "PRA",
+    'net_rtg': "net rtg", 'opp_pts': "opp pts", 'G': "guards", 'F': "forwards", 'C': "centers",
+    'G vs avg': "guards vs NBA avg", 'F vs avg': "forwards vs NBA avg", 'C vs avg': "centers vs NBA avg",
+    'over_under': "side", 'odds_bin': "odds", 'ARP': "PRA",
 }
 
 
@@ -145,7 +147,7 @@ COLUMN_SOURCE = {
     'best side': 'stats', 'signal': 'stats', 'edge pp': 'stats', 'games': 'stats', 'avg': 'stats',
     'adj avg': 'stats', 'avg L5': 'stats', 'over %': 'stats', 'under %': 'stats', 'over % L10': 'stats',
     'under % L10': 'stats', 'percentile': 'stats', 'in band': 'stats', 'min L5': 'stats',
-    'proj score': 'stats', 'proj margin (home)': 'stats', 'proj total': 'stats', 'best bet': 'stats',
+    'proj score': 'stats', 'proj winner': 'stats', 'proj total': 'stats', 'best bet': 'stats',
     'best edge pp': 'stats', 'model %': 'stats', 'fair odds': 'stats', 'games missed': 'stats',
     'team pts change': 'stats', 'opp pts change': 'stats',
 }

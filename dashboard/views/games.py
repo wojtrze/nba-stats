@@ -67,6 +67,11 @@ def describe(outcome) -> str:
     return f"{MARKET_LABELS[outcome['market']]} {who}{line}"
 
 
+def winner(projection, home, away) -> str:
+    """'BOS by 3.5': the projected winner and margin."""
+    return f"{(home if projection['margin'] >= 0 else away).upper()} by {abs(projection['margin']):.1f}"
+
+
 summary, details = [], []
 for event_id, game_odds in odds.groupby('event_id', sort=False):
     home, away = game_odds['home'].iloc[0], game_odds['away'].iloc[0]
@@ -87,13 +92,13 @@ for event_id, game_odds in odds.groupby('event_id', sort=False):
     summary.append({'game': label, 'start (PL)': start.strftime('%a %H:%M'),
                     'best bet': describe(best), 'best edge pp': best['edge pp'], 'best odds': best['odds'],
                     'proj score': f"{projection['away_pts']:.0f} – {projection['home_pts']:.0f}",
-                    'proj margin (home)': projection['margin'], 'proj total': projection['total'],
+                    'proj winner': winner(projection, home, away), 'proj total': projection['total'],
                     'RotoWire': '✔' if home in set(lineups['team']) else ''})
     details.append((label, start, home, away, projection, edges, absences))
 
 st.subheader("Overview")
 overview = pd.DataFrame(summary)
-overview_formats = {'proj margin (home)': '%+.1f', 'proj total': '%.1f', 'best edge pp': '%+.1f', 'best odds': '%.2f'}
+overview_formats = {'proj total': '%.1f', 'best edge pp': '%+.1f', 'best odds': '%.2f'}
 st.caption(source_legend())
 st.dataframe(tinted(overview, overview_formats, sources={'best odds': 'superbet'}), hide_index=True, width='stretch',
              column_config=column_config(overview.columns, overview_formats,
@@ -132,8 +137,9 @@ for label, start, home, away, projection, edges, absences in details:
                 col.dataframe(tinted(absence_table, absence_formats), hide_index=True, width='stretch',
                               column_config=column_config(absence_table.columns, absence_formats))
         m = st.columns(4)
-        m[0].metric("Projected margin (home)", f"{projection['margin']:+.1f}",
-                    help=f"{home.upper()} points minus {away.upper()} points. Negative = {away.upper()} favoured.")
+        m[0].metric("Projected winner", winner(projection, home, away),
+                    help=f"Projected {home.upper()} points minus {away.upper()} points: "
+                         f"{projection['margin']:+.1f} (home margin)")
         m[1].metric("Projected total", f"{projection['total']:.1f}", help="Both teams' projected points combined")
         m[2].metric(f"{home.upper()} points", f"{projection['home_pts']:.1f}",
                     help="Pace × (own ORtg + opponent's DRtg − league average) / 100, + half the home-court edge, "
