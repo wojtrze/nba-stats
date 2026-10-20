@@ -17,6 +17,7 @@ st.set_page_config(page_title="NBA props", page_icon="🏀", layout="wide")
 
 pages = [
     st.Page(os.path.join(DASHBOARD, "views", "todays_props.py"), title="Today's props", icon="🎯", default=True),
+    st.Page(os.path.join(DASHBOARD, "views", "games.py"), title="Games", icon="🏟️", url_path="games"),
     st.Page(os.path.join(DASHBOARD, "views", "player.py"), title="Player", icon="👤", url_path="player"),
     st.Page(os.path.join(DASHBOARD, "views", "lineup.py"), title="Lineup lab", icon="🧩", url_path="lineup"),
     st.Page(os.path.join(DASHBOARD, "views", "teams.py"), title="Teams & matchups", icon="🛡️", url_path="teams"),

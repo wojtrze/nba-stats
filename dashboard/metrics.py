@@ -5,15 +5,17 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 
-STATS = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'ARP', 'MIN', 'STL', 'BLK', 'TO']
+STATS = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP', 'MIN', 'STL', 'BLK', 'TO', 'FGM', 'FGA', '3PA', 'FTM', 'FTA',
+         'PF']
 # rule columns of assessed_bets.csv; each holds the rule's vote ('Over'/'Under') or NaN when it didn't vote
 RULES = ['quantiles', 'median', 'last_games', 'averages', 'bets_hits', 'low_odds']
 POSITION_GROUPS = {'G': 'G', 'PG': 'G', 'SG': 'G', 'F': 'F', 'SF': 'F', 'PF': 'F', 'C': 'C'}
 
 
 def add_combined_stats(logs: pd.DataFrame) -> pd.DataFrame:
-    """The combined bet types bookmakers offer: points+assists, points+rebounds, points+rebounds+assists."""
-    return logs.assign(PA=logs['PTS'] + logs['AST'], PR=logs['PTS'] + logs['REB'],
+    """The combined bet types bookmakers offer: points+assists, points+rebounds, rebounds+assists,
+    points+rebounds+assists."""
+    return logs.assign(PA=logs['PTS'] + logs['AST'], PR=logs['PTS'] + logs['REB'], RA=logs['REB'] + logs['AST'],
                        ARP=logs['PTS'] + logs['REB'] + logs['AST'])
 
 
@@ -211,6 +213,22 @@ def lineup_scenario(logs: pd.DataFrame, team: str, starters, out, available, sta
     return pd.DataFrame(rows)
 
 
+def absence_adjustments(logs: pd.DataFrame, player_ids, out_ids, stats, shrink: float = 5) -> pd.DataFrame:
+    """For each player: the summed with/without change of each stat over the out teammates, each shrunk by
+    n_without / (n_without + shrink) as in lineup_scenario. Index: player id, columns: stats."""
+    out = pd.DataFrame(0.0, index=list(player_ids), columns=list(stats))
+    for p in player_ids:
+        for o in out_ids:
+            if p == o:
+                continue
+            games = stint_games(logs, p, o)
+            played, missed = games[games['teammate_played']], games[~games['teammate_played']]
+            n = len(missed)
+            if n and len(played):
+                out.loc[p] += (missed[list(stats)].mean() - played[list(stats)].mean()) * n / (n + shrink)
+    return out
+
+
 def wilson_interval(hits: int, n: int, z: float = 1.96):
     """95% confidence interval of a hit rate; wide for small samples."""
     if n == 0:
@@ -299,3 +317,107 @@ def allowed_by_position(logs: pd.DataFrame, stat: str) -> pd.DataFrame:
     table = per_game.groupby('defense').mean()
     table['games'] = per_game.groupby('defense').size()
     return table.reindex(columns=['G', 'F', 'C', 'games'])
+
+
+# --- today's games: RotoWire lineups and a simple game model ---
+
+# spread of actual results around game_projection (2025/26 regular season: margin 14.1, total 18.4)
+MARGIN_SD, TOTAL_SD, TEAM_TOTAL_SD = 14.0, 18.0, 11.5
+
+
+def rotowire_team(lineups: pd.DataFrame, team: str, out_max_pct: int = 25) -> Dict[str, list]:
+    """A team's RotoWire lineup as ESPN ids (lineups need a player_id_ESPN column): starters, out (chance to play
+    <= out_max_pct) and questionable (above that but under 100). Unmatched names are skipped."""
+    t = lineups[(lineups['team'] == team) & lineups['player_id_ESPN'].notna()]
+    may_not = t[t['role'] == 'may_not_play']
+    return {'starters': t.loc[t['role'] == 'starter', 'player_id_ESPN'].tolist(),
+            'out': may_not.loc[may_not['play_pct'] <= out_max_pct, 'player_id_ESPN'].tolist(),
+            'questionable': may_not.loc[(may_not['play_pct'] > out_max_pct) & (may_not['play_pct'] < 100),
+                                        'player_id_ESPN'].tolist()}
+
+
+def blended_ratings(current: pd.DataFrame, prior: pd.DataFrame, prior_games: float = 10,
+                    regress: float = 0.3) -> pd.DataFrame:
+    """team_ratings of the current season's games pulled toward the prior season's: the current season weighs
+    n / (n + prior_games), so the first weeks lean on last season. Last season's ratings are first moved
+    `regress` of the way to the league average, since rosters change over the summer. A team missing on one
+    side uses the other."""
+    cols = ['off_rtg', 'def_rtg', 'pace']
+    cur = team_ratings(current) if len(current) else pd.DataFrame(columns=cols + ['games'], dtype=float)
+    old = team_ratings(prior)[cols] if len(prior) else pd.DataFrame(columns=cols, dtype=float)
+    old = old * (1 - regress) + old.mean() * regress
+    teams = cur.index.union(old.index)
+    games = cur['games'].reindex(teams).fillna(0).astype(float)
+    cur, old = cur[cols].reindex(teams).astype(float), old.reindex(teams).astype(float)
+    w = games / (games + prior_games)
+    blended = (cur.mul(w, axis=0) + old.mul(1 - w, axis=0)).fillna(cur).fillna(old)
+    return blended.assign(games=games.astype(int))
+
+
+def absence_impact(games: pd.DataFrame, logs: pd.DataFrame, team: str, player_id, shrink: float = 5) -> Dict:
+    """How the team's points scored and allowed change in games the player missed (inside the player's stints
+    on the team, per season), shrunk toward 0 by n / (n + shrink) where n = games missed."""
+    played = logs[(logs['player_id_ESPN'] == player_id) & (logs['team'] == team) & (logs['MIN'] > 0)]
+    if played.empty:
+        return {'pts_for': 0.0, 'pts_against': 0.0, 'n_without': 0, 'n_with': 0}
+    windows = played.groupby('season_id')['Date'].agg(['min', 'max'])
+    sides = []
+    for side, other in (('home', 'away'), ('away', 'home')):
+        g = games[games[side] == team]
+        sides.append(pd.DataFrame({'game_id': g['game_id'], 'season_id': g['season_id'], 'date': g['date'],
+                                   'pts_for': g[f'{side}_score'], 'pts_against': g[f'{other}_score']}))
+    t = pd.concat(sides).merge(windows, left_on='season_id', right_index=True)
+    t = t[(t['date'] >= t['min']) & (t['date'] <= t['max'])]
+    t['played'] = t['game_id'].isin(played['game_id'])
+    with_, without = t[t['played']], t[~t['played']]
+    n = len(without)
+    if n == 0 or with_.empty:
+        return {'pts_for': 0.0, 'pts_against': 0.0, 'n_without': n, 'n_with': len(with_)}
+    weight = n / (n + shrink)
+    return {'pts_for': weight * (without['pts_for'].mean() - with_['pts_for'].mean()),
+            'pts_against': weight * (without['pts_against'].mean() - with_['pts_against'].mean()),
+            'n_without': n, 'n_with': len(with_)}
+
+
+def game_projection(ratings: pd.DataFrame, home: str, away: str, home_court: float = 1.5,
+                    home_absences=(), away_absences=()) -> Dict:
+    """Projected points for both teams: pace x (team's offense + opponent's defense - league average) / 100,
+    plus half the home-court edge each way, plus the absence_impact dicts of each team's missing players."""
+    league_rtg, league_pace = ratings['off_rtg'].mean(), ratings['pace'].mean()
+    h, a = ratings.loc[home], ratings.loc[away]
+    pace = h['pace'] + a['pace'] - league_pace
+    home_pts = pace * (h['off_rtg'] + a['def_rtg'] - league_rtg) / 100 + home_court / 2
+    away_pts = pace * (a['off_rtg'] + h['def_rtg'] - league_rtg) / 100 - home_court / 2
+    for imp in home_absences:
+        home_pts, away_pts = home_pts + imp['pts_for'], away_pts + imp['pts_against']
+    for imp in away_absences:
+        away_pts, home_pts = away_pts + imp['pts_for'], home_pts + imp['pts_against']
+    return {'home_pts': home_pts, 'away_pts': away_pts, 'margin': home_pts - away_pts,
+            'total': home_pts + away_pts, 'pace': pace}
+
+
+def _normal_cdf(x: float) -> float:
+    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+
+
+def model_probability(projection: Dict, market: str, side: str, line: Optional[float]) -> float:
+    """Chance the outcome wins under the projection. A SPREAD line is the side's handicap (+1.5 = may lose by 1)."""
+    if market in ('ML', 'SPREAD'):
+        margin = projection['margin'] if side == 'home' else -projection['margin']
+        return _normal_cdf((margin + (line if market == 'SPREAD' else 0)) / MARGIN_SD)
+    expected, sd = {'TOTAL': (projection['total'], TOTAL_SD), 'HOME_TOTAL': (projection['home_pts'], TEAM_TOTAL_SD),
+                    'AWAY_TOTAL': (projection['away_pts'], TEAM_TOTAL_SD)}[market]
+    over = _normal_cdf((expected - line) / sd)
+    return over if side == 'over' else 1 - over
+
+
+def market_edges(projection: Dict, odds: pd.DataFrame) -> pd.DataFrame:
+    """Superbet outcomes (market, side, line, odds) with the model's chance, the chance implied by the odds,
+    the edge in percentage points and the model's fair odds."""
+    out = odds.copy()
+    out['model %'] = [100 * model_probability(projection, m, s, l)
+                      for m, s, l in zip(out['market'], out['side'], out['line'])]
+    out['implied %'] = 100 / out['odds']
+    out['edge pp'] = out['model %'] - out['implied %']
+    out['fair odds'] = 100 / out['model %']
+    return out

@@ -4,10 +4,10 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from espn_scraper import NBA_TEAM_ABBRS
-from loaders import filtered_logs, season_label, sidebar_filters, today_props
-from metrics import lineup_scenario, starting_lineup, team_rotation, with_without_matrix
+from loaders import filtered_logs, rotowire_lineups, season_label, sidebar_filters, today_props
+from metrics import lineup_scenario, rotowire_team, starting_lineup, team_rotation, with_without_matrix
 
-STATS = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'ARP', 'MIN', 'FGA']
+STATS = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP', 'STL', 'BLK', 'TO', 'MIN', 'FGA']
 
 st.title("Lineup lab")
 st.caption("Pick a starting five and who's out. The matrix shows how each player's numbers change when a teammate "
@@ -29,14 +29,16 @@ def cached_matrix(seasons, season_types, team, ids, stat):
 # --- team ---
 teams = sorted(t for t in logs['team'].unique() if t in NBA_TEAM_ABBRS)
 upcoming = today_props()
-quick = sorted({t for pair in zip(upcoming['away'], upcoming['home']) for t in pair}) if not upcoming.empty else []
+lineups_rw = rotowire_lineups()
+quick = sorted({t for pair in zip(upcoming['away'], upcoming['home']) for t in pair} if not upcoming.empty else set()
+               | set(lineups_rw['team']))
 # a team sent from another page wins; otherwise restore the last team (widget state is dropped between pages)
 requested = st.session_state.pop('lineup_team', None) or st.session_state.get('_lineup_team')
 if requested in teams and ('lineup_team_select' not in st.session_state or requested != st.session_state.get('_lineup_team')):
     st.session_state['lineup_team_select'] = requested
 c = st.columns([1, 1, 3])
 team = c[0].selectbox("Team", quick + [t for t in teams if t not in quick], format_func=str.upper, key='lineup_team_select',
-                      help="Teams playing in today's Superbet games are listed first.")
+                      help="Teams playing today (Superbet or RotoWire) are listed first.")
 st.session_state['_lineup_team'] = team
 stat = c[1].selectbox("Stat", STATS, key='lineup_stat')
 with c[2].expander("Settings"):
@@ -55,7 +57,7 @@ if rotation.empty:
     st.info(f"No players with {min_games}+ games and {min_minutes}+ minutes for {team.upper()} in the chosen games.")
     st.stop()
 
-# --- lineup (kept per team; a RotoWire projection can fill the same dict later with source='rotowire') ---
+# --- lineup (kept per team; RotoWire's projection is the default for teams it lists today) ---
 lineups = st.session_state.setdefault('lineups', {})
 starters_key, out_key = f'lineup_starters_{team}', f'lineup_out_{team}'
 
@@ -66,8 +68,13 @@ def set_lineup(starters, out, source):
     st.session_state[starters_key], st.session_state[out_key] = lineups[team]['starters'], lineups[team]['out']
 
 
+rw = rotowire_team(lineups_rw, team)
+rw_listed = lineups_rw[lineups_rw['team'] == team]
 if team not in lineups:
-    set_lineup(starting_lineup(logs, team, 'last'), [], 'last game')
+    if rw['starters']:
+        set_lineup(rw['starters'], rw['out'], 'rotowire')
+    else:
+        set_lineup(starting_lineup(logs, team, 'last'), [], 'last game')
 for key, field in ((starters_key, 'starters'), (out_key, 'out')):
     if key not in st.session_state:   # widget state is dropped when leaving the page; restore it
         st.session_state[key] = lineups[team][field]
@@ -77,12 +84,23 @@ def manual_change():
     set_lineup(st.session_state[starters_key], st.session_state[out_key], 'manual')
 
 
-b = st.columns([1, 1, 3])
-b[0].button("Last game's starters", on_click=set_lineup, args=(starting_lineup(logs, team, 'last'), [], 'last game'))
-b[1].button("Most frequent starters (last 10)", on_click=set_lineup,
+b = st.columns([1, 1, 1, 3])
+b[0].button("RotoWire projection", on_click=set_lineup, args=(rw['starters'], rw['out'], 'rotowire'),
+            disabled=not rw['starters'], help="Tonight's expected starters and players out (0-25% to play) "
+                                              "from RotoWire's lineups page.")
+b[1].button("Last game's starters", on_click=set_lineup, args=(starting_lineup(logs, team, 'last'), [], 'last game'))
+b[2].button("Most frequent starters (last 10)", on_click=set_lineup,
             args=(starting_lineup(logs, team, 'frequent'), [], 'frequent'))
-b[2].caption(f"Lineup source: **{lineups[team]['source']}**. The last game is sometimes a rest game; "
+b[3].caption(f"Lineup source: **{lineups[team]['source']}**. The last game is sometimes a rest game; "
              f"switch to the most frequent starters if it looks off.")
+
+if not rw_listed.empty:
+    status = rw_listed['lineup_status'].iloc[0] or 'listed'
+    notes = [f"{r['name']} ({r['injury'] or '?'}, {r['play_pct']:.0f}%)" for _, r in rw_listed.iterrows()
+             if r['role'] == 'may_not_play']
+    unmatched = rw_listed.loc[rw_listed['player_id_ESPN'].isna(), 'name'].tolist()
+    st.caption(f"RotoWire: **{status}** lineup. May not play: {', '.join(notes) or '–'}"
+               + (f". No games in the data for: {', '.join(unmatched)}" if unmatched else ""))
 
 label = lambda p: f"{names.get(p, p)} ({roster['position'].get(p, '')}, {roster['mpg'].get(p, 0):.0f} mpg)"
 l1, l2 = st.columns(2)

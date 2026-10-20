@@ -16,6 +16,11 @@ def players_file(season: int) -> str:
     return os.path.join(data_dir(season), "player_gamelogs.csv")
 
 
+def snapshot_file(season: int, name: str) -> str:
+    """Daily RotoWire/Superbet snapshots: 'rotowire_lineups', 'superbet_props' or 'superbet_game_odds'."""
+    return os.path.join(data_dir(season), f"{name}.csv")
+
+
 def _checked_file(season: int) -> str:
     return os.path.join(data_dir(season), "checked_through.txt")
 

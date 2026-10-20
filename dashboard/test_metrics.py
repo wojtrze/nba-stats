@@ -5,9 +5,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from metrics import (add_combined_stats, allowed_by_position, hit_rates, line_percentile, lineup_scenario,
-                     percentile_band, roi, rule_stats, starting_lineup, stint_games, team_rotation, vote_pattern,
-                     wilson_interval, with_without, with_without_matrix)
+from metrics import (absence_adjustments, absence_impact, add_combined_stats, allowed_by_position, blended_ratings,
+                     game_projection, hit_rates, line_percentile, lineup_scenario, market_edges, model_probability,
+                     percentile_band, roi, rotowire_team, rule_stats, starting_lineup, stint_games, team_rotation,
+                     vote_pattern, wilson_interval, with_without, with_without_matrix)
 
 
 def test_hit_rates_counts_pushes_for_neither_side():
@@ -30,7 +31,7 @@ def test_percentile_band_matches_check_bet():
 
 def test_combined_stats():
     df = add_combined_stats(pd.DataFrame({'PTS': [20], 'REB': [5], 'AST': [7]}))
-    assert (df['PA'][0], df['PR'][0], df['ARP'][0]) == (27, 25, 32)
+    assert (df['PA'][0], df['PR'][0], df['RA'][0], df['ARP'][0]) == (27, 25, 12, 32)
 
 
 def test_roi_and_wilson():
@@ -147,3 +148,60 @@ def test_lineup_scenario_exact_and_shrunk_estimate():
     assert s.loc[1, 'estimate'] == pytest.approx(usual + 10 * 2 / (2 + 2))
     assert s.loc[2, 'change'] == 0
     assert s.loc[1, 'role'] == 'Starter'
+
+
+def test_absence_adjustments_match_shrunk_matrix():
+    logs = _team_logs()
+    adj = absence_adjustments(logs, [1, 2], [3], ['PTS'], shrink=2)
+    assert adj.loc[1, 'PTS'] == pytest.approx(10 * 2 / (2 + 2))
+    assert adj.loc[2, 'PTS'] == 0
+
+
+def test_rotowire_team_splits_starters_out_and_questionable():
+    lineups = pd.DataFrame({'team': ['a'] * 8 + ['b'],
+                            'role': ['starter'] * 5 + ['may_not_play'] * 3 + ['starter'],
+                            'play_pct': [100] * 5 + [0, 50, 25] + [100],
+                            'player_id_ESPN': [1, 2, 3, 4, None, 6, 7, 8, 9]})
+    rw = rotowire_team(lineups, 'a')
+    assert rw == {'starters': [1, 2, 3, 4], 'out': [6, 8], 'questionable': [7]}
+
+
+def _games(rows):
+    cols = ['game_id', 'date', 'season_id', 'season_type', 'home', 'away', 'home_score', 'away_score']
+    df = pd.DataFrame(rows, columns=cols)
+    for side in ('home', 'away'):   # identical box-score totals -> 100 possessions per team
+        df[f'{side}_FGA'], df[f'{side}_FTA'], df[f'{side}_TO'], df[f'{side}_OREB'] = 90, 0, 20, 10
+    df['date'] = pd.to_datetime(df['date'])
+    return df
+
+
+def test_game_projection_and_probabilities():
+    games = _games([('1', '2025-01-01', 2025, 'regular', 'a', 'b', 120, 100),
+                    ('2', '2025-01-02', 2025, 'regular', 'b', 'a', 100, 120)])
+    ratings = blended_ratings(games.iloc[0:0], games, regress=0)
+    assert ratings.loc['a', 'off_rtg'] == 120 and ratings.loc['b', 'def_rtg'] == 120
+    p = game_projection(ratings, 'a', 'b', home_court=2)
+    # league average rating 110, pace 100: a scores 120 + 120 - 110 = 130 (+1 home), b 100 + 100 - 110 = 90 (-1)
+    assert (p['home_pts'], p['away_pts']) == (pytest.approx(131), pytest.approx(89))
+    assert model_probability(p, 'ML', 'home', None) + model_probability(p, 'ML', 'away', None) == pytest.approx(1)
+    assert model_probability(p, 'SPREAD', 'home', -42) == pytest.approx(0.5)
+    assert model_probability(p, 'TOTAL', 'over', 220) == pytest.approx(0.5)
+    edges = market_edges(p, pd.DataFrame({'market': ['TOTAL'], 'side': ['under'], 'line': [220.0], 'odds': [2.5]}))
+    assert edges['edge pp'].iloc[0] == pytest.approx(50 - 40)
+
+
+def test_blended_ratings_weights_current_season_by_games():
+    prior = _games([('1', '2025-01-01', 2025, 'regular', 'a', 'b', 120, 100)])
+    current = _games([('2', '2026-01-01', 2026, 'regular', 'a', 'b', 100, 100)])
+    r = blended_ratings(current, prior, prior_games=1, regress=0)   # 1 current game -> weight 1/2
+    assert r.loc['a', 'off_rtg'] == pytest.approx(110) and r.loc['a', 'games'] == 1
+
+
+def test_absence_impact_uses_games_inside_stint():
+    logs = _team_logs()
+    logs['Date'] = pd.to_datetime(logs['Date'])
+    games = _games([(str(g), f'2025-01-0{g}', 2025, 'regular', 'a', 'x', 100 + (10 if g in (4, 5) else 0), 100)
+                    for g in range(1, 7)])
+    imp = absence_impact(games, logs, 'a', 3, shrink=2)        # 3 missed games 4-5, team scored 10 more
+    assert (imp['n_without'], imp['n_with']) == (2, 4)
+    assert imp['pts_for'] == pytest.approx(10 * 2 / 4) and imp['pts_against'] == 0

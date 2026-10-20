@@ -6,7 +6,8 @@ import pandas as pd
 import streamlit as st
 
 from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS, SEASONS
-from espn_scraper.storage import checked_through, games_file, load_player_gamelogs
+from espn_scraper.storage import checked_through, games_file, load_player_gamelogs, snapshot_file
+from name_resolver import NameResolver
 
 from metrics import POSITION_GROUPS, add_combined_stats
 
@@ -46,31 +47,68 @@ def assessed_bets() -> pd.DataFrame:
     return df
 
 
-@st.cache_data(ttl=600, show_spinner="Fetching today's Superbet props...")
+@st.cache_resource(show_spinner=False)
+def name_resolver() -> NameResolver:
+    return NameResolver(player_logs())
+
+
+def _latest_snapshot(name: str) -> pd.DataFrame:
+    """The last fetch stored by daily_snapshot.py, used when a live source fails."""
+    path = snapshot_file(CURRENT_SEASON, name)
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    return df[df['fetched_at'] == df['fetched_at'].max()].drop(columns='fetched_at')
+
+
+@st.cache_data(ttl=600, show_spinner="Fetching today's Superbet offers...")
+def superbet_offers() -> dict:
+    """Superbet's player props (over and under merged into one row per line) and game odds for the next 36 hours,
+    with ESPN player ids. Falls back to the latest snapshot if Superbet can't be reached."""
+    from daily_snapshot import merge_over_under
+    try:
+        from superbet_fetcher import todays_offers
+        offers = todays_offers()
+        props, game_odds = merge_over_under(pd.DataFrame(offers['props'])), pd.DataFrame(offers['game_odds'])
+    except Exception as e:
+        log.warning("Superbet unavailable, using the last snapshot: %s", e)
+        props, game_odds = _latest_snapshot('superbet_props'), _latest_snapshot('superbet_game_odds')
+    if not props.empty:
+        props = name_resolver().add_ids(props, team_cols=('home', 'away'))
+    return {'props': props, 'game_odds': game_odds}
+
+
 def today_props() -> pd.DataFrame:
-    """Superbet's over/under player props for the next 36 hours, one row per line (over and under merged)."""
-    from superbet_fetcher import all_today_props
-    props = pd.DataFrame(all_today_props())
-    if props.empty:
-        return props
-    keys = ['name', 'name_ESPN', 'home', 'away', 'bet_type', 'line', 'event_id', 'start_time']
-    wide = props.pivot_table(index=keys, columns='over_under', values='odds', aggfunc='first').reset_index()
-    wide.columns.name = None
-    return wide.rename(columns={'Over': 'over_odds', 'Under': 'under_odds'})
+    return superbet_offers()['props']
+
+
+def today_game_odds() -> pd.DataFrame:
+    return superbet_offers()['game_odds']
+
+
+LINEUP_COLUMNS = ['game_date', 'tip_et', 'away', 'home', 'team', 'side', 'lineup_status', 'role', 'pos', 'name',
+                  'rotowire_id', 'play_pct', 'injury', 'player_id_ESPN']
 
 
 @st.cache_data(ttl=1800, show_spinner="Checking RotoWire lineups...")
-def unlikely_to_play() -> pd.DataFrame:
-    """Players RotoWire lists as doubtful/out; empty if the page can't be read."""
+def rotowire_lineups() -> pd.DataFrame:
+    """RotoWire's expected/confirmed lineups for today with ESPN player ids. Falls back to the latest snapshot
+    if the page can't be read; empty if there's none."""
     try:
-        from lineup_fetcher import players_unlikely_to_play
-        df = pd.DataFrame(players_unlikely_to_play())
+        from lineup_fetcher import fetch_lineups
+        df = pd.DataFrame(fetch_lineups())
     except Exception as e:
-        log.warning("RotoWire lineups unavailable: %s", e)
-        return pd.DataFrame(columns=['name', 'team', 'likelihood'])
+        log.warning("RotoWire lineups unavailable, using the last snapshot: %s", e)
+        df = _latest_snapshot('rotowire_lineups')
     if df.empty:
-        return pd.DataFrame(columns=['name', 'team', 'likelihood', 'name_ESPN'])
-    return df.assign(name_ESPN=df['name'].str.replace(' ', '', regex=False))
+        return pd.DataFrame(columns=LINEUP_COLUMNS)
+    return name_resolver().add_ids(df)
+
+
+def unlikely_to_play() -> pd.DataFrame:
+    """Players RotoWire lists under "may not play" with less than a 100% chance."""
+    df = rotowire_lineups()
+    return df[(df['role'] == 'may_not_play') & (df['play_pct'] < 100)]
 
 
 def season_status() -> pd.DataFrame:
