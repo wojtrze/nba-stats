@@ -12,6 +12,7 @@ Tools for NBA player-prop betting analysis. The project:
 |---|---|
 | `espn_scraper/` | Scrapes games and player game logs from ESPN's JSON API into `data/<season>/` (2024/25, 2025/26 and the current 2026/27). Run on demand; only new games are added. |
 | `dashboard/` | Browser dashboard (Streamlit): today's props, games, player deep-dive, lineup lab, teams & matchups, rule backtest, data status. |
+| `dashboard_v2/` | Second version of the dashboard, organised by task: tonight, research, review, data. Uses `dashboard/`'s models and calculations; `dashboard/` is unchanged. |
 | `superbet_fetcher.py` | Fetches Superbet's NBA offers for the next 36 hours: over/under player props (PTS, REB, AST, 3PM, PA, PR, RA, PRA, STL, BLK, TO, FGM/FGA, FTM/FTA, 3PA, PF) and game markets (moneyline, handicap, total, team totals). |
 | `lineup_fetcher.py` | Expected/confirmed starting fives and "may not play" players (with chance to play and injury tag) from RotoWire's lineups page. |
 | `daily_snapshot.py` | Appends today's RotoWire lineups and Superbet offers to `data/<season>/` with a timestamp, plus the dashboard's pick and edge for every line, so the results tracker can settle them later. |
@@ -37,6 +38,7 @@ Tools for NBA player-prop betting analysis. The project:
 | `data/<season>/superbet_props.csv` | Superbet player lines with over and under odds, one row per line and snapshot. |
 | `data/<season>/superbet_game_odds.csv` | Superbet game markets, every line offered, one row per outcome and snapshot. |
 | `data/<season>/my_bets.csv` | Bets saved from the dashboard's bet slip: what, at which odds, the stake, and the model's chance and edge at the time. |
+| `data/run_log.csv` | One row per scraper run started from dashboard v2's Data center: time, job, command, exit code, duration and the last line of its output. |
 
 Snapshots taken with this version also store the model's view of each line: `player_id_ESPN`, `pick`, `model_pct`, `edge_pp`, `edge_low` and `proj_avg` for props, `model_pct` and `edge_pp` for game outcomes. Older rows leave them empty.
 
@@ -110,7 +112,7 @@ To add a new season, add its start year and ESPN calendar dates to `SEASONS` in 
 streamlit run dashboard/app.py
 ```
 
-Opens `http://localhost:8501` with eight pages:
+Opens `http://localhost:8501` with eight pages. Superbet blocks frequent requests, so the dashboard never fetches it on its own: the pages show the latest saved snapshot, or the offers from the last time you pressed **Fetch from Superbet** (on Today's props and Games) if that's newer, leaving out games that already started. Superbet is contacted at most once every 5 minutes; the button and "Take snapshot now" are greyed out until then.
 
 - **Today's props:** every Superbet line for the next 36 hours next to the player's average, hit rate over/under the line (season and last 10) and where the line sits in their results. The RotoWire column shows tonight's role (starter, bench, or injury tag with chance to play; ✔ = confirmed lineup); `adj avg` adds the player's usual change when RotoWire's out teammates miss games, and `proj avg` also scales it by the game (Superbet's implied team total vs the team's usual points) and the matchup (what the opponent allows to the player's position), each damped to half and capped at ±8%. Players RotoWire lists as out are hidden by default.
   - **The edge** is the model's chance minus the break-even chance of the odds (1 / odds). The model's chance averages two estimates, both pulled toward Superbet's margin-free chance as if the market were worth 10 games: the player's hit rate, and the chance from `proj avg` and their usual spread of results. `edge low` is the edge at the low end of a 95% range; 🟢 = even that is positive, 🟡 = positive edge but too little data to be sure.
@@ -127,6 +129,29 @@ Opens `http://localhost:8501` with eight pages:
 Every table marks where each column comes from, with an icon in the header and a matching tint on the column: 💰 orange = Superbet, 📋 blue = RotoWire, 📊 green = calculated from the scraped ESPN stats (including edges that compare those numbers with Superbet's odds). Hover a header for what the number means. The columns that decide a bet (pick, edge, odds) come first after the player, bet and line; the rest are grouped by source. Sources and their colours are defined in `dashboard/glossary.py` (`SOURCES`), so a new data source is one entry there.
 
 The sidebar picks the seasons and game types (preseason, regular, play-in, playoffs) the pages use. Unit tests: `python -m pytest dashboard tests` (the feed parsers are tested against pages saved in `tests/fixtures/`).
+
+### 2b. Dashboard v2
+
+```
+streamlit run dashboard_v2/app.py --server.port 8502
+```
+
+The same data and models as the dashboard above, laid out around the daily workflow. Both can run at the same time (the old one on port 8501). Every page has the same shape: a title with one line on what it answers, one row of filters, key numbers, one main table, and the selected row's details in tabs. The sidebar always shows how fresh the data is: 🟢 / 🟠 / 🔴 for the ESPN stats (stored through yesterday?), Superbet's odds and RotoWire's lineups (fetched or read from a snapshot, and how long ago), with a link to the Data center when something is out of date. The *Scope* button in the header picks the seasons and game types for every page.
+
+- **Tonight**
+  - **Overview:** tonight's games as cards (tip-off in Polish time, Superbet's moneyline, handicap and total, the projected winner and the best-priced bet, each team's RotoWire lineup status and who's out), the 10 best player lines and the 5 best game bets. Pick one to open it on Props or Games.
+  - **Props:** Superbet's player lines priced as on Today's props, with a note on which games are adjusted for RotoWire's lineups. The table shows the 12 columns that decide a bet (*More → Show every column* for the rest). A selected line has four tabs: *Verdict* (reasons for and against, and how the expected number was built: average → teammates out → game and matchup), *Teammates* (the player's row of the with/without matrix as a chart, tonight's out players outlined; works without RotoWire too), *History* (last 20 games vs the line, distribution, splits, record against the opponent) and *Line movement* (every snapshot of the line). A line checker for any player and line is at the bottom.
+  - **Games:** one row per game, then the selected game's markets with the reasons for the best (or the clicked) outcome, and each team's ratings, lineup and absences. Model settings are in a popover.
+- **Research**
+  - **Player history:** form (last 5/10 vs average, minutes), and tabs for the game log (bars vs a line, 5/10-game averages, minutes), the distribution with percentiles, per-season and per-month averages over every stored season, splits, averages against each opponent, with/without one teammate and the full game log.
+  - **Team history:** record and league ranks of the ratings, then the margin of every game, rolling offensive/defensive rating and pace, what the defense allows to guards, forwards and centers, and the roster.
+  - **Lineup lab:** any team, also without an expected lineup. *Lineup from* picks RotoWire's lineup when it lists the team today, otherwise the last game's or the most frequent starters (or your own). The matrix covers the whole rotation, then the estimate for the chosen lineup and absences. *Use every stored season* (on by default) gives the matrix enough games early in the season; earlier seasons only count while both players were on the team.
+- **Review**
+  - **Results:** every snapshotted line, settled against the stored stats. *Lines vs averages* compares each line with the player's average before that game (only earlier games, so nothing you couldn't have known): how often the side toward the average won and its ROI at the opening odds, by how far the line was from the average and by bet type, and how far the results landed from the lines. *Dashboard's picks* and *Game markets* show how the saved picks did (hit rate, ROI, cumulative profit, calibration). *All settled lines* lists them all, with a CSV download.
+- **Data**
+  - **Data center:** a card per source with its status and buttons: *Update 2026/27* (or another season, a date range, one game, a rebuild), *Fetch now* (Superbet, for the pages only), *Save snapshot* (today, or RotoWire's lineups for tomorrow), and *Run both* for the morning routine (stats, then a snapshot). As in the first dashboard, Superbet is contacted only when one of these buttons is pressed, at most once every 5 minutes, and the pages read the newer of the last fetch and the last saved snapshot. RotoWire is fetched when a page needs it and kept for 30 minutes. The output streams into the page while the job runs, and every run is logged to `data/run_log.csv` (*Recent runs*). Tabs below show the stored seasons and snapshot files, names that don't match an ESPN player, and the points-add-up check.
+
+The bet slip and the rule backtest are only in the first dashboard. Unit tests: `python -m pytest dashboard dashboard_v2 tests`.
 
 ### 3. See today's Superbet offers and RotoWire lineups
 
@@ -157,7 +182,7 @@ python daily_snapshot.py              # appends to data/<season>/rotowire_lineup
 python daily_snapshot.py --tomorrow   # RotoWire's lineups for tomorrow
 ```
 
-Each run adds rows with a `fetched_at` time, so running it a few times a day (morning, an hour before tip-off) keeps the changes. If RotoWire or Superbet can't be reached, the dashboard falls back to the latest snapshot. Each run also prices every line with the dashboard's default settings (about 15 seconds); if that fails, the odds are saved without picks.
+Each run adds rows with a `fetched_at` time, so running it a few times a day (morning, an hour before tip-off) keeps the changes. The dashboards read Superbet's offers from the latest snapshot (or an on-demand fetch, see above); if RotoWire can't be reached, they fall back to its latest snapshot. Each run also prices every line with the dashboard's default settings (about 15 seconds); if that fails, the odds are saved without picks.
 
 The results tracker treats a line's first snapshot before tip-off as the bet and its last one as the closing line, so schedule two runs a day. On Windows, run these once in a Command Prompt (not PowerShell: `%CD%` must expand to the repository folder) opened in the repository root:
 

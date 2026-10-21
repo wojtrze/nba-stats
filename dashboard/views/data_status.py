@@ -5,8 +5,9 @@ import sys
 import pandas as pd
 import streamlit as st
 
-from loaders import (games, name_resolver, player_logs, rotowire_lineups, season_label, season_status,
-                     superbet_offers, today_props)
+from loaders import (SUPERBET_COOLDOWN, games, name_resolver, note_superbet_contact, player_logs,
+                     reload_superbet_snapshot, rotowire_lineups, season_label, season_status, snapshot_history,
+                     superbet_wait, today_props)
 from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS
 from espn_scraper.storage import snapshot_file
 from glossary import column_config
@@ -41,12 +42,18 @@ snapshots = pd.DataFrame(rows)
 st.dataframe(snapshots, hide_index=True, width='stretch',
              column_config=column_config(snapshots.columns,
                                          tips={'last': "When the newest snapshot was fetched (UTC)"}))
-if st.button("Take snapshot now", help="Runs daily_snapshot.py: appends today's RotoWire lineups and Superbet offers"):
+wait = superbet_wait()
+if st.button("Take snapshot now", disabled=wait is not None,
+             help=f"Superbet was contacted recently; possible again in {wait.seconds // 60 + 1} min" if wait else
+             "Runs daily_snapshot.py: appends today's RotoWire lineups and Superbet offers. Superbet blocks frequent "
+             f"requests, so this is possible at most once every {SUPERBET_COOLDOWN.seconds // 60} minutes."):
+    note_superbet_contact()
     with st.spinner("Fetching RotoWire and Superbet..."):
         result = subprocess.run([sys.executable, "daily_snapshot.py"], capture_output=True, text=True)
     st.code((result.stdout + result.stderr)[-5000:] or "(no output)")
-    superbet_offers.clear()
+    reload_superbet_snapshot()
     rotowire_lineups.clear()
+    snapshot_history.clear()
 
 unmatched = []
 lineups = rotowire_lineups()

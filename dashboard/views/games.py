@@ -5,7 +5,8 @@ import streamlit as st
 from components import reasons_panel, slip_button
 from espn_scraper import CURRENT_SEASON
 from glossary import column_config, source_legend, tinted
-from loaders import games, player_logs, rotowire_lineups, season_label, snapshot_history, superbet_offers, today_game_odds
+from loaders import (games, player_logs, rotowire_lineups, season_label, snapshot_history, superbet_fetch_controls,
+                     today_game_odds)
 from metrics import absence_impact, game_lines
 from models import GAME_DEFAULTS, GAME_TYPES, game_ratings, price_games
 from reasons import game_reasons
@@ -20,12 +21,8 @@ st.caption("Superbet's game markets for the next 36 hours next to a simple proje
            "defensive rating and pace (this season blended with last season), home court, and how the team "
            "usually does without the players RotoWire lists as out.")
 
-top = st.columns([1, 4])
-if top[0].button("Refresh offers"):
-    superbet_offers.clear()
-    rotowire_lineups.clear()
-    snapshot_history.clear()
-with top[1].expander("Settings"):
+superbet_fetch_controls(key='games')
+with st.expander("Settings"):
     s = st.columns(5)
     prior_games = s[0].number_input("Prior weight (games)", 0, 82, GAME_DEFAULTS['prior_games'],
                                     help="This season counts n / (n + this) against last season's ratings")
@@ -43,7 +40,8 @@ with top[1].expander("Settings"):
 
 odds = today_game_odds()
 if odds.empty:
-    st.info("Superbet has no NBA games in the next 36 hours.")
+    st.info("No Superbet games coming up. Press Fetch from Superbet (or save a snapshot on Data status) to get "
+            "the next 36 hours.")
     st.stop()
 
 model = game_ratings(games(), CURRENT_SEASON, prior_games, regress)

@@ -5,7 +5,7 @@ import streamlit as st
 from components import reasons_panel, slip_button
 from glossary import column_config, source_legend, tinted
 from loaders import (filtered_logs, games as all_games, player_logs, rotowire_lineups, sidebar_filters, snapshot_history,
-                     superbet_offers, today_game_odds, today_props)
+                     superbet_fetch_controls, today_game_odds, today_props)
 from metrics import STATS, absence_adjustments, hit_rates, percentile_band, rotowire_team
 from models import price_props
 from reasons import prop_reasons
@@ -15,11 +15,7 @@ st.title("Today's props")
 seasons, season_types = sidebar_filters()
 logs = filtered_logs(seasons, season_types)
 
-top = st.columns([1, 4])
-if top[0].button("Refresh offers"):
-    superbet_offers.clear()
-    rotowire_lineups.clear()
-    snapshot_history.clear()
+superbet_fetch_controls(key='props')
 props = today_props()
 lineups = rotowire_lineups()
 by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
@@ -89,8 +85,9 @@ def prop_panel(row):
 
 
 if props.empty:
-    st.info("Superbet has no NBA player props right now. During preseason it only offers game markets; "
-            "props usually appear from the first regular-season games. Use the line checker below meanwhile.")
+    st.info("No Superbet player props for upcoming games. Press Fetch from Superbet (or save a snapshot on Data "
+            "status) to get today's. During preseason Superbet only offers game markets; props usually appear from "
+            "the first regular-season games. Use the line checker below meanwhile.")
 else:
     table = priced(tuple(seasons), tuple(season_types), props, lineups, today_game_odds())
 
