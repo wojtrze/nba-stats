@@ -141,3 +141,26 @@ def test_lines_summary():
     s = lines_summary(_priced()).set_index('bet_type')
     assert s.loc['PTS', 'lines'] == 3 and s.loc['PTS', 'over %'] == 50     # the 10.0 push is left out
     assert s.loc['PTS', 'actual − line'] == pytest.approx((4.5 - 2.5 + 0) / 3)
+
+
+# --- calibration fit ---
+
+def test_fit_recovers_known_coefficients():
+    from backtest.calibrate import COEFS, apply, features, fit
+    rng = np.random.default_rng(0)
+    n = 40000
+    market, model = rng.uniform(0.35, 0.65, n), rng.uniform(0.2, 0.8, n)
+    over = rng.integers(0, 2, n).astype(bool)
+    truth = {'a': 1.0, 'b': 0.25, 'c': -0.15, 'd': 0.02}
+    won = (rng.uniform(size=n) < apply(truth, market, model, over)).astype(float)
+    beta = fit(features(market, model, over), won)
+    assert dict(zip(COEFS, beta)) == {k: pytest.approx(v, abs=0.05) for k, v in truth.items()}
+
+
+def test_vectorised_apply_matches_metrics_calibrate():
+    from backtest.calibrate import apply
+    from metrics import calibrate
+    coef = {'a': 0.9, 'b': 0.3, 'c': -0.1, 'd': 0.05}
+    market, model, over = np.array([0.4, 0.55, np.nan]), np.array([0.6, 0.3, 0.7]), np.array([True, False, True])
+    expected = [calibrate(p, m, 'Over' if o else 'Under', coef) for p, m, o in zip(model, market, over)]
+    assert apply(coef, market, model, over) == pytest.approx(expected)

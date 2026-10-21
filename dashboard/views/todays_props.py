@@ -45,8 +45,12 @@ def rotowire_entry(player_id) -> dict:
     return listed.iloc[0].to_dict() if len(listed) else {}
 
 
-PROP_TIPS = {'model %': "Chance the pick wins: the hit rate pulled toward the market's margin-free chance (worth "
-                        "10 games), averaged with the chance from proj avg and the player's usual spread of results"}
+PROP_TIPS = {'model %': "Chance the pick wins, calibrated on 2022/23: the model's own chance (raw model %) mapped "
+                        "to how often such picks actually won against Unibet's lines. The model alone was "
+                        "overconfident, so this sits close to the market's margin-free chance.",
+             'raw model %': "The model's own chance before calibration: the hit rate pulled toward the market's "
+                            "margin-free chance (worth 10 games), averaged with the chance from proj avg and the "
+                            "player's usual spread of results"}
 
 
 def prop_panel(row):
@@ -133,7 +137,8 @@ else:
     st.caption(f"{len(shown)} of {len(table)} lines, {sorted_by}. ⏰ = tip-off within the hour; lines leave the "
                f"list at tip-off. Hover a column header for what it means. "
                f"🟢 = even the low end of the model's range beats the price; 🟡 = positive edge, but too little data "
-               f"to be sure. Click a row for the reasons to bet or pass.")
+               f"to be sure. Click a row for the reasons to bet or pass. model % is calibrated on 2022/23, where the "
+               f"model's own opinion proved worth little beyond the price, so few lines show an edge.")
     st.caption(source_legend())
     # who/what -> the decision -> tonight's lineup -> the player's numbers -> both sides' odds
     columns = ['name', 'game', 'tip-off', 'bet_type', 'line',
@@ -141,8 +146,9 @@ else:
                'RotoWire', 'line move', 'open line',
                'proj avg', 'adj avg', 'avg', 'avg L5', 'matchup', 'spread', 'game total', 'percentile', 'in band',
                'over %', 'under %', 'over % L10', 'under % L10', 'games', 'min L5',
-               'over_odds', 'under_odds']
-    formats = {'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'over %': '%.0f',
+               'raw model %', 'over_odds', 'under_odds']
+    formats = {'raw model %': '%.0f',
+               'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'over %': '%.0f',
                'under %': '%.0f', 'over % L10': '%.0f', 'under % L10': '%.0f', 'percentile': '%.0f',
                'over_odds': '%.2f', 'under_odds': '%.2f', 'pick odds': '%.2f', 'edge pp': '%+.1f', 'edge low': '%+.1f',
                'model %': '%.0f', 'break-even %': '%.0f', 'market %': '%.0f', 'games': '%d', 'proj avg': '%.1f',

@@ -16,7 +16,8 @@ from metrics import grouped_rates
 from tracking import calibration
 
 BACKTEST_FILE = os.path.join('data', 'backtest', '2022_lines.csv')
-VIEWS = {'summary': "Summary", 'tester': "Strategy tester", 'player': "Player"}
+VIEWS = {'summary': "Summary", 'tester': "Strategy tester", 'player': "Player", 'calibration': "Calibration"}
+CALIBRATION_REPORT = os.path.join('data', 'backtest', '2022_calibration.md')
 BET_LABELS = {'model': "Model pick", 'average': "Toward the season average", 'under': "Always Under",
               'over': "Always Over"}
 RATE_FORMATS = {'bets': '%d', 'hit %': '%.1f', 'ci low %': '%.1f', 'ci high %': '%.1f', 'ROI %': '%+.1f',
@@ -242,8 +243,24 @@ def render():
              "RotoWire's value)") or 'none'
     view = top[1].segmented_control("View", list(VIEWS), default='summary', format_func=VIEWS.get,
                                     key='bt_view') or 'summary'
+    calibrated = 'raw model %' in bt and (bt['raw model %'] - bt['model %']).abs().max() > 0.5
     st.caption("Unibet's 2022/23 player lines, each priced by today's props model from the games before its date "
                "only. No historical game odds, so the implied-team-total factor is off. Details: "
-               "data/backtest/2022_summary.md.")
+               "data/backtest/2022_summary.md."
+               + (" model %, edges and signals are calibrated with coefficients fitted on this same season, so these "
+                  "numbers are in-sample: the honest check on unseen games is under Calibration." if calibrated
+                  else ""))
+    if view == 'calibration':
+        calibration_view()
+        return
     every = bt[bt['variant'] == variant]
     {'summary': summary_view, 'tester': tester_view, 'player': player_view}[view](every)
+
+
+def calibration_view():
+    """The report of python -m backtest.calibrate: fitted on Nov–Jan, scored on Feb–May."""
+    if not os.path.exists(CALIBRATION_REPORT):
+        st.info("No calibration yet. Run `python -m backtest.calibrate` after the backtest.")
+        return
+    with open(CALIBRATION_REPORT, encoding='utf-8') as f:
+        st.markdown(f.read().split('\n', 1)[1])   # without the report's own title

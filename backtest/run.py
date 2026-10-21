@@ -39,7 +39,8 @@ LINEUP_COLUMNS = ['game_date', 'tip_et', 'away', 'home', 'team', 'side', 'lineup
 KEEP = ['game_date', 'name', 'name_ESPN', 'player_id_ESPN', 'team', 'home', 'away', 'bet_type', 'line', 'main',
         'over_odds', 'under_odds', 'games', 'avg', 'avg L5', 'lineup adj', 'adj avg', 'matchup', 'proj avg',
         'over % L10', 'under % L10', 'best side', 'model %', 'market %', 'break-even %', 'edge pp', 'edge low',
-        'pick odds', 'signal']
+        'pick odds', 'signal', 'raw model %', 'raw over %', 'raw under %', 'raw over low %', 'raw under low %',
+        'market over %']
 
 
 def known_absences(logs: pd.DataFrame, day: pd.Timestamp, teams) -> pd.DataFrame:
@@ -143,7 +144,10 @@ def summary(results: Dict[str, pd.DataFrame], reports: List[Dict]) -> str:
     parts = ["# 2022/23 backtest of the props model", "",
              f"Unibet's 2022/23 player lines, each priced by `models.price_props` from the games before its date "
              f"only. Main lines (the most balanced price per player, stat and game) of players with {MIN_GAMES}+ "
-             f"games. Pushes are left out; ROI is per unit at the line's odds; ci = 95% Wilson interval.", ""]
+             f"games. Pushes are left out; ROI is per unit at the line's odds; ci = 95% Wilson interval.",
+             "", "model %, edges and signals are calibrated (data/backtest/calibration.json) when the calibration "
+                 "exists; it's fitted on this same season, so these numbers are then in-sample. The honest check on "
+                 "games the fit never saw is data/backtest/2022_calibration.md.", ""]
     for report in reports:
         parts += ["- " + ", ".join(f"{k}: {v}" for k, v in report.items())]
     for variant, table in results.items():

@@ -23,20 +23,25 @@ table_all = priced_props(seasons, season_types)
 
 DEFAULT_TYPES = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP']
 SIGNALS = {'all': "All", 'positive': "🟢🟡 Edge", 'sure': "🟢 Holds"}
-FORMATS = {'line': '%g', 'edge pp': '%+.1f', 'edge low': '%+.1f', 'pick odds': '%.2f', 'model %': '%.0f',
+FORMATS = {'raw model %': '%.0f',
+           'line': '%g', 'edge pp': '%+.1f', 'edge low': '%+.1f', 'pick odds': '%.2f', 'model %': '%.0f',
            'proj avg': '%.1f', 'pick % L10': '%.0f', 'pick %': '%.0f', 'break-even %': '%.0f', 'market %': '%.0f',
            'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'percentile': '%.0f',
            'over_odds': '%.2f', 'under_odds': '%.2f', 'games': '%d', 'line move': '%+g', 'open line': '%g',
            'spread': '%+g', 'game total': '%g'}
 TIPS = {'pick % L10': "How often the picked side won in the player's last 10 games",
         'pick %': "How often the picked side won in all the games shown",
-        'model %': "Chance the pick wins: the hit rate pulled toward the market's margin-free chance (worth 10 "
-                   "games), averaged with the chance from proj avg and the player's usual spread of results"}
-MAIN_COLUMNS = ['name', 'game', 'tip-off', 'bet_type', 'line', 'best side', 'signal', 'edge pp', 'pick odds', 'model %',
-                'proj avg', 'pick % L10', 'RotoWire']
+        'model %': "Chance the pick wins, calibrated on 2022/23: the model's own chance (raw model %) mapped to how "
+                   "often such picks actually won against Unibet's lines. The model alone was "
+                   "overconfident, so this sits close to the market's margin-free chance.",
+        'raw model %': "The model's own chance before calibration: the hit rate pulled toward the market's "
+                       "margin-free chance (worth 10 games), averaged with the chance from proj avg and the player's "
+                       "usual spread of results"}
+MAIN_COLUMNS = ['name', 'game', 'tip-off', 'bet_type', 'line', 'best side', 'signal', 'edge pp', 'pick odds',
+                'model %', 'proj avg', 'pick % L10', 'RotoWire']
 MORE_COLUMNS = ['edge low', 'break-even %', 'market %', 'line move', 'open line', 'adj avg', 'avg', 'avg L5',
-                'matchup', 'spread', 'game total', 'percentile', 'pick %', 'games', 'min L5', 'over_odds',
-                'under_odds']
+                'matchup', 'spread', 'game total', 'percentile', 'pick %', 'games', 'min L5', 'raw model %',
+                'over_odds', 'under_odds']
 
 
 def lineup_banner():
@@ -284,7 +289,8 @@ picked = table(shown, columns, FORMATS, TIPS, key='props_table', select=True, he
                legend=['superbet', 'rotowire', 'stats'])
 st.caption(("Earliest tip-off first; within a game greens first, then by edge" if sort == 'tip-off' else
             "Greens first, then by edge") + ". ⏰ = tip-off within the hour; lines leave the list at tip-off. Hover "
-           "a header for what it means; pick a row for the details.")
+           "a header for what it means; pick a row for the details. model % is calibrated on 2022/23, where the "
+           "model's own opinion proved worth little beyond the price, so few lines show an edge.")
 
 # a line sent from the Overview opens here until a row is picked
 focus = st.session_state.get('props_focus')

@@ -1,16 +1,21 @@
 """The dashboard's two pricing models as plain functions (no Streamlit), shared by the Today's props and Games
 pages, daily_snapshot.py (which saves the edges it would have shown) and the results tracker."""
+import json
+import os
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
 from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS
-from metrics import (POSITION_GROUPS, STATS, absence_adjustments, absence_impact, add_combined_stats,
-                     allowed_by_position, blended_ratings, context_factor, game_lines, game_projection, hit_rates,
-                     line_percentile, market_edges, matchup, no_vig, percentile_band, prop_probability, rotowire_team,
-                     team_ratings)
+from metrics import (IDENTITY_CALIBRATION, POSITION_GROUPS, STATS, absence_adjustments, absence_impact,
+                     add_combined_stats, allowed_by_position, blended_ratings, calibrate, context_factor, game_lines,
+                     game_projection, hit_rates, line_percentile, market_edges, matchup, no_vig, percentile_band,
+                     prop_probability, rotowire_team, team_ratings)
 from superbet_fetcher import main_lines
+
+# fitted by backtest/calibrate.py on Unibet's 2022/23 lines; without it the model's chances are used as they are
+CALIBRATION_FILE = os.path.join('data', 'backtest', 'calibration.json')
 
 # the sidebar's defaults: the current season, every game type but All-Star games
 DEFAULT_SEASON_TYPES = ['pre', 'regular', 'playin', 'post']
@@ -50,8 +55,17 @@ def rotowire_status(lineups: pd.DataFrame, player_id, team) -> str:
     return f"{p['injury'] or 'may not play'} {p['play_pct']:.0f}%"
 
 
+def load_calibration(path: str = CALIBRATION_FILE) -> Dict:
+    """The coefficients backtest/calibrate.py fitted (metrics.calibrate), or the identity when there are none."""
+    if not os.path.exists(path):
+        return IDENTITY_CALIBRATION
+    with open(path, encoding='utf-8') as f:
+        return json.load(f)['coefficients']
+
+
 def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, game_odds: pd.DataFrame,
-                games: pd.DataFrame, adjust: Optional[Callable] = None) -> pd.DataFrame:
+                games: pd.DataFrame, adjust: Optional[Callable] = None,
+                calibration: Optional[Dict] = None) -> pd.DataFrame:
     """Every Superbet line (props with player_id_ESPN) compared with the player's game logs and priced.
 
     logs: prepare_logs output in the seasons and game types to use; games: games.csv rows of the same.
@@ -59,6 +73,9 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     Adds, per line: the player's numbers (avg, hit rates, percentile...), RotoWire status, lineup adj and adj avg,
     the game context (opponent, spread, implied total, matchup) and proj avg, and the pick: best side, model %,
     market % (margin-free), break-even %, edge pp, edge low, pick odds and signal.
+    model %, edge pp and edge low are calibrated (metrics.calibrate with `calibration`, default: the fitted
+    coefficients in CALIBRATION_FILE); raw model %, raw over/under % (and their low ends) and market over % are
+    the model's own chances before that, which backtest/calibrate.py fits on.
     """
     adjust = adjust or absence_adjustments
     by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
@@ -128,22 +145,27 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     table = table.join(pd.DataFrame(context, index=table.index))
     table['proj avg'] = table['adj avg'] * table['pace factor'] * table['matchup factor']
 
+    coef = load_calibration() if calibration is None else calibration
+
     def price(row) -> pd.Series:
         games_ = by_player.get(row['player_id'], empty)
         values = games_[row['bet_type']] if len(games_) else pd.Series(dtype=float)
         market = dict(zip(['Over', 'Under'], no_vig(row['over_odds'], row['under_odds'])))
-        best = None
+        best, raw = None, {'market over %': 100 * market['Over']}
         for side, odds in (('Over', row['over_odds']), ('Under', row['under_odds'])):
             if pd.isna(odds):
                 continue
             chance = prop_probability(values, row['line'], side, market[side], mean=row['proj avg'])
-            cand = {'best side': side, 'model %': 100 * chance['p'], 'market %': 100 * market[side],
-                    'break-even %': 100 / odds, 'edge pp': 100 * chance['p'] - 100 / odds,
-                    'edge low': 100 * chance['low'] - 100 / odds, 'pick odds': odds}
+            raw.update({f'raw {side.lower()} %': 100 * chance['p'], f'raw {side.lower()} low %': 100 * chance['low']})
+            p, low = (calibrate(chance[k], market[side], side, coef) for k in ('p', 'low'))
+            cand = {'best side': side, 'model %': 100 * p, 'raw model %': 100 * chance['p'],
+                    'market %': 100 * market[side], 'break-even %': 100 / odds, 'edge pp': 100 * p - 100 / odds,
+                    'edge low': 100 * low - 100 / odds, 'pick odds': odds}
             if best is None or cand['edge pp'] > best['edge pp']:
                 best = cand
-        return pd.Series(best or dict.fromkeys(['best side', 'model %', 'market %', 'break-even %', 'edge pp',
-                                                'edge low', 'pick odds'], np.nan))
+        best = best or dict.fromkeys(['best side', 'model %', 'raw model %', 'market %', 'break-even %', 'edge pp',
+                                      'edge low', 'pick odds'], np.nan)
+        return pd.Series(best | raw)
 
     table = pd.concat([table, table.apply(price, axis=1)], axis=1)
     table['in band'] = (table['p30'] <= table['line']) & (table['line'] <= table['p70'])

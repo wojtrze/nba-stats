@@ -102,6 +102,29 @@ def prop_probability(values: pd.Series, line: float, side: str, market: float, m
     return {'p': p, 'low': max(p - half, 0.0), 'high': min(p + half, 1.0), 'hit': shrunk, 'dist': dist}
 
 
+# --- calibration: the model's chance mapped to how often such picks actually won (backtest/calibrate.py) ---
+
+# a = weight of the market's chance, b = weight of the model's opinion beyond it, c = Over/Under bias, d = offset
+IDENTITY_CALIBRATION = {'a': 1.0, 'b': 1.0, 'c': 0.0, 'd': 0.0}
+
+
+def logit(p: float) -> float:
+    p = min(max(p, 1e-4), 1 - 1e-4)
+    return math.log(p / (1 - p))
+
+
+def calibrate(p: float, market: float, side: str, coef: Optional[Dict] = None) -> float:
+    """The chance that `side` wins, corrected for how the model's chances have turned out:
+    sigmoid(a·logit(market) + b·(logit(p) − logit(market)) + c·[Over] + d). market: the side's margin-free chance
+    (0.5 when unknown). The identity coefficients return p itself (up to clipping at 0.01%)."""
+    if pd.isna(p):
+        return p
+    coef = coef or IDENTITY_CALIBRATION
+    m = 0.5 if pd.isna(market) else market
+    z = coef['a'] * logit(m) + coef['b'] * (logit(p) - logit(m)) + coef['c'] * (side == 'Over') + coef['d']
+    return 1 / (1 + math.exp(-z))
+
+
 def splits(games: pd.DataFrame, stat: str, line: Optional[float] = None) -> pd.DataFrame:
     """Average (and hit rate over the line) by home/away, starter/bench, rest and minutes."""
     g = games.assign(
