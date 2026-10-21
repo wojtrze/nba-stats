@@ -1,0 +1,3 @@
+started_at,job,command,exit_code,seconds,summary
+2026-10-21T11:11:47Z,stats,python -m espn_scraper,0,2.5,"2026/27: added 0 games, 0 player lines. 11 games not final yet."
+2026-10-21T11:11:53Z,snapshot,python daily_snapshot.py,0,28.2,superbet_game_odds: 1698 rows
