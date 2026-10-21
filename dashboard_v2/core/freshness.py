@@ -54,8 +54,8 @@ def live_status(live: Optional[bool], fetched_at: Optional[datetime], rows: Opti
     age = now - fetched_at
     level = 'ok' if age <= MAX_LIVE_AGE else 'stale'
     if live:
-        return _status(level, f"fetched {age_text(age)}",
-                       f"{rows} {what}, fetched {fetched_at.astimezone(PL):%a %H:%M}")
+        count = f"{rows} {what}, " if rows is not None else ""
+        return _status(level, f"fetched {age_text(age)}", f"{count}fetched {fetched_at.astimezone(PL):%a %H:%M}")
     count = f"{rows} {what} from the snapshot" if rows is not None else "Snapshot"
     return _status(level, f"snapshot, {age_text(age)}",
                    f"{count} saved {fetched_at.astimezone(PL):%a %H:%M}"
@@ -80,6 +80,6 @@ def overview(live: Dict[str, Dict], now: Optional[datetime] = None) -> Dict[str,
         seen = live.get(key)
         if seen:
             out[key] = live_status(seen['live'], seen['fetched_at'], seen['rows'], now, what)
-        else:
-            out[key] = live_status(None, last_snapshot(snapshot), None, now, what)
+        else:   # not read in this session yet: the newest saved fetch (every Superbet fetch is saved)
+            out[key] = live_status(True if key == 'superbet' else None, last_snapshot(snapshot), None, now, what)
     return out

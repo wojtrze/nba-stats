@@ -1,9 +1,12 @@
+from datetime import datetime, timezone
+
 import pandas as pd
 import streamlit as st
 
-from core.data import game_odds, lineups as rotowire_lineups, priced_games, priced_props
-from core.ui import PAGES, go_to_data, kpis, page_header, pl_time, stop, table
+from core.data import game_odds, lineups as rotowire_lineups, priced_games, priced_props, superbet
+from core.ui import PAGES, kpis, no_offers, page_header, pl_time, stop, table
 from espn_scraper import NBA_TEAM_NAMES
+from schedule import minutes_to, starts_soon
 from superbet_fetcher import main_lines
 from core.labels import MARKET_LABELS, describe_outcome, winner
 
@@ -13,8 +16,7 @@ seasons, season_types = page_header(
 
 odds = game_odds()
 if odds.empty:
-    go_to_data("**No games on Superbet in the next 36 hours.** If there should be, fetch the offers again in the "
-               "Data center.")
+    no_offers(superbet()['status'])
     stop()
 
 lineups = rotowire_lineups()
@@ -47,7 +49,9 @@ def lineup_line(team: str) -> str:
     return f"**{team.upper()}** {badge}" + (f" · out/doubtful: {out}" if out else "")
 
 
-events = odds.drop_duplicates('event_id').sort_values('start_time')
+# earliest tip-off first
+events = odds.drop_duplicates('event_id').sort_values('start_time', key=lambda s: pd.to_datetime(s, utc=True))
+now = datetime.now(timezone.utc)
 for start in range(0, len(events), 3):
     cols = st.columns(3)
     for col, (_, e) in zip(cols, events.iloc[start:start + 3].iterrows()):
@@ -57,6 +61,8 @@ for start in range(0, len(events), 3):
         total = m[m['market'] == 'TOTAL']['line']
         with col.container(border=True):
             st.markdown(f"#### {e['away'].upper()} @ {e['home'].upper()}")
+            if starts_soon(e['start_time'], now):
+                st.markdown(f":orange-badge[⏰ tip-off in {max(1, round(minutes_to(e['start_time'], now)))} min]")
             st.caption(f"{pl_time(e['start_time'])} · {NBA_TEAM_NAMES.get(e['away'], '')} at "
                        f"{NBA_TEAM_NAMES.get(e['home'], '')}")
             odds_text = " · ".join(filter(None, [

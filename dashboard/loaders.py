@@ -12,6 +12,7 @@ from espn_scraper.storage import checked_through, load_games, load_player_gamelo
 from name_resolver import NameResolver
 
 from models import DEFAULT_SEASON_TYPES, prepare_logs
+from schedule import offers_status, upcoming
 
 log = logging.getLogger(__name__)
 
@@ -60,8 +61,9 @@ def snapshot_history(name: str) -> pd.DataFrame:
 
 
 # --- Superbet, on demand only ---
-# Superbet blocks frequent requests, so the pages never fetch it themselves: they read the newer of the last
-# on-demand fetch (fetch_superbet, behind a "Fetch from Superbet" button) and the latest saved snapshot.
+# Superbet blocks frequent requests, so the pages never fetch it themselves. A fetch happens only when asked for
+# (fetch_superbet, behind a "Fetch from Superbet" button, or a snapshot run) and is always saved to the snapshot
+# files, so the pages read one source, the newest snapshot, and a restart shows exactly what was fetched.
 
 # the shortest gap between two requests to Superbet (fetches and snapshot runs)
 SUPERBET_COOLDOWN = timedelta(minutes=5)
@@ -71,8 +73,8 @@ _MODEL_COLUMNS = ['player_id_ESPN', 'pick', 'model_pct', 'edge_pp', 'edge_low', 
 
 @st.cache_resource(show_spinner=False)
 def _superbet_store() -> Dict:
-    """The last on-demand fetch ('offers'), the last request to Superbet ('tried_at') and its error, shared by
-    every browser tab so two tabs can't double the requests."""
+    """The last request to Superbet ('tried_at') and the last fetch's error, shared by every browser tab so two
+    tabs can't double the requests."""
     return {}
 
 
@@ -81,10 +83,10 @@ def _snapshot_mtime() -> float:
     return os.path.getmtime(path) if os.path.exists(path) else 0.0
 
 
-@st.cache_data(show_spinner="Reading the latest Superbet snapshot...")
+@st.cache_data(show_spinner="Reading the latest Superbet fetch...")
 def _superbet_snapshot(mtime: float) -> Dict:
-    """The latest snapshot's lines (with ESPN ids) and game odds; mtime is the file's, so a new snapshot is
-    read again."""
+    """Every line and game odd of the newest fetch (props with ESPN ids) and when it was fetched; mtime is the
+    file's, so a new fetch is read again."""
     path = snapshot_file(CURRENT_SEASON, 'superbet_props')
     fetched = pd.read_csv(path, usecols=['fetched_at'])['fetched_at'] if os.path.exists(path) else pd.Series()
     props = _latest_snapshot('superbet_props').drop(columns=_MODEL_COLUMNS, errors='ignore')
@@ -94,23 +96,15 @@ def _superbet_snapshot(mtime: float) -> Dict:
             'fetched_at': pd.to_datetime(fetched.max(), utc=True).to_pydatetime() if len(fetched) else None}
 
 
-def _upcoming(df: pd.DataFrame) -> pd.DataFrame:
-    """Rows of games that haven't started: an older snapshot also holds games that were already played."""
-    if df.empty:
-        return df
-    return df[pd.to_datetime(df['start_time'], utc=True) > datetime.now(timezone.utc)].reset_index(drop=True)
-
-
 def superbet_offers() -> dict:
-    """Superbet's player props (over and under merged into one row per line, with ESPN player ids) and game odds
-    of the games that haven't started, from the last on-demand fetch or the latest snapshot, whichever is newer.
-    Never contacts Superbet. 'live' = from an on-demand fetch; 'fetched_at' = when (None without any data)."""
-    fetched = _superbet_store().get('offers')
+    """The newest Superbet fetch, never contacting Superbet: 'props' (over and under merged into one row per line,
+    with ESPN player ids) and 'game_odds' of the games that haven't tipped off, earliest first; 'fetched_at';
+    'status' (schedule.offers_status: available / all_started / none_saved, the nights, games and lines)."""
     snapshot = _superbet_snapshot(_snapshot_mtime())
-    live = fetched is not None and (snapshot['fetched_at'] is None or fetched['fetched_at'] >= snapshot['fetched_at'])
-    source = fetched if live else snapshot
-    return {'props': _upcoming(source['props']), 'game_odds': _upcoming(source['game_odds']), 'live': live,
-            'fetched_at': source['fetched_at']}
+    now = datetime.now(timezone.utc)
+    return {'props': upcoming(snapshot['props'], now), 'game_odds': upcoming(snapshot['game_odds'], now),
+            'fetched_at': snapshot['fetched_at'],
+            'status': offers_status(snapshot['props'], snapshot['game_odds'], snapshot['fetched_at'], now)}
 
 
 def superbet_wait() -> Optional[timedelta]:
@@ -131,9 +125,10 @@ def note_superbet_contact():
 
 
 def fetch_superbet() -> Optional[str]:
-    """Fetch Superbet's offers now, unless it was contacted within SUPERBET_COOLDOWN. Returns the error, or None
-    when it worked. A failed fetch keeps the previous offers."""
-    from daily_snapshot import merge_over_under
+    """Fetch Superbet's offers now, unless it was contacted within SUPERBET_COOLDOWN, and save them to the
+    snapshot files with the dashboard's pick for every line (daily_snapshot.save_superbet). Returns the error, or
+    None when it worked. A failed fetch saves nothing; the pages keep the previous fetch."""
+    from daily_snapshot import save_superbet
     from superbet_fetcher import todays_offers
     if superbet_wait():
         return f"Superbet was contacted less than {SUPERBET_COOLDOWN.seconds // 60} minutes ago"
@@ -145,24 +140,28 @@ def fetch_superbet() -> Optional[str]:
         log.warning("Superbet fetch failed: %s", e)
         store['error'] = str(e)
         return store['error']
-    props = merge_over_under(pd.DataFrame(offers['props']))
-    if not props.empty:
-        props = name_resolver().add_ids(props, team_cols=('home', 'away'))
-    store.update(offers={'props': props, 'game_odds': pd.DataFrame(offers['game_odds']),
-                         'fetched_at': datetime.now(timezone.utc)}, error=None)
+    try:
+        save_superbet(offers, rotowire_lineups(), datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+    except Exception as e:
+        log.error("Superbet's offers were fetched but couldn't be saved: %s", e)
+        store['error'] = f"fetched, but couldn't be saved: {e}"
+        return store['error']
+    store['error'] = None
+    reload_superbet_snapshot()
+    snapshot_history.clear()   # line movement and the results read every fetch
     return None
 
 
 def reload_superbet_snapshot():
-    """Read the snapshot file again (a new snapshot is picked up by its mtime anyway)."""
+    """Read the snapshot file again (a new fetch is picked up by its mtime anyway)."""
     _superbet_snapshot.clear()
 
 
 def superbet_fetch_controls(where=st, key: str = 'superbet'):
-    """A "Fetch from Superbet" button, off during the cooldown, and where the offers shown come from. The fetch
+    """A "Fetch from Superbet" button, off during the cooldown, and when the offers shown were fetched. The fetch
     runs in the click's callback, before the page draws, so the page already shows the new offers."""
     def fetch():
-        with st.spinner("Fetching today's Superbet offers..."):
+        with st.spinner("Fetching and saving today's Superbet offers..."):
             fetch_superbet()
 
     offers, wait = superbet_offers(), superbet_wait()
@@ -170,11 +169,10 @@ def superbet_fetch_controls(where=st, key: str = 'superbet'):
     b.button("Fetch from Superbet", key=f'fetch_{key}', disabled=wait is not None, on_click=fetch,
              help=f"Possible again in {wait.seconds // 60 + 1} min" if wait else
              "Superbet blocks frequent requests, so it's only fetched when you press this (at most once every "
-             f"{SUPERBET_COOLDOWN.seconds // 60} minutes)")
+             f"{SUPERBET_COOLDOWN.seconds // 60} minutes). Every fetch is saved.")
     when = offers['fetched_at']
-    source = "fetched" if offers['live'] else "from the snapshot saved"
-    c.caption((f"💰 Superbet offers {source} {pd.Timestamp(when).tz_convert('Europe/Warsaw'):%a %H:%M}"
-               if when else "💰 No Superbet offers fetched or saved yet")
+    c.caption((f"💰 Superbet offers fetched {pd.Timestamp(when).tz_convert('Europe/Warsaw'):%a %d %b %H:%M} (saved)"
+               if when else "💰 No Superbet offers fetched yet")
               + (f" · the last fetch failed: {superbet_error()[:100]}" if superbet_error() else ""))
 
 

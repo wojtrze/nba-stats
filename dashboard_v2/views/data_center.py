@@ -48,12 +48,12 @@ if job:
     elif name == 'snapshot':
         jobs.save_snapshot(**options)
     elif name == 'fetch_superbet':
-        with st.spinner("Fetching Superbet's offers..."):
+        with st.spinner("Fetching and saving Superbet's offers..."):
             error = fetch_superbet()
         if error:
-            st.error(f"Superbet couldn't be fetched: {error[:200]}. The pages keep using the previous offers.")
+            st.error(f"Superbet couldn't be fetched: {error[:200]}. The pages keep using the previous fetch.")
         else:
-            st.toast("Fetched Superbet's offers")
+            st.toast("Fetched and saved Superbet's offers")
 
 superbet()   # records which Superbet data the pages read, for the status line
 rw = rotowire()
@@ -112,21 +112,23 @@ with odds_col.container(border=True):
     m[1].metric("Games", game_odds()['event_id'].nunique() if len(game_odds()) else 0, border=True,
                 help="Games with moneyline / handicap / total markets in the next 36 hours")
     st.caption("Superbet blocks frequent requests, so it's only contacted when you press a button here (at most "
-               f"once per {SUPERBET_COOLDOWN.seconds // 60} minutes). The pages use the newer of the last fetch and "
-               "the last saved snapshot.")
+               f"once per {SUPERBET_COOLDOWN.seconds // 60} minutes). Every fetch is saved; the pages use the newest "
+               "one until its games tip off.")
+    if superbet()['status']['state'] == 'all_started':
+        st.info("Every game of the last fetch has tipped off: fetch again for new offers.")
     if superbet_error():
         st.warning(f"The last fetch failed: {superbet_error()[:150]}")
     wait = superbet_wait()
     b = st.columns(2)
-    b[0].button("Fetch now", key='fetch_superbet', width='stretch', disabled=wait is not None, on_click=queue,
-                args=('fetch_superbet',),
+    b[0].button("Fetch & save", key='fetch_superbet', type='primary', width='stretch', disabled=wait is not None,
+                on_click=queue, args=('fetch_superbet',),
                 help=f"Possible again in {wait.seconds // 60 + 1} min" if wait else
-                "Fetch Superbet's offers for the pages, without saving them")
-    b[1].button("Save snapshot", key='snap_superbet', type='primary', width='stretch', disabled=wait is not None,
+                "Fetch Superbet's offers and save them with the dashboard's pick for every line (kept after a "
+                "restart; used for line movement and the Results page)")
+    b[1].button("Snapshot with lineups", key='snap_superbet', width='stretch', disabled=wait is not None,
                 on_click=queue, args=('snapshot',),
                 help=f"Possible again in {wait.seconds // 60 + 1} min" if wait else
-                "python daily_snapshot.py: fetches Superbet and RotoWire once and saves them with the dashboard's "
-                "pick for every line, for line movement and the Results page")
+                "python daily_snapshot.py: the same as Fetch & save, plus RotoWire's lineups saved with it")
     last_run_caption('snapshot')
 
 # --- RotoWire ---

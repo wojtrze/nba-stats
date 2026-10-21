@@ -68,7 +68,9 @@ HELP = STAT_HELP | {
     'line moves': "Superbet's main home handicap and total, first snapshot → now",
 
     # Games
-    'start (PL)': "Tip-off, Polish time", 'proj score': "Projected score, away – home",
+    'start (PL)': "Tip-off, Polish time; ⏰ = within the next hour",
+    'tip-off': "Tip-off, Polish time; ⏰ = within the next hour. Lines leave the page when the game starts.",
+    'proj score': "Projected score, away – home",
     'proj winner': "Team the projection favours and by how many points",
     'proj total': "Projected combined points",
     'best bet': "The market outcome with the biggest model edge in this game",
@@ -160,7 +162,7 @@ SOURCES = {
 # default source of a column; tables override it with `sources` where a name means something else
 COLUMN_SOURCE = {
     'bet_type': 'superbet', 'line': 'superbet', 'over_odds': 'superbet', 'under_odds': 'superbet',
-    'pick odds': 'superbet', 'odds': 'superbet', 'implied %': 'superbet', 'start (PL)': 'superbet',
+    'pick odds': 'superbet', 'odds': 'superbet', 'implied %': 'superbet', 'start (PL)': 'superbet', 'tip-off': 'superbet',
     'market %': 'superbet', 'break-even %': 'superbet', 'edge low': 'stats', 'open line': 'superbet',
     'line move': 'superbet', 'spread': 'superbet', 'game total': 'superbet', 'odds move': 'superbet',
     'line moves': 'superbet', 'proj avg': 'stats', 'matchup': 'stats',

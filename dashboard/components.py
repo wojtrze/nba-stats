@@ -8,6 +8,25 @@ import streamlit as st
 
 from bets import describe
 from reasons import verdict
+from schedule import no_offers_text
+
+
+def night_stored(status: Dict) -> bool:
+    """The stored stats already hold every night of the last fetch, so its lines can be settled."""
+    from loaders import games
+    stored = set(games()['date'].dt.date)
+    return bool(status['nights']) and all(night in stored for night in status['nights'])
+
+
+def no_offers(status: Dict, key: str):
+    """In place of the betting tables when the last Superbet fetch has nothing left to bet: what was fetched, that
+    new offers are fetched by hand (the Fetch from Superbet button above), and a link to that night's results."""
+    with st.container(border=True):
+        st.markdown(no_offers_text(status, night_stored(status)))
+        if status['state'] == 'all_started' and st.button("See how the last night's lines resolved", key=key,
+                                                          icon="📈"):
+            st.session_state['results_night'] = status['nights']
+            st.switch_page("views/results.py")
 
 
 def _add_to_slip(bet: Dict):

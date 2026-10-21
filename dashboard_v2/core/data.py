@@ -2,7 +2,7 @@
 
 The stored stats and Superbet's offers come from the old dashboard's loaders (same caches, same columns).
 Superbet blocks frequent requests, so it's only contacted on demand (loaders.fetch_superbet, the Data center's
-Fetch now and Save snapshot); the pages read the newer of the last such fetch and the latest saved snapshot.
+Fetch now and Save snapshot), and every fetch is saved; the pages read the newest one.
 RotoWire is fetched here rather than through loaders, so the pages can tell live lineups from a fallback
 snapshot; it's kept for 30 minutes.
 """
@@ -33,12 +33,10 @@ def _snapshot_time(name: str):
 
 
 def superbet() -> Dict:
-    """loaders.superbet_offers (the newer of the last on-demand fetch and the latest snapshot; never contacts
-    Superbet), noting for the freshness strip which one the pages read."""
+    """loaders.superbet_offers (the newest saved fetch; never contacts Superbet), noting for the freshness strip
+    when it was fetched."""
     offers = superbet_offers()
-    # live None = read from a snapshot (live False would mean a fetch failed and fell back to one)
-    LAST_FETCH['superbet'] = {'live': True if offers['live'] else None, 'fetched_at': offers['fetched_at'],
-                              'rows': len(offers['props'])}
+    LAST_FETCH['superbet'] = {'live': True, 'fetched_at': offers['fetched_at'], 'rows': len(offers['props'])}
     return offers
 
 

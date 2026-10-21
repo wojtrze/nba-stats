@@ -103,15 +103,20 @@ def take_snapshot(date: str = 'today') -> dict:
         log.error("Superbet failed: %s", e)
         counts['superbet_props'] = counts['superbet_game_odds'] = None
         return counts
+    return counts | save_superbet(offers, lineups, fetched_at)
+
+
+def save_superbet(offers: dict, lineups: pd.DataFrame, fetched_at: str) -> dict:
+    """Append one Superbet fetch (superbet_fetcher.todays_offers output) to the snapshot files, each line with the
+    dashboard's pick and edge. The dashboards save every on-demand fetch through this too."""
     props, game_odds = merge_over_under(pd.DataFrame(offers['props'])), pd.DataFrame(offers['game_odds'])
     try:
         props, game_odds = add_model_columns(props, game_odds, lineups)
     except Exception as e:
         # the odds are worth keeping even when the model can't run (e.g. no game logs yet)
         log.error("Pricing failed, saving the odds without picks: %s", e)
-    counts['superbet_props'] = _append('superbet_props', props, fetched_at)
-    counts['superbet_game_odds'] = _append('superbet_game_odds', game_odds, fetched_at)
-    return counts
+    return {'superbet_props': _append('superbet_props', props, fetched_at),
+            'superbet_game_odds': _append('superbet_game_odds', game_odds, fetched_at)}
 
 
 if __name__ == '__main__':

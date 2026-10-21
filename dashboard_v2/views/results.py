@@ -8,6 +8,7 @@ from core.analysis import GAP_LABELS, settle_lines, side_rates
 from core.ui import go_to_data, kpis, page_header, stop, table
 from glossary import column_config, tinted
 from loaders import filtered_logs, games, player_logs, snapshot_history
+from schedule import nights_text
 from tracking import calibration, edge_bucket, results_table, settle_games
 
 seasons, season_types = page_header(
@@ -33,15 +34,21 @@ def settled_games() -> pd.DataFrame:
 
 lines = settled(tuple(seasons), tuple(season_types))
 if lines.empty:
-    go_to_data("**No saved lines yet.** Save snapshots of Superbet's lines before the games (Data center → Save "
-               "snapshot), then update the stats the next morning to settle them.")
+    go_to_data("**No saved lines yet.** Fetch Superbet's lines before the games (Data center → Fetch & save; "
+               "every fetch is saved), then update the stats the next morning to settle them.")
     stop()
 
 # --- filters ---
 f = st.columns([2, 5, 2])
 dates = lines['game_date'].dropna()
 start, end = dates.min().date(), dates.max().date()
-period = f[0].date_input("Game dates", (start, end), min_value=start, max_value=end)
+# opened from "See how the last night's lines resolved": that night, on the list of every line
+night = st.session_state.pop('results_night', None)
+if night:
+    st.session_state['res_dates'] = (max(night[0], start), min(night[-1], end))
+    st.session_state['res_tab'] = "All settled lines"
+st.session_state.setdefault('res_dates', (start, end))
+period = f[0].date_input("Game dates", min_value=start, max_value=end, key='res_dates')
 types = sorted(lines['bet_type'].unique())
 type_filter = f[1].pills("Bet types", types, selection_mode='multi', key='res_types',
                          format_func=lambda t: 'PRA' if t == 'ARP' else t, help="None picked = all")
@@ -70,8 +77,12 @@ kpis([{'label': "Settled lines", 'value': len(done),
        'value': f"{100 * avg_decided['pre avg profit'].mean():+.1f}%" if len(avg_decided) else "–",
        'help': "At the opening odds of that side, 1 unit per line"}])
 
+if night:
+    st.caption(f"Showing the night of {nights_text(night)}: the last Superbet fetch. Change the dates above for "
+               f"every saved night.")
 avg_tab, picks_tab, games_tab, all_tab = st.tabs(
-    ["Lines vs averages", "Dashboard's picks", "Game markets", "All settled lines"])
+    ["Lines vs averages", "Dashboard's picks", "Game markets", "All settled lines"],
+    default=st.session_state.get('res_tab'))
 
 with avg_tab:
     if done.empty:

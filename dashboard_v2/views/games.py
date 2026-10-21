@@ -3,9 +3,9 @@ import pandas as pd
 import streamlit as st
 
 from components import reasons_panel
-from core.data import game_model, lineups as rotowire_lineups, priced_games
+from core.data import game_model, lineups as rotowire_lineups, priced_games, superbet
 from core.labels import MARKET_LABELS, describe_outcome, winner
-from core.ui import PAGES, go_to_data, kpis, page_header, pl_time, stop, table
+from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, stop, table
 from espn_scraper import CURRENT_SEASON
 from loaders import season_label, snapshot_history
 from models import GAME_DEFAULTS
@@ -29,6 +29,9 @@ with st.popover("Model settings"):
                              help="RotoWire players with at most this chance to play are treated as out")
     all_lines = s[1].toggle("Every line", help="Otherwise only Superbet's main line of each market")
 
+if superbet()['status']['state'] != 'available':
+    no_offers(superbet()['status'])
+    stop()
 priced = priced_games(prior_games, regress, home_court, shrink, out_max, all_lines)
 if not priced:
     go_to_data("**Superbet has no NBA games in the next 36 hours**, or none could be priced. Fetch the offers "
@@ -44,6 +47,7 @@ st.caption(f"Ratings: {season_label(CURRENT_SEASON)} ({model['current']} games) 
            f"{season_label(CURRENT_SEASON - 1)} ({model['prior']} games). Superbet's margin is about 2–3 pp per "
            f"side, so small edges are noise.")
 
+priced = sorted(priced, key=lambda g: pd.Timestamp(g['start_time']))   # earliest tip-off first
 rows = []
 for g in priced:
     best = g['edges'].loc[g['edges']['edge pp'].idxmax()]

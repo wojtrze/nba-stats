@@ -1,15 +1,18 @@
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-from components import reasons_panel, slip_button
+from components import no_offers, reasons_panel, slip_button
 from espn_scraper import CURRENT_SEASON
 from glossary import column_config, source_legend, tinted
 from loaders import (games, player_logs, rotowire_lineups, season_label, snapshot_history, superbet_fetch_controls,
-                     today_game_odds)
+                     superbet_offers, today_game_odds)
 from metrics import absence_impact, game_lines
 from models import GAME_DEFAULTS, GAME_TYPES, game_ratings, price_games
 from reasons import game_reasons
+from schedule import tip_label
 from superbet_fetcher import main_lines
 from tracking import game_odds_movement, opening_game_lines
 
@@ -39,6 +42,10 @@ with st.expander("Settings"):
                                                     "line where both sides have the closest odds)")
 
 odds = today_game_odds()
+status = superbet_offers()['status']
+if status['state'] != 'available':
+    no_offers(status, key='games_no_offers')
+    st.stop()
 if odds.empty:
     st.info("No Superbet games coming up. Press Fetch from Superbet (or save a snapshot on Data status) to get "
             "the next 36 hours.")
@@ -90,8 +97,10 @@ def moves(event_id) -> str:
 
 
 summary, details = [], []
-for game in price_games(odds, ratings, lineups, all_games, logs, home_court, shrink, out_max, all_lines,
-                        impact=cached_impact):
+now = datetime.now(timezone.utc)
+priced = price_games(odds, ratings, lineups, all_games, logs, home_court, shrink, out_max, all_lines,
+                     impact=cached_impact)
+for game in sorted(priced, key=lambda g: pd.Timestamp(g['start_time'])):   # earliest tip-off first
     event_id, home, away = game['event_id'], game['home'], game['away']
     projection, absences = game['projection'], game['absences']
     edges = game_odds_movement(history, game['edges'])
@@ -99,7 +108,7 @@ for game in price_games(odds, ratings, lineups, all_games, logs, home_court, shr
     start = pd.to_datetime(game['start_time']).tz_convert('Europe/Warsaw')
     label = f"{away.upper()} @ {home.upper()}"
     # the decision first, then the projection behind it, then where the inputs stand
-    summary.append({'game': label, 'start (PL)': start.strftime('%a %H:%M'),
+    summary.append({'game': label, 'start (PL)': tip_label(game['start_time'], now),
                     'best bet': describe(best), 'best edge pp': best['edge pp'], 'best odds': best['odds'],
                     'proj score': f"{projection['away_pts']:.0f} – {projection['home_pts']:.0f}",
                     'proj winner': winner(projection, home, away), 'proj total': projection['total'],
@@ -120,7 +129,7 @@ st.caption("Hover a column header for what it means; expand a game below for eve
            "about 2–3 pp per side, so small edges are noise.")
 
 for label, start, home, away, projection, edges, absences, event_id, start_time in details:
-    with st.expander(f"{label} · {start.strftime('%a %H:%M')} · projected {away.upper()} {projection['away_pts']:.0f} – "
+    with st.expander(f"{label} · {tip_label(start_time, now)} · projected {away.upper()} {projection['away_pts']:.0f} – "
                      f"{projection['home_pts']:.0f} {home.upper()}"):
         cols = st.columns(2)
         for col, team, side in ((cols[0], away, 'Away'), (cols[1], home, 'Home')):

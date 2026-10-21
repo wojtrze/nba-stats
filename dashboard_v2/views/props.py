@@ -5,9 +5,9 @@ import streamlit as st
 from components import reasons_panel
 from core import charts
 from core.analysis import teammate_impact
-from core.data import lineups as rotowire_lineups, priced_props
+from core.data import lineups as rotowire_lineups, priced_props, superbet
 from core.state import persist, remember
-from core.ui import PAGES, go_to_data, kpis, page_header, pl_time, stop, table
+from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, stop, table
 from glossary import column_config
 from loaders import filtered_logs, player_logs, snapshot_history
 from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits
@@ -32,7 +32,7 @@ TIPS = {'pick % L10': "How often the picked side won in the player's last 10 gam
         'pick %': "How often the picked side won in all the games shown",
         'model %': "Chance the pick wins: the hit rate pulled toward the market's margin-free chance (worth 10 "
                    "games), averaged with the chance from proj avg and the player's usual spread of results"}
-MAIN_COLUMNS = ['name', 'game', 'bet_type', 'line', 'best side', 'signal', 'edge pp', 'pick odds', 'model %',
+MAIN_COLUMNS = ['name', 'game', 'tip-off', 'bet_type', 'line', 'best side', 'signal', 'edge pp', 'pick odds', 'model %',
                 'proj avg', 'pick % L10', 'RotoWire']
 MORE_COLUMNS = ['edge low', 'break-even %', 'market %', 'line move', 'open line', 'adj avg', 'avg', 'avg L5',
                 'matchup', 'spread', 'game total', 'percentile', 'pick %', 'games', 'min L5', 'over_odds',
@@ -206,6 +206,11 @@ def line_checker():
            'delta': "line inside" if p30 <= line <= p70 else "line outside", 'delta_color': 'off'}])
 
 
+if superbet()['status']['state'] != 'available':
+    no_offers(superbet()['status'])
+    with st.expander("Line checker: any player, any line"):
+        line_checker()
+    stop()
 if table_all.empty:
     go_to_data("**Superbet has no player props right now.** In preseason it only offers game markets; props appear "
                "with the regular season. If games are on tonight, fetch the offers again in the Data center. "
@@ -219,10 +224,15 @@ lineup_banner()
 
 # --- filters ---
 for key, default in (('props_games', []), ('props_types', DEFAULT_TYPES), ('props_signal', 'all'),
-                     ('props_hide_out', True), ('props_min_games', 5), ('props_more', False)):
+                     ('props_hide_out', True), ('props_min_games', 5), ('props_more', False),
+                     ('props_sort', 'tip-off')):
     persist(key, default)
 f = st.columns([2, 4, 2, 1], vertical_alignment='bottom')
-game_filter = f[0].multiselect("Games", sorted(table_all['game'].unique()), key='props_games', on_change=remember,
+# tip-off times change their label as the game nears, so they're computed on every run, not cached
+table_all = table_all.assign(**{'tip-off': [pl_time(t) for t in table_all['start_time']],
+                                'tip_at': pd.to_datetime(table_all['start_time'], utc=True)})
+games_by_tip = table_all.sort_values('tip_at').drop_duplicates('game')['game'].tolist()
+game_filter = f[0].multiselect("Games", games_by_tip, key='props_games', on_change=remember,
                                args=('props_games',), placeholder="All games")
 available = sorted(table_all['bet_type'].unique(), key=lambda t: (t not in DEFAULT_TYPES, t))
 st.session_state['props_types'] = [t for t in st.session_state['props_types'] if t in available]
@@ -239,6 +249,9 @@ with f[3].popover("More", width='stretch'):
     min_games = st.number_input("Min games", 0, 100, key='props_min_games', on_change=remember,
                                 args=('props_min_games',), help="Hide players with fewer games in the scope")
     more = st.toggle("Show every column", key='props_more', on_change=remember, args=('props_more',))
+    sort = st.segmented_control("Sort by", ['tip-off', 'edge'], key='props_sort', on_change=remember,
+                                args=('props_sort',), format_func={'tip-off': "Tip-off, then edge",
+                                                                   'edge': "Edge only"}.get) or 'tip-off'
 
 shown = table_all[table_all['games'] >= min_games]
 if game_filter:
@@ -251,7 +264,9 @@ elif signal == 'sure':
     shown = shown[shown['signal'] == '🟢']
 if hide_out:
     shown = shown[~shown['RotoWire'].str.startswith(('Out', 'OFS'))]
-shown = shown.sort_values(['signal', 'edge pp'], ascending=[True, False],
+# earliest game first, greens and the biggest edges first within a game; or edge only
+order = (['tip_at', 'game'] if sort == 'tip-off' else []) + ['signal', 'edge pp']
+shown = shown.sort_values(order, ascending=[True] * (len(order) - 1) + [False],
                           key=lambda c: c.map({'🟢': 0, '🟡': 1, '': 2}) if c.name == 'signal' else c)
 shown = shown.reset_index(drop=True)
 
@@ -267,7 +282,9 @@ kpis([{'label': "Lines shown", 'value': f"{len(shown)} / {len(table_all)}",
 columns = MAIN_COLUMNS + (MORE_COLUMNS if more else [])
 picked = table(shown, columns, FORMATS, TIPS, key='props_table', select=True, height=420,
                legend=['superbet', 'rotowire', 'stats'])
-st.caption("Greens first, then by edge. Hover a header for what it means; pick a row for the details.")
+st.caption(("Earliest tip-off first; within a game greens first, then by edge" if sort == 'tip-off' else
+            "Greens first, then by edge") + ". ⏰ = tip-off within the hour; lines leave the list at tip-off. Hover "
+           "a header for what it means; pick a row for the details.")
 
 # a line sent from the Overview opens here until a row is picked
 focus = st.session_state.get('props_focus')

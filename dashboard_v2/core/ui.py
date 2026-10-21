@@ -1,6 +1,6 @@
 """The building blocks every v2 page is made of, so the pages look and read the same way:
 header (title, purpose, scope) -> filters -> KPIs -> one main table -> details of the selected row."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Sequence
 
 import pandas as pd
@@ -38,6 +38,22 @@ def sidebar_status():
             st.markdown(f"{s['icon']} {SOURCE_NAMES[key]}  \n:gray[{s['label']}]", help=s['detail'])
         if any(s['level'] != 'ok' for s in status.values()) and 'data' in PAGES:
             st.page_link(PAGES['data'], label="Update in the Data center", icon="🔄")
+
+
+def no_offers(status: Dict):
+    """In place of tonight's betting content when the last Superbet fetch has nothing left to bet: what was
+    fetched, a link to fetch again (Data center) and one to that night's results."""
+    from components import night_stored
+    from schedule import no_offers_text
+    with st.container(border=True):
+        st.markdown(no_offers_text(status, night_stored(status)))
+        c = st.columns(2)
+        if 'data' in PAGES:
+            c[0].page_link(PAGES['data'], label="Fetch new offers in the Data center", icon="🔄")
+        if status['state'] == 'all_started' and c[1].button("See how the last night's lines resolved",
+                                                             icon="📈", key='no_offers_results'):
+            st.session_state['results_night'] = status['nights']
+            st.switch_page(PAGES['results'])
 
 
 def stop():
@@ -85,8 +101,9 @@ def verdict_text(word: str, colour: str) -> str:
 
 
 def pl_time(start_time) -> str:
-    """'Wed 01:00': a tip-off time in Polish time."""
-    return pd.to_datetime(start_time).tz_convert(freshness.PL).strftime('%a %H:%M')
+    """'Wed 01:00': a tip-off time in Polish time; '⏰ in 35 min (01:00)' within the hour before it."""
+    from schedule import tip_label
+    return tip_label(start_time, datetime.now(timezone.utc))
 
 
 def now_pl() -> datetime:

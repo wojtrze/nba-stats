@@ -1,14 +1,17 @@
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-from components import reasons_panel, slip_button
+from components import no_offers, reasons_panel, slip_button
 from glossary import column_config, source_legend, tinted
 from loaders import (filtered_logs, games as all_games, player_logs, rotowire_lineups, sidebar_filters, snapshot_history,
-                     superbet_fetch_controls, today_game_odds, today_props)
+                     superbet_fetch_controls, superbet_offers, today_game_odds, today_props)
 from metrics import STATS, absence_adjustments, hit_rates, percentile_band, rotowire_team
 from models import price_props
 from reasons import prop_reasons
+from schedule import tip_label
 from tracking import prop_movement
 
 st.title("Today's props")
@@ -84,15 +87,23 @@ def prop_panel(row):
         st.switch_page("views/player.py")
 
 
-if props.empty:
+status = superbet_offers()['status']
+if status['state'] != 'available':
+    no_offers(status, key='props_no_offers')
+elif props.empty:
     st.info("No Superbet player props for upcoming games. Press Fetch from Superbet (or save a snapshot on Data "
             "status) to get today's. During preseason Superbet only offers game markets; props usually appear from "
             "the first regular-season games. Use the line checker below meanwhile.")
 else:
     table = priced(tuple(seasons), tuple(season_types), props, lineups, today_game_odds())
+    # the tip-off label changes as the game nears, so it's computed on every run, not cached
+    now = datetime.now(timezone.utc)
+    table = table.assign(**{'tip-off': [tip_label(t, now) for t in table['start_time']],
+                            'tip_at': pd.to_datetime(table['start_time'], utc=True)})
 
-    f = st.columns(5)
-    game_filter = f[0].multiselect("Games", sorted(table['game'].unique()))
+    f = st.columns([2, 2, 1, 2, 2, 2])
+    game_filter = f[0].multiselect("Games", table.sort_values('tip_at').drop_duplicates('game')['game'].tolist(),
+                                   help="In tip-off order")
     type_filter = f[1].multiselect("Bet types", sorted(table['bet_type'].unique()),
                                    default=[t for t in ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP']
                                             if t in set(table['bet_type'])],
@@ -103,6 +114,8 @@ else:
     outside = f[3].toggle("Only lines outside the 30–70% band",
                           help="Lines below the player's 30th or above their 70th percentile")
     hide_out = f[4].toggle("Hide players RotoWire lists as out", value=True)
+    sort = f[5].radio("Sort by", ["Tip-off, then edge", "Edge"], horizontal=True,
+                      help="Tip-off: the earliest game first, the biggest edges first within a game")
     shown = table[table['games'] >= min_games]
     if game_filter:
         shown = shown[shown['game'].isin(game_filter)]
@@ -112,14 +125,18 @@ else:
         shown = shown[~shown['in band']]
     if hide_out:
         shown = shown[~shown['RotoWire'].str.startswith(('Out', 'OFS'))]
-    shown = shown.sort_values('edge pp', ascending=False).reset_index(drop=True)
+    order = (['tip_at', 'game'] if sort.startswith("Tip-off") else []) + ['edge pp']
+    shown = shown.sort_values(order, ascending=[True] * (len(order) - 1) + [False]).reset_index(drop=True)
 
-    st.caption(f"{len(shown)} of {len(table)} lines, best edge first. Hover a column header for what it means. "
+    sorted_by = "earliest tip-off first, best edge first within a game" if order[0] == 'tip_at' else \
+        "best edge first"
+    st.caption(f"{len(shown)} of {len(table)} lines, {sorted_by}. ⏰ = tip-off within the hour; lines leave the "
+               f"list at tip-off. Hover a column header for what it means. "
                f"🟢 = even the low end of the model's range beats the price; 🟡 = positive edge, but too little data "
                f"to be sure. Click a row for the reasons to bet or pass.")
     st.caption(source_legend())
     # who/what -> the decision -> tonight's lineup -> the player's numbers -> both sides' odds
-    columns = ['name', 'game', 'bet_type', 'line',
+    columns = ['name', 'game', 'tip-off', 'bet_type', 'line',
                'best side', 'signal', 'edge pp', 'edge low', 'pick odds', 'model %', 'break-even %', 'market %',
                'RotoWire', 'line move', 'open line',
                'proj avg', 'adj avg', 'avg', 'avg L5', 'matchup', 'spread', 'game total', 'percentile', 'in band',
