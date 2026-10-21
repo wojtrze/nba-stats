@@ -12,6 +12,7 @@ Tools for NBA player-prop betting analysis. The project:
 |---|---|
 | `espn_scraper/` | Scrapes games and player game logs from ESPN's JSON API into `data/<season>/` (2024/25, 2025/26 and the current 2026/27). Run on demand; only new games are added. |
 | `dashboard/` | Browser dashboard (Streamlit): today's props, games, player deep-dive, lineup lab, teams & matchups, rule backtest, data status. |
+| `backtest/` | Backtest of the props model on Unibet's 2022/23 lines (`offers_resolved.csv`, `2022-players-logs.csv`). |
 | `dashboard_v2/` | Second version of the dashboard, organised by task: tonight, research, review, data. Uses `dashboard/`'s models and calculations; `dashboard/` is unchanged. |
 | `superbet_fetcher.py` | Fetches Superbet's NBA offers for the next 36 hours: over/under player props (PTS, REB, AST, 3PM, PA, PR, RA, PRA, STL, BLK, TO, FGM/FGA, FTM/FTA, 3PA, PF) and game markets (moneyline, handicap, total, team totals). |
 | `lineup_fetcher.py` | Expected/confirmed starting fives and "may not play" players (with chance to play and injury tag) from RotoWire's lineups page. |
@@ -34,6 +35,7 @@ Tools for NBA player-prop betting analysis. The project:
 | `2022-players-logs.csv` | Player game logs from earlier seasons, same columns. |
 | `offers.csv`, `offers_resolved.csv`, `assessed_bets.csv`, `bets.csv` | Historical bookmaker offers, their results and rule assessments. |
 | `season_ratings/` | Team ratings for seasons 2018–2022. |
+| `data/backtest/2022_lines.csv`, `2022_summary.md` | The props model's backtest on Unibet's 2022/23 lines (`python -m backtest.run`): every line priced and settled, and the summary tables. |
 | `data/<season>/rotowire_lineups.csv` | RotoWire snapshots: one row per listed player (starter or may-not-play) with `fetched_at`. |
 | `data/<season>/superbet_props.csv` | Superbet player lines with over and under odds, one row per line and snapshot. |
 | `data/<season>/superbet_game_odds.csv` | Superbet game markets, every line offered, one row per outcome and snapshot. |
@@ -148,6 +150,7 @@ The same data and models as the dashboard above, laid out around the daily workf
   - **Lineup lab:** any team, also without an expected lineup. *Lineup from* picks RotoWire's lineup when it lists the team today, otherwise the last game's or the most frequent starters (or your own). The matrix covers the whole rotation, then the estimate for the chosen lineup and absences. *Use every stored season* (on by default) gives the matrix enough games early in the season; earlier seasons only count while both players were on the team.
 - **Review**
   - **Results:** every snapshotted line, settled against the stored stats. *Lines vs averages* compares each line with the player's average before that game (only earlier games, so nothing you couldn't have known): how often the side toward the average won and its ROI at the opening odds, by how far the line was from the average and by bet type, and how far the results landed from the lines. *Dashboard's picks* and *Game markets* show how the saved picks did (hit rate, ROI, cumulative profit, calibration). *All settled lines* lists them all, with a CSV download.
+  - **Backtest 2022/23:** the backtest of the props model (section 7), when `data/backtest/2022_lines.csv` exists. *Tonight's lineup* switches between the two variants. *Summary*: the model against simple strategies on the same lines, calibration, and the model's picks by signal, edge, stat and month. *Strategy tester*: pick the lines (dates, players, stats, the model's signal, minimum edge and games, main lines only) and what to bet (the model's pick, toward the season average, always Under or Over; one side only) and see bets, hit rate against break-even, profit, ROI, the cumulative profit by date, results by stat and side, and every bet (CSV download). *Player*: how a player's lines resolved (how often they went over, the average miss), a chart of each line against the result and the season average before it, and how the model's picks on them did.
 - **Data**
   - **Data center:** a card per source with its status and buttons: *Update 2026/27* (or another season, a date range, one game, a rebuild), *Fetch now* (Superbet, for the pages only), *Save snapshot* (today, or RotoWire's lineups for tomorrow), and *Run both* for the morning routine (stats, then a snapshot). As in the first dashboard, Superbet is contacted only when one of these buttons is pressed, at most once every 5 minutes, and the pages read the newer of the last fetch and the last saved snapshot. RotoWire is fetched when a page needs it and kept for 30 minutes. The output streams into the page while the job runs, and every run is logged to `data/run_log.csv` (*Recent runs*). Tabs below show the stored seasons and snapshot files, names that don't match an ESPN player, and the points-add-up check.
 
@@ -254,6 +257,19 @@ print(assessment.assess_bets_from_list([bet]))
 ```
 
 Creating `BetAssessment` fetches RotoWire's lineups page, so it needs an internet connection. Running `python bet_analyst.py` directly uses Unibet as its source of offers, which doesn't work at the moment.
+
+### 7. Backtest the props model on 2022/23
+
+```
+python -m backtest.run                                                  # both variants, about 10 minutes
+python -m backtest.run --variant none --since 2022-11-10 --until 2022-11-20   # a quick partial run
+```
+
+Prices Unibet's 2022/23 player lines (`offers_resolved.csv`, about 40,000 lines from Nov 10 to May 9) with today's props model (`models.price_props`, unchanged), each from the games before its date only, and settles them. Writes `data/backtest/2022_lines.csv` and `data/backtest/2022_summary.md`; dashboard v2 shows them on the *Backtest 2022/23* page (see below).
+
+- The old `2022-players-logs.csv` lacks columns today's scraper stores, so `backtest/data_2022.py` rebuilds them: game ids from date and teams, season type from the date, starters as each team's top 5 by minutes, positions from the 2024–26 logs (86% of player games; the rest get no matchup factor). The file was scraped from end-of-season rosters, so a traded player's earlier games carry his final team; the real team is taken from the date and opponent (2,395 games moved).
+- There are no historical game odds, so the implied-team-total factor is off. Variant `none` knows nothing about tonight's lineup; `absences` treats every rotation player (15+ min a game over the team's last 10) who didn't play as out, an upper bound for RotoWire's value.
+- Results (main lines, players with 5+ games, 29,331 lines): the model's picks won 51.0% at −3.6% ROI, worse than always betting the Under (52.2%, −2.7%); 🟢 picks 52.1% at −1.9% (2,181 bets, not significantly better than break-even). The model is overconfident: picks it gave 60–70% won 54.5%, 70–80% won 55%. Knowing tonight's absences perfectly barely changes this (🟢 −0.8%). Overs lost 6.7%, Unders 1.0%.
 
 ## Known limitations
 

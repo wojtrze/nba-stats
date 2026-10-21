@@ -11,8 +11,9 @@ OVER, UNDER, PUSH, NEUTRAL, AVERAGE = '#16a34a', '#dc2626', '#9aa5b1', '#3b82f6'
 
 
 def layout(fig: go.Figure, height: int, title: str = '', **kw):
-    fig.update_layout(height=height, margin=dict(l=10, r=10, t=40 if title else 10, b=10), title=title,
-                      legend=dict(orientation='h', y=1.12, x=0), **kw)
+    # the legend sits on the plot's top edge, below the title (which gets its own band of the margin)
+    fig.update_layout(height=height, margin=dict(l=10, r=10, t=70 if title else 30, b=10), title=title,
+                      legend=dict(orientation='h', y=1.0, yanchor='bottom', x=0), **kw)
     return fig
 
 

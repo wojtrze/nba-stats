@@ -1,0 +1,143 @@
+"""Run with: python -m pytest backtest"""
+import numpy as np
+import pandas as pd
+import pytest
+
+import backtest  # noqa: F401  (puts dashboard/ on the path)
+from backtest.data_2022 import add_game_columns, espn_name, fix_teams, mark_main_lines, pair_sides
+from backtest.run import known_absences, price_season, side_result
+from models import prepare_logs
+
+
+def test_espn_name():
+    assert espn_name('J.Brown') == 'JaylenBrown'
+    assert espn_name('LukaDončić') == 'LukaDoncic'
+    assert espn_name('StephenCurry') == 'StephenCurry'
+
+
+def test_fix_teams_moves_a_traded_players_old_games():
+    # the trade: player 9 is listed with 'bkn' (his final team) for a game 'dal' played against 'PHX'
+    logs = pd.DataFrame({'Date': pd.to_datetime(['2023-01-01'] * 4 + ['2023-03-01'] * 2),
+                         'OPP': ['PHX', 'PHX', 'PHX', 'DAL', 'BOS', 'BOS'],
+                         'team': ['dal', 'dal', 'bkn', 'phx', 'bkn', 'bkn'],
+                         'player_id_ESPN': [1, 2, 9, 3, 9, 4]})
+    fixed, moved = fix_teams(logs)
+    assert moved == 1
+    assert fixed.loc[2, 'team'] == 'dal'
+    assert fixed.loc[4, 'team'] == 'bkn'          # after the trade, unchanged
+
+
+def test_add_game_columns():
+    logs = pd.DataFrame({'Date': pd.to_datetime(['2022-11-10'] * 7 + ['2023-04-12', '2023-04-20']),
+                         'team': ['por'] * 6 + ['cha', 'lal', 'lal'], 'OPP': ['CHA'] * 6 + ['POR', 'MIN', 'DEN'],
+                         'MIN': [30, 35, 10, 20, 25, 28, 40, 30, 30]})
+    out = add_game_columns(logs)
+    assert out['game_id'].iloc[0] == '2022-11-10_cha_por' == out['game_id'].iloc[6]   # same id from both sides
+    assert out['season_type'].tolist()[-3:] == ['regular', 'playin', 'post']
+    assert out['starter'].iloc[:6].tolist() == [True, True, False, True, True, True]   # all but the 10-minute one
+
+
+def test_pair_sides_and_main_line():
+    offers = pd.DataFrame({'player_ESPN': 'A', 'bet_type': 'PTS', 'home': 'bos', 'away': 'ny',
+                           'closed_date': '2022-11-11T00:30:00Z', 'actual': 25.0,
+                           'line': [20.5, 20.5, 22.5, 22.5, 24.5],
+                           'over_under': ['Over', 'Under', 'Over', 'Under', 'Over'],
+                           'odds': [1.6, 2.3, 1.9, 1.9, 2.4]})
+    lines = pair_sides(offers)
+    assert lines['line'].tolist() == [20.5, 22.5]     # 24.5 has no Under: dropped
+    assert lines['over_odds'].tolist() == [1.6, 1.9] and lines['under_odds'].tolist() == [2.3, 1.9]
+    lines = lines.assign(player_id_ESPN=1, game_date=pd.Timestamp('2022-11-10'))
+    assert mark_main_lines(lines)['main'].tolist() == [False, True]
+
+
+def _season(days=12, extreme_day=None):
+    """Player 1 (G) scores 10 a game for 'bos' vs 'ny'; on extreme_day he scores 60. Player 2 plays every game but
+    the last (a rotation player who misses it)."""
+    rows = []
+    for i in range(days):
+        date = pd.Timestamp('2022-11-01') + pd.Timedelta(days=i)
+        gid = f"{date:%Y-%m-%d}_bos_ny"
+        pts = 60.0 if date == extreme_day else 10.0
+        rows.append({'player_id_ESPN': 1, 'Date': date, 'PTS': pts, 'MIN': 30.0, 'game_id': gid})
+        if i < days - 1:
+            rows.append({'player_id_ESPN': 2, 'Date': date, 'PTS': 15.0, 'MIN': 32.0, 'game_id': gid})
+    logs = pd.DataFrame(rows)
+    return logs.assign(team='bos', OPP='NY', type='home', REB=5.0, AST=3.0, season_id=2022, season_type='regular',
+                       position='G', starter=True, player_display_name=logs['player_id_ESPN'].astype(str),
+                       player_name_ESPN=logs['player_id_ESPN'].map({1: 'One', 2: 'Two'}), **{'3PM': 1.0, 'FGA': 10.0})
+
+
+def _line(day):
+    return pd.DataFrame([{'name': 'One', 'name_ESPN': 'One', 'player_ESPN': 'One', 'home': 'bos', 'away': 'ny',
+                          'bet_type': 'PTS', 'line': 20.5, 'event_id': 'e', 'start_time': '2022-11-12T00:00:00Z',
+                          'closed_date': '2022-11-12T00:00:00Z', 'over_odds': 1.9, 'under_odds': 1.9,
+                          'player_id_ESPN': 1, 'game_date': day, 'main': True, 'file_actual': 60.0}])
+
+
+def test_no_look_ahead_the_game_itself_is_not_used():
+    day = pd.Timestamp('2022-11-11')
+    logs = prepare_logs(_season(extreme_day=day))
+    out = price_season(logs, _line(day), 'none').iloc[0]
+    assert out['games'] == 10 and out['avg'] == 10        # only the 10 games before the 11th
+    assert out['best side'] == 'Under'                    # a 60-point night it can't know about
+    assert out['actual'] == 60 and out['pick result'] == 'loss'
+
+
+def test_known_absences_lists_the_missing_rotation_player():
+    logs = prepare_logs(_season(days=12))
+    out = known_absences(logs, pd.Timestamp('2022-11-12'), ['bos'])
+    assert out['player_id_ESPN'].tolist() == [2] and out['play_pct'].tolist() == [0]
+    assert known_absences(logs, pd.Timestamp('2022-11-11'), ['bos']).empty
+
+
+def test_side_result_push_and_profit():
+    t = pd.DataFrame({'actual': [25, 20, 15, 20], 'line': [20.5, 20.0, 20.5, 20.5]})
+    r = side_result(t, pd.Series(['Over', 'Over', 'Over', np.nan]), pd.Series([1.9] * 4), 'x')
+    assert r['x result'].tolist()[:3] == ['win', 'push', 'loss'] and pd.isna(r['x result'].iloc[3])
+    assert r['x profit'].tolist()[:3] == pytest.approx([0.9, 0.0, -1.0])
+
+
+# --- the dashboard's strategy tester ---
+
+def _priced():
+    return pd.DataFrame({
+        'game_date': pd.to_datetime(['2022-11-10', '2022-11-10', '2022-12-01', '2022-12-01', '2023-01-05']),
+        'name_ESPN': ['A', 'B', 'A', 'B', 'A'], 'bet_type': ['PTS', 'REB', 'PTS', 'PTS', 'AST'],
+        'line': [20.5, 5.5, 20.5, 10.0, 4.5], 'actual': [25.0, 3.0, 18.0, 10.0, 6.0],
+        'over_odds': [1.9, 2.0, 1.8, 1.9, 1.9], 'under_odds': [1.9, 1.8, 2.0, 1.9, 1.9],
+        'avg': [22.0, 6.0, 19.0, 12.0, 4.0], 'avg L5': 1.0, 'proj avg': 1.0,
+        'best side': ['Over', 'Under', 'Under', 'Over', 'Under'], 'edge pp': [6.0, 2.0, -1.0, 8.0, 3.0],
+        'signal': ['🟢', '🟡', np.nan, '🟢', '🟡'], 'games': [8, 8, 20, 20, 30], 'main': [True, True, True, True, False]})
+
+
+def test_filter_lines():
+    from backtest.explore import filter_lines
+    t = _priced()
+    assert len(filter_lines(t)) == 4                                   # the alternative line is out
+    assert len(filter_lines(t, main_only=False)) == 5
+    assert filter_lines(t, players=['A'])['line'].tolist() == [20.5, 20.5]
+    assert filter_lines(t, signals=['none'])['line'].tolist() == [20.5]
+    assert len(filter_lines(t, min_edge=5)) == 2 and len(filter_lines(t, min_games=10)) == 2
+    assert len(filter_lines(t, since='2022-12-01', until='2022-12-01')) == 2
+
+
+def test_bets_totals_and_cumulative():
+    from backtest.explore import bets, cumulative, totals
+    t = _priced()[lambda d: d['main']]
+    b = bets(t, 'model')
+    assert b['bet result'].tolist() == ['win', 'win', 'win', 'push']
+    s = totals(b)
+    assert s['bets'] == 3 and s['pushes'] == 1 and s['hit %'] == 100
+    assert s['profit'] == pytest.approx(0.9 + 0.8 + 1.0)
+    assert s['ROI %'] == pytest.approx(100 * 2.7 / 4)                   # the push returns its stake
+    assert cumulative(b)['total'].tolist() == pytest.approx([1.7, 2.7])
+    unders = bets(t, 'under', side='Under')
+    assert unders['bet side'].eq('Under').all() and len(bets(t, 'model', side='Over')) == 2
+    assert bets(t, 'average')['bet side'].tolist() == ['Over', 'Over', 'Under', 'Over']
+
+
+def test_lines_summary():
+    from backtest.explore import lines_summary
+    s = lines_summary(_priced()).set_index('bet_type')
+    assert s.loc['PTS', 'lines'] == 3 and s.loc['PTS', 'over %'] == 50     # the 10.0 push is left out
+    assert s.loc['PTS', 'actual − line'] == pytest.approx((4.5 - 2.5 + 0) / 3)

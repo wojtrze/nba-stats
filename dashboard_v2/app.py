@@ -33,7 +33,8 @@ navigation = st.navigation({
     "Research": [page("player_history.py", "Player history", "👤", 'player'),
                  page("team_history.py", "Team history", "🛡️", 'team'),
                  page("lineup_lab.py", "Lineup lab", "🧩", 'lineup')],
-    "Review": [page("results.py", "Results", "📈", 'results')],
+    "Review": [page("results.py", "Results", "📈", 'results'),
+               page("backtest.py", "Backtest 2022/23", "🧪", 'backtest')],
     "Data": [page("data_center.py", "Data center", "🔄", 'data')],
 })
 navigation.run()
