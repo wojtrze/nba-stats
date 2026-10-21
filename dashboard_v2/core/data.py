@@ -16,6 +16,7 @@ from loaders import (clear_rotowire, fetch_rotowire, filtered_logs, games, name_
                      reload_superbet_snapshot, snapshot_history, superbet_offers)
 from metrics import absence_adjustments, absence_impact
 from models import GAME_DEFAULTS, GAME_TYPES, game_ratings, price_games, price_props
+from reasons import flag_props
 from tracking import game_odds_movement, prop_movement
 
 log = logging.getLogger(__name__)
@@ -78,9 +79,10 @@ def _adjustments(part, players, out, stats):
 def _priced_props(seasons, season_types, props_, lineups_, odds) -> pd.DataFrame:
     g = games()
     g = g[g['season_id'].isin(seasons) & g['season_type'].isin(season_types)]
-    table = price_props(props_, filtered_logs(list(seasons), list(season_types)), lineups_, odds, g,
-                        adjust=_adjustments)
-    table = prop_movement(snapshot_history('superbet_props'), table)
+    logs = filtered_logs(list(seasons), list(season_types))
+    table = price_props(props_, logs, lineups_, odds, g, adjust=_adjustments)
+    # 🔴 + 'red flag' for lines with a reason to pass whatever the numbers say
+    table = flag_props(prop_movement(snapshot_history('superbet_props'), table), logs, lineups_)
     # ESPN's "Bam Adebayo" reads better than Superbet's "Adebayo, Bam"; unmatched names stay as Superbet has them
     display = player_logs().groupby('player_id_ESPN')['player_display_name'].last()
     table['name'] = table['player_id'].map(display).fillna(table['name'])

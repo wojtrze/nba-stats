@@ -38,7 +38,7 @@ TIPS = {'pick % L10': "How often the picked side won in the player's last 10 gam
                        "margin-free chance (worth 10 games), averaged with the chance from proj avg and the player's "
                        "usual spread of results"}
 MAIN_COLUMNS = ['name', 'game', 'tip-off', 'bet_type', 'line', 'best side', 'signal', 'edge pp', 'pick odds',
-                'model %', 'proj avg', 'pick % L10', 'RotoWire']
+                'model %', 'proj avg', 'pick % L10', 'RotoWire', 'red flag']
 MORE_COLUMNS = ['edge low', 'break-even %', 'market %', 'line move', 'open line', 'adj avg', 'avg', 'avg L5',
                 'matchup', 'spread', 'game total', 'percentile', 'pick %', 'games', 'min L5', 'raw model %',
                 'over_odds', 'under_odds']
@@ -246,8 +246,9 @@ type_filter = f[1].pills("Bet types", available, key='props_types', selection_mo
                          help="PA = points+assists, PR = points+rebounds, RA = rebounds+assists, PRA = all three")
 signal = f[2].segmented_control("Signal", list(SIGNALS), format_func=SIGNALS.get, key='props_signal',
                                 on_change=remember, args=('props_signal',),
-                                help="🟢 = even the low end of the model's range beats the price; 🟡 = positive edge "
-                                     "but too little data to be sure")
+                                help="🟢 = even the low end of the model's range beats the price; 🟡 = positive "
+                                     "edge but too little data to be sure. 🔴 lines (a reason to pass) are only in "
+                                     "All.")
 with f[3].popover("More", width='stretch'):
     hide_out = st.toggle("Hide players RotoWire lists as out", key='props_hide_out', on_change=remember,
                          args=('props_hide_out',))
@@ -264,7 +265,7 @@ if game_filter:
 if type_filter:
     shown = shown[shown['bet_type'].isin(type_filter)]
 if signal == 'positive':
-    shown = shown[shown['signal'] != '']
+    shown = shown[shown['signal'].isin(['🟢', '🟡'])]
 elif signal == 'sure':
     shown = shown[shown['signal'] == '🟢']
 if hide_out:
@@ -272,7 +273,7 @@ if hide_out:
 # earliest game first, greens and the biggest edges first within a game; or edge only
 order = (['tip_at', 'game'] if sort == 'tip-off' else []) + ['signal', 'edge pp']
 shown = shown.sort_values(order, ascending=[True] * (len(order) - 1) + [False],
-                          key=lambda c: c.map({'🟢': 0, '🟡': 1, '': 2}) if c.name == 'signal' else c)
+                          key=lambda c: c.map({'🟢': 0, '🟡': 1, '': 2, '🔴': 3}) if c.name == 'signal' else c)
 shown = shown.reset_index(drop=True)
 
 kpis([{'label': "Lines shown", 'value': f"{len(shown)} / {len(table_all)}",
@@ -281,14 +282,16 @@ kpis([{'label': "Lines shown", 'value': f"{len(shown)} / {len(table_all)}",
        'help': "The edge stays positive even at the low end of the model's range"},
       {'label': "🟡 Positive edge", 'value': int((shown['signal'] == '🟡').sum())},
       {'label': "Games", 'value': shown['event_id'].nunique()},
-      {'label': "Players out", 'value': int(lineups['role'].eq('may_not_play').sum()) if len(lineups) else 0,
-       'help': "Players RotoWire lists under may not play"}])
+      {'label': "🔴 Red flags", 'value': int((shown['signal'] == '🔴').sum()),
+       'help': "Lines with a reason to pass whatever the numbers say: too few games, preseason only, may not play, "
+               "minutes swinging, the line moving against the pick"}])
 
 columns = MAIN_COLUMNS + (MORE_COLUMNS if more else [])
 picked = table(shown, columns, FORMATS, TIPS, key='props_table', select=True, height=420,
                legend=['superbet', 'rotowire', 'stats'])
 st.caption(("Earliest tip-off first; within a game greens first, then by edge" if sort == 'tip-off' else
-            "Greens first, then by edge") + ". ⏰ = tip-off within the hour; lines leave the list at tip-off. Hover "
+            "Greens first, then by edge") + ", 🔴 last (red flag: a reason to pass, said in the last column). "
+           "⏰ = tip-off within the hour; lines leave the list at tip-off. Hover "
            "a header for what it means; pick a row for the details. model % is calibrated on 2022/23, where the "
            "model's own opinion proved worth little beyond the price, so few lines show an edge.")
 

@@ -51,7 +51,11 @@ HELP = STAT_HELP | {
     'break-even %': "Chance the pick must win to break even at Superbet's odds: 100 / odds (margin included)",
     'market %': "Superbet's chance for the pick with the bookmaker's margin removed, so Over + Under = 100%",
     'signal': "🟢 the edge stays positive even at the low end of the range; 🟡 positive edge, but the range "
-              "reaches below break-even (too little data to be sure)",
+              "reaches below break-even (too little data to be sure); 🔴 a reason to pass whatever the numbers say "
+              "(see red flag)",
+    'red flag': "Why not to trust this line, whatever its numbers: too few games, preseason only, may not play, "
+                "minutes swinging, the line moving against the pick (props); early season, no RotoWire lineup, an "
+                "edge too big to be true (games)",
     'min L5': "Average minutes over the last 5 games: falling minutes are a warning sign for Overs",
     'open line': "The line when daily_snapshot.py first saw it",
     'line move': "Current line minus the opening line: + = the line went up (the market expects more), − = down. "
@@ -171,7 +175,7 @@ COLUMN_SOURCE = {
     'adj avg': 'stats', 'avg L5': 'stats', 'over %': 'stats', 'under %': 'stats', 'over % L10': 'stats',
     'under % L10': 'stats', 'percentile': 'stats', 'in band': 'stats', 'min L5': 'stats',
     'proj score': 'stats', 'proj winner': 'stats', 'proj total': 'stats', 'best bet': 'stats',
-    'best edge pp': 'stats', 'model %': 'stats', 'raw model %': 'stats', 'fair odds': 'stats', 'games missed': 'stats',
+    'best edge pp': 'stats', 'model %': 'stats', 'red flag': 'stats', 'raw model %': 'stats', 'fair odds': 'stats', 'games missed': 'stats',
     'team pts change': 'stats', 'opp pts change': 'stats',
 }
 

@@ -118,3 +118,42 @@ def test_game_lines_implied_totals():
     ])
     lines = game_lines(main)
     assert lines.loc[1, 'home_implied'] == 113 and lines.loc[1, 'away_implied'] == 107
+
+
+# --- 🔴: red flags on whole tables ---
+
+def test_prop_flags_each_rule():
+    from reasons import prop_flags
+    steady = pd.Series([32.0] * 12)
+    assert prop_flags(12, False, np.nan, '', steady, np.nan, 'Over') == []
+    assert prop_flags(5, False, np.nan, '', steady[:5], np.nan, 'Over')[0].startswith("Only 5 games")
+    assert "preseason" in prop_flags(12, True, np.nan, '', steady, np.nan, 'Over')[0]
+    assert prop_flags(12, False, 50, 'Ques 50%', steady, np.nan, 'Over') == \
+        ["RotoWire: Ques 50%: may sit or play limited minutes"]
+    assert "Minutes swing" in prop_flags(12, False, np.nan, '', pd.Series([10.0, 35.0] * 6), np.nan, 'Over')[0]
+    assert "against the pick" in prop_flags(12, False, np.nan, '', steady, -1.5, 'Over')[0]   # down hurts an Over
+    assert prop_flags(12, False, np.nan, '', steady, -1.5, 'Under') == []                     # ...and helps an Under
+
+
+def test_flag_props_turns_flagged_lines_red():
+    from reasons import flag_props
+    logs = pd.DataFrame({'player_id_ESPN': [1] * 10 + [2] * 3, 'MIN': 30.0, 'season_type': 'regular'})
+    table = pd.DataFrame({'player_id': [1, 2, 1], 'best side': ['Over', 'Over', 'Under'], 'signal': ['🟢', '🟢', '🟡'],
+                          'RotoWire': ['starter', 'bench', 'Ques 50%'], 'line move': [np.nan, np.nan, np.nan]})
+    lineups = pd.DataFrame({'player_id_ESPN': [1], 'play_pct': [50]})
+    lineups_none = pd.DataFrame(columns=['player_id_ESPN', 'play_pct'])
+    out = flag_props(table.iloc[:2], logs, lineups_none)
+    assert out['signal'].tolist() == ['🟢', '🔴'] and out['red flag'].iloc[1].startswith("Only 3 games")
+    out = flag_props(table, logs, lineups)
+    assert out['signal'].tolist() == ['🔴', '🔴', '🔴']                 # player 1 is questionable on RotoWire
+    assert out['red flag'].iloc[2] == "RotoWire: Ques 50%: may sit or play limited minutes"
+
+
+def test_game_outcomes_red_only_for_flags():
+    from reasons import flag_game_outcomes
+    edges = pd.DataFrame({'edge pp': [6.0, -8.0, 18.0]})
+    settled = flag_game_outcomes(edges, games_played=20, rotowire=True)
+    assert settled['signal'].tolist() == ['🟢', '', '🔴']      # a bad price alone isn't red any more
+    assert "Edge over 15 pp" in settled['red flag'].iloc[2]
+    early = flag_game_outcomes(edges, games_played=2, rotowire=False)
+    assert early['signal'].tolist() == ['🔴'] * 3 and "Early season" in early['red flag'].iloc[0]

@@ -88,7 +88,7 @@ with left:
     if props.empty:
         st.caption("Superbet has no player props on these games yet.")
     else:
-        top = props[props['signal'] != ''].sort_values(['signal', 'edge pp'], ascending=[True, False],
+        top = props[props['signal'].isin(['🟢', '🟡'])].sort_values(['signal', 'edge pp'], ascending=[True, False],
                                                        key=lambda c: c.map({'🟢': 0, '🟡': 1}) if c.name == 'signal'
                                                        else c).head(10).reset_index(drop=True)
         picked = table(top, ['name', 'bet_type', 'line', 'best side', 'signal', 'edge pp', 'pick odds', 'RotoWire'],

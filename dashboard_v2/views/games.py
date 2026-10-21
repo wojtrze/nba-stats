@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -9,7 +8,7 @@ from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, st
 from espn_scraper import CURRENT_SEASON
 from loaders import season_label, snapshot_history
 from models import GAME_DEFAULTS
-from reasons import game_reasons
+from reasons import flag_game_outcomes, game_reasons
 from tracking import opening_game_lines
 
 page_header("Games", "Superbet's moneyline, handicap and totals next to a team model: offensive and defensive "
@@ -50,18 +49,22 @@ st.caption(f"Ratings: {season_label(CURRENT_SEASON)} ({model['current']} games) 
 priced = sorted(priced, key=lambda g: pd.Timestamp(g['start_time']))   # earliest tip-off first
 rows = []
 for g in priced:
+    played = min(ratings['games'].get(g['home'], 0), ratings['games'].get(g['away'], 0))
+    g['edges'] = flag_game_outcomes(g['edges'], played, g['home'] in set(lineups['team']))
     best = g['edges'].loc[g['edges']['edge pp'].idxmax()]
     p = g['projection']
     rows.append({'event_id': g['event_id'], 'game': f"{g['away'].upper()} @ {g['home'].upper()}",
                  'start (PL)': pl_time(g['start_time']),
                  'proj score': f"{p['away_pts']:.0f} – {p['home_pts']:.0f}", 'proj winner': winner(p, g['home'], g['away']),
-                 'proj total': p['total'], 'best bet': describe_outcome(best), 'best edge pp': best['edge pp'],
+                 'proj total': p['total'], 'best bet': describe_outcome(best), 'signal': best['signal'],
+                 'best edge pp': best['edge pp'],
                  'best odds': best['odds'], 'RotoWire': '✔' if g['home'] in set(lineups['team']) else ''})
 summary = pd.DataFrame(rows)
-picked = table(summary, ['game', 'start (PL)', 'proj winner', 'proj score', 'proj total', 'best bet', 'best edge pp',
-                         'best odds', 'RotoWire'],
+picked = table(summary, ['game', 'start (PL)', 'proj winner', 'proj score', 'proj total', 'best bet', 'signal',
+                         'best edge pp', 'best odds', 'RotoWire'],
                {'proj total': '%.1f', 'best edge pp': '%+.1f', 'best odds': '%.2f'},
                tips={'RotoWire': "✔ = RotoWire lists this game's lineups, so absences are in the projection",
+                     'signal': "The best bet's signal: " + "🟢 model edge of +5 pp or more; 🔴 a reason to pass whatever the numbers say (see red flag)",
                      'best odds': "Superbet's odds for the best bet"},
                sources={'best odds': 'superbet'}, key='games_table', select=True, legend=['superbet', 'stats'])
 
@@ -94,16 +97,15 @@ with st.container(border=True):
     markets_tab, teams_tab = st.tabs(["Markets", "Teams & absences"])
     with markets_tab:
         t = edges.assign(order=edges['market'].map(list(MARKET_LABELS).index), market=edges['market'].map(MARKET_LABELS),
-                         team=edges['team'].fillna('').str.upper(),
-                         signal=np.select([edges['edge pp'] >= 5, edges['edge pp'] <= -5], ['🟢', '🔴'], ''))
+                         team=edges['team'].fillna('').str.upper())
         t = t.sort_values(['order', 'line', 'side'])
         t['line'] = [('–' if pd.isna(v) else f"{v:+g}" if m == 'Handicap' else f"{v:g}")
                      for v, m in zip(t['line'], t['market'])]
         cols = ['market', 'team', 'side', 'line', 'signal', 'edge pp', 'odds', 'odds move', 'implied %', 'model %',
-                'fair odds']
+                'fair odds', 'red flag']
         row = table(t, cols, {'implied %': '%.0f', 'model %': '%.0f', 'fair odds': '%.2f', 'odds': '%.2f',
                               'odds move': '%+.2f', 'edge pp': '%+.1f'},
-                    tips={'signal': "🟢 model edge of +5 pp or more, 🔴 −5 pp or less",
+                    tips={'signal': "🟢 model edge of +5 pp or more; 🔴 a reason to pass whatever the numbers say (see red flag)",
                           'edge pp': "model % − implied %, in percentage points"},
                     key=f"markets_{event_id}", select=True)
         outcome = edges.loc[t.index[row]] if row is not None else edges.loc[edges['edge pp'].idxmax()]

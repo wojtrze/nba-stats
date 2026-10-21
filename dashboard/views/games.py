@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -11,7 +10,7 @@ from loaders import (games, player_logs, rotowire_lineups, season_label, snapsho
                      superbet_offers, today_game_odds)
 from metrics import absence_impact, game_lines
 from models import GAME_DEFAULTS, GAME_TYPES, game_ratings, price_games
-from reasons import game_reasons
+from reasons import flag_game_outcomes, game_reasons
 from schedule import tip_label
 from superbet_fetcher import main_lines
 from tracking import game_odds_movement, opening_game_lines
@@ -103,13 +102,15 @@ priced = price_games(odds, ratings, lineups, all_games, logs, home_court, shrink
 for game in sorted(priced, key=lambda g: pd.Timestamp(g['start_time'])):   # earliest tip-off first
     event_id, home, away = game['event_id'], game['home'], game['away']
     projection, absences = game['projection'], game['absences']
-    edges = game_odds_movement(history, game['edges'])
+    played = min(ratings['games'].get(home, 0), ratings['games'].get(away, 0))
+    edges = flag_game_outcomes(game_odds_movement(history, game['edges']), played, home in set(lineups['team']))
     best = edges.loc[edges['edge pp'].idxmax()]
     start = pd.to_datetime(game['start_time']).tz_convert('Europe/Warsaw')
     label = f"{away.upper()} @ {home.upper()}"
     # the decision first, then the projection behind it, then where the inputs stand
     summary.append({'game': label, 'start (PL)': tip_label(game['start_time'], now),
-                    'best bet': describe(best), 'best edge pp': best['edge pp'], 'best odds': best['odds'],
+                    'best bet': describe(best), 'signal': best['signal'], 'best edge pp': best['edge pp'],
+                    'best odds': best['odds'],
                     'proj score': f"{projection['away_pts']:.0f} – {projection['home_pts']:.0f}",
                     'proj winner': winner(projection, home, away), 'proj total': projection['total'],
                     'RotoWire': '✔' if home in set(lineups['team']) else '', 'line moves': moves(event_id)})
@@ -123,7 +124,10 @@ st.dataframe(tinted(overview, overview_formats, sources={'best odds': 'superbet'
              column_config=column_config(overview.columns, overview_formats,
                                          tips={'RotoWire': "✔ = RotoWire already lists this game's lineups and "
                                                            "injuries, so absences are in the projection",
-                                               'best odds': "Superbet's odds for the best bet"},
+                                               'best odds': "Superbet's odds for the best bet",
+                                               'signal': "The best bet's signal: 🟢 model edge of +5 pp or more; 🔴 a "
+                                                         "reason to pass whatever the numbers say (see the game's "
+                                                         "markets)"},
                                          sources={'best odds': 'superbet'}))
 st.caption("Hover a column header for what it means; expand a game below for every market. Superbet's margin is "
            "about 2–3 pp per side, so small edges are noise.")
@@ -168,15 +172,14 @@ for label, start, home, away, projection, edges, absences, event_id, start_time 
                          "+ the effect of missing players")
         # markets in MARKET_LABELS order (moneyline first), then by line
         table = edges.assign(order=edges['market'].map(list(MARKET_LABELS).index),
-                             market=edges['market'].map(MARKET_LABELS), team=edges['team'].fillna('').str.upper(),
-                             signal=np.select([edges['edge pp'] >= 5, edges['edge pp'] <= -5], ['🟢', '🔴'], ''))
+                             market=edges['market'].map(MARKET_LABELS), team=edges['team'].fillna('').str.upper())
         table = table.sort_values(['order', 'line', 'side'])
         # a moneyline has no line: show it as text so the empty cell reads '–' rather than 'None'
         table['line'] = [('–' if pd.isna(v) else f"{v:+g}" if m == 'Handicap' else f"{v:g}")
                          for v, m in zip(table['line'], table['market'])]
         # outcome -> verdict -> Superbet's price -> the model's price
         market_cols = ['market', 'team', 'side', 'line', 'signal', 'edge pp', 'odds', 'odds move', 'implied %',
-                       'model %', 'fair odds']
+                       'model %', 'fair odds', 'red flag']
         market_formats = {'implied %': '%.0f', 'model %': '%.0f', 'fair odds': '%.2f', 'odds': '%.2f', 'odds move': '%+.2f',
                           'edge pp': '%+.1f'}
         event = st.dataframe(tinted(table[market_cols], market_formats), hide_index=True, width='stretch',
@@ -185,7 +188,7 @@ for label, start, home, away, projection, edges, absences, event_id, start_time 
                          market_cols, formats=market_formats,
                          tips={'line': "Handicap: the team's handicap (+1.5 = still wins the bet if it loses by 1). "
                                        "Totals: the points line. Empty for the moneyline.",
-                               'signal': "🟢 model edge of +5 pp or more, 🔴 −5 pp or less",
+                               'signal': "🟢 model edge of +5 pp or more; 🔴 a reason to pass whatever the numbers say (see red flag)",
                                'edge pp': "model % − implied %, in percentage points"}))
         # the selected outcome, or the game's best bet
         picked = table.iloc[event.selection.rows[0]] if event.selection.rows else table.loc[edges['edge pp'].idxmax()]

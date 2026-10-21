@@ -10,7 +10,7 @@ from loaders import (filtered_logs, games as all_games, player_logs, rotowire_li
                      superbet_fetch_controls, superbet_offers, today_game_odds, today_props)
 from metrics import STATS, absence_adjustments, hit_rates, percentile_band, rotowire_team
 from models import price_props
-from reasons import prop_reasons
+from reasons import flag_props, prop_reasons
 from schedule import tip_label
 from tracking import prop_movement
 
@@ -35,9 +35,10 @@ def cached_adjustments(part, players, out, stats):
 def priced(seasons, season_types, props, lineups, odds) -> pd.DataFrame:
     g = all_games()
     g = g[g['season_id'].isin(seasons) & g['season_type'].isin(season_types)]
-    table = price_props(props, filtered_logs(list(seasons), list(season_types)), lineups, odds, g,
-                        adjust=cached_adjustments)
-    return prop_movement(snapshot_history('superbet_props'), table)
+    logs_ = filtered_logs(list(seasons), list(season_types))
+    table = price_props(props, logs_, lineups, odds, g, adjust=cached_adjustments)
+    # 🔴 + 'red flag' for lines with a reason to pass whatever the numbers say
+    return flag_props(prop_movement(snapshot_history('superbet_props'), table), logs_, lineups)
 
 
 def rotowire_entry(player_id) -> dict:
@@ -129,7 +130,9 @@ else:
         shown = shown[~shown['in band']]
     if hide_out:
         shown = shown[~shown['RotoWire'].str.startswith(('Out', 'OFS'))]
-    order = (['tip_at', 'game'] if sort.startswith("Tip-off") else []) + ['edge pp']
+    # 🔴 lines (a reason to pass) after the others, within each game when sorted by tip-off
+    shown = shown.assign(red=shown['signal'] == '🔴')
+    order = (['tip_at', 'game'] if sort.startswith("Tip-off") else []) + ['red', 'edge pp']
     shown = shown.sort_values(order, ascending=[True] * (len(order) - 1) + [False]).reset_index(drop=True)
 
     sorted_by = "earliest tip-off first, best edge first within a game" if order[0] == 'tip_at' else \
@@ -137,13 +140,14 @@ else:
     st.caption(f"{len(shown)} of {len(table)} lines, {sorted_by}. ⏰ = tip-off within the hour; lines leave the "
                f"list at tip-off. Hover a column header for what it means. "
                f"🟢 = even the low end of the model's range beats the price; 🟡 = positive edge, but too little data "
-               f"to be sure. Click a row for the reasons to bet or pass. model % is calibrated on 2022/23, where the "
+               f"to be sure; 🔴 = a reason to pass whatever the numbers say (red flag column), listed last. "
+               f"Click a row for the reasons to bet or pass. model % is calibrated on 2022/23, where the "
                f"model's own opinion proved worth little beyond the price, so few lines show an edge.")
     st.caption(source_legend())
     # who/what -> the decision -> tonight's lineup -> the player's numbers -> both sides' odds
     columns = ['name', 'game', 'tip-off', 'bet_type', 'line',
                'best side', 'signal', 'edge pp', 'edge low', 'pick odds', 'model %', 'break-even %', 'market %',
-               'RotoWire', 'line move', 'open line',
+               'RotoWire', 'red flag', 'line move', 'open line',
                'proj avg', 'adj avg', 'avg', 'avg L5', 'matchup', 'spread', 'game total', 'percentile', 'in band',
                'over %', 'under %', 'over % L10', 'under % L10', 'games', 'min L5',
                'raw model %', 'over_odds', 'under_odds']

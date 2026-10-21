@@ -128,22 +128,49 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame) -> List[
                                f"The line moved {'up' if move > 0 else 'down'} {abs(move):g} since the first snapshot"
                                f" ({'the market moved your way' if favours(move > 0) else 'the market moved against you'})"))
 
-    # reasons that alone mean "pass"
-    if n < MIN_GAMES:
-        reasons.append(_reason(False, f"Only {n} games in the sample: too few to trust the numbers", flag=True))
-    if n and 'season_type' in games and (games['season_type'] == 'pre').all():
-        reasons.append(_reason(False, "Every game is preseason: minutes and roles change in the regular season",
-                               flag=True))
-    pct = bet.get('play_pct')
-    if _known(pct) and 0 < pct < 100:
-        reasons.append(_reason(False, f"RotoWire: {bet.get('status')}: may sit or play limited minutes", flag=True))
-    if n >= 5 and games['MIN'].mean() > 0 and games['MIN'].std() / games['MIN'].mean() > 0.35:
-        reasons.append(_reason(False, f"Minutes swing a lot ({games['MIN'].min():.0f}–{games['MIN'].max():.0f}): "
-                                      f"the role isn't settled", flag=True))
-    if _known(move) and abs(move) >= 1.5 and not favours(move > 0):
-        reasons.append(_reason(False, f"The line moved {abs(move):g} against the pick: the market may know something "
-                                      f"(injury, minutes)", flag=True))
+    # reasons that alone mean "pass" (the tables show them as 🔴)
+    preseason_only = bool(n and 'season_type' in games and (games['season_type'] == 'pre').all())
+    minutes = games['MIN'] if n else pd.Series(dtype=float)
+    reasons += [_reason(False, text, flag=True) for text in
+                prop_flags(n, preseason_only, bet.get('play_pct'), bet.get('status'), minutes, move, bet['side'])]
     return reasons
+
+
+def prop_flags(n: int, preseason_only: bool, play_pct, status, minutes: pd.Series, line_move, side) -> List[str]:
+    """The reasons to pass a prop whatever its numbers say: too few games, preseason only, may not play, unstable
+    minutes, the line moving against the pick. minutes: the player's minutes in the games behind the numbers."""
+    flags = []
+    if n < MIN_GAMES:
+        flags.append(f"Only {n} games in the sample: too few to trust the numbers")
+    if preseason_only:
+        flags.append("Every game is preseason: minutes and roles change in the regular season")
+    if _known(play_pct) and 0 < play_pct < 100:
+        flags.append(f"RotoWire: {status}: may sit or play limited minutes")
+    if n >= 5 and len(minutes) and minutes.mean() > 0 and minutes.std() / minutes.mean() > 0.35:
+        flags.append(f"Minutes swing a lot ({minutes.min():.0f}–{minutes.max():.0f}): the role isn't settled")
+    if _known(line_move) and abs(line_move) >= 1.5 and (line_move > 0) != (side == 'Over'):
+        flags.append(f"The line moved {abs(line_move):g} against the pick: the market may know something "
+                     f"(injury, minutes)")
+    return flags
+
+
+def flag_props(table: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame) -> pd.DataFrame:
+    """models.price_props output (with prop_movement's 'line move' when there is one) with 'red flag' (the
+    prop_flags of each line, joined; '' when none) and 🔴 as the signal of every flagged line. logs: the games
+    the lines were priced from; lineups: RotoWire's (with ESPN ids)."""
+    by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
+    listed = lineups.dropna(subset=['player_id_ESPN']).drop_duplicates('player_id_ESPN') if len(lineups) else lineups
+    play_pct = listed.set_index('player_id_ESPN')['play_pct'] if len(listed) else pd.Series(dtype=float)
+    empty = pd.Series(dtype=float)
+    flags = []
+    for _, row in table.iterrows():
+        games = by_player.get(row['player_id'])
+        n = 0 if games is None else len(games)
+        flags.append('; '.join(prop_flags(n, bool(n and (games['season_type'] == 'pre').all()),
+                                          play_pct.get(row['player_id']), row.get('RotoWire'),
+                                          games['MIN'] if n else empty, row.get('line move'), row['best side'])))
+    flags = pd.Series(flags, index=table.index)
+    return table.assign(**{'red flag': flags, 'signal': table['signal'].where(flags == '', '🔴')})
 
 
 def game_reasons(outcome: Dict, ctx: Dict) -> List[Dict]:
@@ -205,16 +232,31 @@ def game_reasons(outcome: Dict, ctx: Dict) -> List[Dict]:
                                            f"{t.upper()} without {name}: {change:+.1f} points ({imp['n_without']} "
                                            f"games missed)"))
 
-    if min(ctx['games_played'].get(t, 0) for t in (home, away)) < 5:
-        reasons.append(_reason(False, "Early season: the ratings are still mostly last season's, which don't know "
-                                      "about summer trades", flag=True))
-    if not ctx['rotowire']:
-        reasons.append(_reason(False, "RotoWire doesn't list this game yet: absences aren't in the projection",
-                               flag=True))
-    if outcome['edge pp'] > 15:
-        reasons.append(_reason(False, "Edge over 15 pp: more likely the model is missing something (a trade, rest) "
-                                      "than the market being that wrong", flag=True))
+    played = min(ctx['games_played'].get(t, 0) for t in (home, away))
+    reasons += [_reason(False, text, flag=True) for text in game_flags(outcome['edge pp'], played, ctx['rotowire'])]
     return reasons
+
+
+def game_flags(edge_pp: float, games_played: int, rotowire: bool) -> List[str]:
+    """The reasons to pass a game market whatever its numbers say. games_played: the fewer of the two teams'
+    current-season games; rotowire: RotoWire lists the game."""
+    flags = []
+    if games_played < 5:
+        flags.append("Early season: the ratings are still mostly last season's, which don't know about summer trades")
+    if not rotowire:
+        flags.append("RotoWire doesn't list this game yet: absences aren't in the projection")
+    if edge_pp > 15:
+        flags.append("Edge over 15 pp: more likely the model is missing something (a trade, rest) than the market "
+                     "being that wrong")
+    return flags
+
+
+def flag_game_outcomes(edges: pd.DataFrame, games_played: int, rotowire: bool) -> pd.DataFrame:
+    """metrics.market_edges rows of one game with 'red flag' (game_flags, joined) and 'signal': 🔴 when flagged,
+    otherwise 🟢 for an edge of +5 pp or more."""
+    flags = pd.Series(['; '.join(game_flags(e, games_played, rotowire)) for e in edges['edge pp']], index=edges.index)
+    signal = np.where(flags != '', '🔴', np.where(edges['edge pp'] >= 5, '🟢', ''))
+    return edges.assign(signal=signal, **{'red flag': flags})
 
 
 def verdict(reasons: List[Dict], edge_pp: float, edge_low: float = np.nan):
