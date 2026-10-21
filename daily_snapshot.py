@@ -51,6 +51,72 @@ def _append(name: str, df: pd.DataFrame, fetched_at: str) -> int:
     return len(df)
 
 
+# --- RotoWire: the dashboards save every fetch that differs from the last saved version of that day ---
+
+# what lineup_fetcher.fetch_lineups returns, as saved (the ESPN ids are added when the dashboards read it)
+LINEUP_COLUMNS = ['game_date', 'tip_et', 'away', 'home', 'team', 'side', 'lineup_status', 'role', 'pos', 'name',
+                  'rotowire_id', 'play_pct', 'injury']
+_PLAYER_KEY = ['game_date', 'team', 'name']
+_PLAYER_FIELDS = ['role', 'pos', 'play_pct', 'injury']
+
+
+def _as_text(df: pd.DataFrame) -> pd.DataFrame:
+    """Rows comparable between a fresh fetch and a saved one (read back from CSV): every value as text."""
+    out = df.reindex(columns=LINEUP_COLUMNS).copy()
+    out['play_pct'] = pd.to_numeric(out['play_pct'], errors='coerce').map(lambda v: '' if pd.isna(v) else f"{v:.0f}")
+    return out.astype(object).where(out.notna(), '').astype(str).replace({'nan': '', 'None': ''})
+
+
+def _status(row) -> str:
+    """'starter', 'Out 0%', 'Ques 50%'."""
+    if row['role'] == 'starter':
+        return 'starter'
+    return f"{row['injury'] or 'may not play'} {row['play_pct']}%".strip() if row['play_pct'] else \
+        (row['injury'] or row['role'])
+
+
+def lineup_changes(old: pd.DataFrame, new: pd.DataFrame) -> list:
+    """What changed between two versions of RotoWire's page, in words: lineups confirmed (or back to expected),
+    players whose role, chance to play or injury changed, players newly listed or no longer listed."""
+    old, new = _as_text(old), _as_text(new)
+    changes = []
+    old_status = old.drop_duplicates('team').set_index('team')['lineup_status']
+    for team, status in new.drop_duplicates('team').set_index('team')['lineup_status'].items():
+        if team in old_status.index and old_status[team] != status and status:
+            changes.append(f"{team.upper()} lineup {status}")
+    before = old.drop_duplicates(_PLAYER_KEY).set_index(_PLAYER_KEY)
+    after = new.drop_duplicates(_PLAYER_KEY).set_index(_PLAYER_KEY)
+    for key in after.index:
+        name, team = key[2], key[1].upper()
+        if key not in before.index:
+            changes.append(f"new: {name} ({team}, {_status(after.loc[key])})")
+        elif any(before.loc[key, f] != after.loc[key, f] for f in _PLAYER_FIELDS):
+            changes.append(f"{name} ({team}): {_status(before.loc[key])} → {_status(after.loc[key])}")
+    changes += [f"no longer listed: {key[2]} ({key[1].upper()})" for key in before.index if key not in after.index]
+    return changes
+
+
+def save_lineups_if_changed(lineups: pd.DataFrame, fetched_at: str) -> str:
+    """Append a RotoWire fetch to rotowire_lineups.csv when it's the first of its day (game_date) or differs
+    from the last saved version of that day. Returns what was saved ('' when nothing was)."""
+    if lineups.empty:
+        return ''
+    path = snapshot_file(CURRENT_SEASON, 'rotowire_lineups')
+    saved = pd.read_csv(path) if os.path.exists(path) else pd.DataFrame(columns=['fetched_at'] + LINEUP_COLUMNS)
+    days = set(lineups['game_date'].astype(str))
+    same_day = saved[saved['game_date'].astype(str).isin(days)]
+    last = same_day[same_day['fetched_at'] == same_day['fetched_at'].max()] if len(same_day) else same_day
+    changes = lineup_changes(last, lineups) if len(last) else None
+    if changes == []:
+        return ''
+    _append('rotowire_lineups', lineups.reindex(columns=LINEUP_COLUMNS).copy(), fetched_at)
+    when = ', '.join(f"{pd.Timestamp(d):%b %d}" for d in sorted(days))
+    if changes is None:
+        return f"saved {len(lineups)} players for {when} (first fetch of the day)"
+    shown = '; '.join(changes[:3]) + (f"; …and {len(changes) - 3} more" if len(changes) > 3 else '')
+    return f"saved {len(lineups)} players for {when}: {len(changes)} change{'s' * (len(changes) > 1)} – {shown}"
+
+
 def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.DataFrame):
     """props with player_id_ESPN, pick, model_pct, edge_pp, edge_low and proj_avg; game_odds with model_pct and
     edge_pp. Same models and defaults as the dashboard pages (current season, every game type but All-Star)."""

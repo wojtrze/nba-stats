@@ -3,18 +3,16 @@
 The stored stats and Superbet's offers come from the old dashboard's loaders (same caches, same columns).
 Superbet blocks frequent requests, so it's only contacted on demand (loaders.fetch_superbet, the Data center's
 Fetch now and Save snapshot), and every fetch is saved; the pages read the newest one.
-RotoWire is fetched here rather than through loaders, so the pages can tell live lineups from a fallback
-snapshot; it's kept for 30 minutes.
+RotoWire comes from loaders.fetch_rotowire too (live at most every 30 minutes, saved whenever it changed).
 """
 import logging
-from datetime import datetime, timezone
 from typing import Dict, List
 
 import pandas as pd
 import streamlit as st
 
 from espn_scraper import CURRENT_SEASON
-from loaders import (LINEUP_COLUMNS, _latest_snapshot, filtered_logs, games, name_resolver, player_logs,
+from loaders import (clear_rotowire, fetch_rotowire, filtered_logs, games, name_resolver, player_logs,
                      reload_superbet_snapshot, snapshot_history, superbet_offers)
 from metrics import absence_adjustments, absence_impact
 from models import GAME_DEFAULTS, GAME_TYPES, game_ratings, price_games, price_props
@@ -27,11 +25,6 @@ log = logging.getLogger(__name__)
 LAST_FETCH: Dict[str, Dict] = {}
 
 
-def _snapshot_time(name: str):
-    history = snapshot_history(name)
-    return pd.to_datetime(history['fetched_at'].max(), utc=True).to_pydatetime() if len(history) else None
-
-
 def superbet() -> Dict:
     """loaders.superbet_offers (the newest saved fetch; never contacts Superbet), noting for the freshness strip
     when it was fetched."""
@@ -40,21 +33,13 @@ def superbet() -> Dict:
     return offers
 
 
-@st.cache_data(ttl=1800, show_spinner="Checking RotoWire's lineups...")
 def rotowire() -> Dict:
-    """RotoWire's expected/confirmed lineups for today with ESPN ids ('lineups'), live or from the latest
-    snapshot; empty (with the usual columns) when there's neither."""
-    try:
-        from lineup_fetcher import fetch_lineups
-        df = pd.DataFrame(fetch_lineups())
-        live, fetched_at, error = True, datetime.now(timezone.utc), None
-    except Exception as e:
-        log.warning("RotoWire lineups unavailable, using the last snapshot: %s", e)
-        df = _latest_snapshot('rotowire_lineups')
-        live, fetched_at, error = False, _snapshot_time('rotowire_lineups'), str(e)
-    df = pd.DataFrame(columns=LINEUP_COLUMNS) if df.empty else name_resolver().add_ids(df)
-    LAST_FETCH['rotowire'] = {'live': live, 'fetched_at': fetched_at, 'rows': len(df)}
-    return {'lineups': df, 'live': live, 'fetched_at': fetched_at, 'error': error}
+    """loaders.fetch_rotowire (live at most every 30 minutes, saved when it changed; the latest saved version
+    when RotoWire can't be read), noting for the freshness strip where the lineups came from."""
+    fetched = fetch_rotowire()
+    LAST_FETCH['rotowire'] = {'live': fetched['live'], 'fetched_at': fetched['fetched_at'],
+                              'rows': len(fetched['lineups'])}
+    return fetched
 
 
 def props() -> pd.DataFrame:
@@ -73,7 +58,7 @@ def clear_live():
     """Re-read the snapshots and fetch RotoWire again on the next page load. Superbet's last on-demand fetch is
     kept: the pages use it until a newer snapshot exists."""
     reload_superbet_snapshot()
-    rotowire.clear()
+    clear_rotowire()
     snapshot_history.clear()
 
 

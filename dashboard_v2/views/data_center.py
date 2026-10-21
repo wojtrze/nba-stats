@@ -10,8 +10,8 @@ from core.ui import page_header
 from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS, SEASONS
 from espn_scraper.storage import snapshot_file
 from glossary import column_config
-from loaders import (SUPERBET_COOLDOWN, fetch_superbet, games, player_logs, season_label, season_status,
-                     superbet_error, superbet_wait)
+from loaders import (SUPERBET_COOLDOWN, clear_rotowire, fetch_superbet, games, player_logs, season_label,
+                     season_status, snapshot_history, superbet_error, superbet_wait)
 
 page_header("Data center", "Fetch fresh stats, odds and lineups, and check that the stored data is complete. "
                            "Every other page reads what's here.")
@@ -94,6 +94,23 @@ def superbet_caption():
                    f"({HOW[r['job']]}) failed: {r['summary']}")
 
 
+def lineups_caption():
+    """The last saved RotoWire version (what a restart would show) and, when the run log has it, what changed."""
+    history = snapshot_history('rotowire_lineups')
+    if history.empty:
+        st.caption("No RotoWire lineups saved yet.")
+        return
+    newest = history['fetched_at'].max()
+    last_saved = history[history['fetched_at'] == newest]
+    when = pd.to_datetime(newest, utc=True)
+    days = ', '.join(f"{pd.Timestamp(d):%b %d}" for d in sorted(last_saved['game_date'].astype(str).unique()))
+    st.caption(f"✅ Last saved lineups {when.tz_convert(freshness.PL):%a %d %b %H:%M}: {len(last_saved)} players "
+               f"({days}). Every fetch that changed something is saved.")
+    run = last.get('lineups')
+    if run is not None and abs((pd.to_datetime(run['started_at'], utc=True) - when).total_seconds()) < 180:
+        st.caption(run['summary'].replace('saved ', 'Saved ', 1))
+
+
 stats_col, odds_col, lineup_col = st.columns(3)
 
 # --- ESPN stats ---
@@ -171,16 +188,17 @@ with lineup_col.container(border=True):
         st.warning(f"RotoWire couldn't be read, showing the last snapshot. {rw['error'][:150]}")
     b = st.columns(2)
     if b[0].button("Fetch live", key='fetch_rotowire', width='stretch',
-                   help="Read RotoWire's lineups page again (not saved)"):
-        rotowire.clear()
+                   help="Read RotoWire's lineups page again; saved when something changed"):
+        clear_rotowire()
         st.rerun()
     b[1].button("Snapshot for tomorrow", key='snap_tomorrow', width='stretch', on_click=queue, args=('snapshot',),
                 disabled=superbet_wait() is not None,
                 kwargs={'tomorrow': True},
                 help="python daily_snapshot.py --tomorrow: RotoWire's lineups for tomorrow's games")
+    lineups_caption()
 
-st.caption("RotoWire's lineups are kept for 30 minutes, then fetched again when a page needs them. To run the "
-           "morning routine automatically, see the scheduled tasks in the README.")
+st.caption("RotoWire's lineups are kept for 30 minutes, then fetched again when a page needs them, and saved "
+           "whenever they changed. To run the morning routine automatically, see the scheduled tasks in the README.")
 if st.button("Reload snapshots and lineups", help="Re-read the saved snapshots and fetch RotoWire again (doesn't "
                                                    "contact Superbet)"):
     clear_live()

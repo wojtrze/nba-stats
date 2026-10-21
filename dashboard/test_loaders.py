@@ -21,7 +21,7 @@ def data_dir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(lineup_fetcher, 'fetch_lineups', lambda *a: (_ for _ in ()).throw(OSError("offline")))
     loaders._superbet_store().clear()
-    loaders.rotowire_lineups.clear()
+    loaders.clear_rotowire()
     yield tmp_path
     loaders._superbet_store().clear()
 
@@ -61,3 +61,62 @@ def test_a_failed_fetch_saves_nothing(data_dir, monkeypatch):
     assert _saved('superbet_props').empty
     run = pd.read_csv(loaders.RUN_LOG).iloc[-1]
     assert (run['job'], run['exit_code'], run['summary']) == ('fetch', 1, "failed: 403 Forbidden")
+
+
+# --- RotoWire: saved whenever it changed ---
+
+def _player(name, team='bos', role='starter', pct=None, injury=None, status='expected', day='2026-10-22'):
+    return {'game_date': day, 'tip_et': '7:30 PM ET', 'away': 'ny', 'home': 'bos', 'team': team,
+            'side': 'home' if team == 'bos' else 'away', 'lineup_status': status, 'role': role, 'pos': 'G',
+            'name': name, 'rotowire_id': 1, 'play_pct': pct, 'injury': injury}
+
+
+PAGE = [_player('Jayson Tatum'), _player('Jaylen Brown', role='may_not_play', pct=50, injury='Ques'),
+        _player('Jalen Brunson', team='ny')]
+
+
+def test_lineup_changes_in_words():
+    from daily_snapshot import lineup_changes
+    old = pd.DataFrame(PAGE)
+    new = pd.DataFrame([_player('Jayson Tatum', status='confirmed'),
+                        _player('Jaylen Brown', role='may_not_play', pct=0, injury='Out', status='confirmed'),
+                        _player('Mikal Bridges', team='ny', role='may_not_play', pct=25, injury='Doubt')])
+    assert lineup_changes(old, new) == ["BOS lineup confirmed", "Jaylen Brown (BOS): Ques 50% → Out 0%",
+                                        "new: Mikal Bridges (NY, Doubt 25%)", "no longer listed: Jalen Brunson (NY)"]
+    assert lineup_changes(old, pd.DataFrame(PAGE)) == []
+
+
+def test_lineups_saved_only_when_changed(data_dir):
+    from daily_snapshot import save_lineups_if_changed
+    first = save_lineups_if_changed(pd.DataFrame(PAGE), '2026-10-22T10:00:00Z')
+    assert first == "saved 3 players for Oct 22 (first fetch of the day)"
+    assert save_lineups_if_changed(pd.DataFrame(PAGE), '2026-10-22T10:30:00Z') == ''        # identical page
+    changed = [*PAGE[:1], _player('Jaylen Brown', role='may_not_play', pct=0, injury='Out'), PAGE[2]]
+    assert save_lineups_if_changed(pd.DataFrame(changed), '2026-10-22T11:00:00Z') == \
+        "saved 3 players for Oct 22: 1 change – Jaylen Brown (BOS): Ques 50% → Out 0%"
+    tomorrow = [_player('Jayson Tatum', day='2026-10-23')]                                   # another page
+    assert save_lineups_if_changed(pd.DataFrame(tomorrow), '2026-10-22T11:05:00Z').endswith("(first fetch of the day)")
+    saved = _saved('rotowire_lineups')
+    assert saved['fetched_at'].unique().tolist() == ['2026-10-22T10:00:00Z', '2026-10-22T11:00:00Z',
+                                                     '2026-10-22T11:05:00Z']
+
+
+def test_the_shared_fetch_saves_and_logs(data_dir, monkeypatch):
+    class Resolver:
+        def add_ids(self, df, **kw):
+            return df.assign(player_id_ESPN=None)
+    monkeypatch.setattr(loaders, 'name_resolver', lambda: Resolver())
+    monkeypatch.setattr(lineup_fetcher, 'fetch_lineups', lambda *a: PAGE)
+    first = loaders.fetch_rotowire()
+    assert first['live'] and first['saved'].endswith("(first fetch of the day)") and len(first['lineups']) == 3
+    loaders.clear_rotowire()
+    again = loaders.fetch_rotowire()                         # the same page half an hour later
+    assert again['saved'] == '' and _saved('rotowire_lineups')['fetched_at'].nunique() == 1
+    runs = pd.read_csv(loaders.RUN_LOG)
+    assert runs['job'].tolist() == ['lineups']               # only the save is logged
+
+
+def test_failed_lineups_fetch_saves_nothing(data_dir):
+    out = loaders.fetch_rotowire()                           # the fixture's RotoWire is offline
+    assert not out['live'] and out['error'] == "offline" and out['lineups'].empty
+    assert _saved('rotowire_lineups').empty and not os.path.exists(loaders.RUN_LOG)

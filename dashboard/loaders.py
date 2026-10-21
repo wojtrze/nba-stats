@@ -214,18 +214,46 @@ LINEUP_COLUMNS = ['game_date', 'tip_et', 'away', 'home', 'team', 'side', 'lineup
 
 
 @st.cache_data(ttl=1800, show_spinner="Checking RotoWire lineups...")
-def rotowire_lineups() -> pd.DataFrame:
-    """RotoWire's expected/confirmed lineups for today with ESPN player ids. Falls back to the latest snapshot
-    if the page can't be read; empty if there's none."""
+def fetch_rotowire() -> Dict:
+    """RotoWire's expected/confirmed lineups for today, fetched live at most every 30 minutes for both
+    dashboards. A live fetch is saved to rotowire_lineups.csv when it's the day's first or something changed
+    (daily_snapshot.save_lineups_if_changed), and logged. When the page can't be read, the latest saved version
+    is used. Returns 'lineups' (with ESPN ids; empty with the usual columns when there's nothing), 'live',
+    'fetched_at', 'error' and 'saved' (what was saved, '' when nothing)."""
+    from daily_snapshot import save_lineups_if_changed
+    started = datetime.now(timezone.utc)
+    saved, error = '', None
     try:
         from lineup_fetcher import fetch_lineups
-        df = pd.DataFrame(fetch_lineups())
+        raw = pd.DataFrame(fetch_lineups())
+        live, fetched_at = True, started
     except Exception as e:
         log.warning("RotoWire lineups unavailable, using the last snapshot: %s", e)
-        df = _latest_snapshot('rotowire_lineups')
-    if df.empty:
-        return pd.DataFrame(columns=LINEUP_COLUMNS)
-    return name_resolver().add_ids(df)
+        raw, live, error = _latest_snapshot('rotowire_lineups'), False, str(e)
+        history = snapshot_history('rotowire_lineups')
+        fetched_at = pd.to_datetime(history['fetched_at'].max(), utc=True).to_pydatetime() if len(history) else None
+    if live and not raw.empty:
+        try:
+            saved = save_lineups_if_changed(raw, started.strftime('%Y-%m-%dT%H:%M:%SZ'))
+        except Exception as e:
+            log.error("RotoWire's lineups couldn't be saved: %s", e)
+            saved = f"couldn't be saved: {e}"
+        if saved:
+            log_run(started, 'lineups', "RotoWire lineups (dashboard)", 1 if saved.startswith("couldn't") else 0,
+                    (datetime.now(timezone.utc) - started).total_seconds(), saved[:300])
+            snapshot_history.clear()
+    lineups = pd.DataFrame(columns=LINEUP_COLUMNS) if raw.empty else name_resolver().add_ids(raw)
+    return {'lineups': lineups, 'live': live, 'fetched_at': fetched_at, 'error': error, 'saved': saved}
+
+
+def rotowire_lineups() -> pd.DataFrame:
+    """RotoWire's lineups for today with ESPN player ids (fetch_rotowire)."""
+    return fetch_rotowire()['lineups']
+
+
+def clear_rotowire():
+    """Fetch RotoWire again on the next page load."""
+    fetch_rotowire.clear()
 
 
 def unlikely_to_play() -> pd.DataFrame:

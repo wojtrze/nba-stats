@@ -5,7 +5,7 @@ import sys
 import pandas as pd
 import streamlit as st
 
-from loaders import (SUPERBET_COOLDOWN, games, name_resolver, note_superbet_contact, player_logs,
+from loaders import (SUPERBET_COOLDOWN, clear_rotowire, games, name_resolver, note_superbet_contact, player_logs,
                      reload_superbet_snapshot, rotowire_lineups, season_label, season_status, snapshot_history,
                      superbet_wait, today_props)
 from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS
@@ -52,7 +52,7 @@ if st.button("Take snapshot now", disabled=wait is not None,
         result = subprocess.run([sys.executable, "daily_snapshot.py"], capture_output=True, text=True)
     st.code((result.stdout + result.stderr)[-5000:] or "(no output)")
     reload_superbet_snapshot()
-    rotowire_lineups.clear()
+    clear_rotowire()
     snapshot_history.clear()
 
 unmatched = []
