@@ -1,3 +1,6 @@
 started_at,job,command,exit_code,seconds,summary
 2026-10-21T11:11:47Z,stats,python -m espn_scraper,0,2.5,"2026/27: added 0 games, 0 player lines. 11 games not final yet."
 2026-10-21T11:11:53Z,snapshot,python daily_snapshot.py,0,28.2,superbet_game_odds: 1698 rows
+2026-10-21T22:14:26Z,lineups,RotoWire lineups (dashboard),0,12.9,saved 169 players for Oct 21: 1 change – no longer listed: Leonard Miller (CHI)
+2026-10-21T22:47:59Z,lineups,RotoWire lineups (dashboard),0,17.1,saved 169 players for Oct 21: 4 changes – ATL lineup confirmed; ORL lineup confirmed; MIL lineup confirmed; …and 1 more
+2026-10-21T22:56:37Z,fetch,Fetch from Superbet (dashboard),0,27.6,"saved 2,408 player lines and 1,696 game odds (13 games)"
