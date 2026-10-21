@@ -2,9 +2,14 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from components import reasons_panel, slip_button
 from glossary import column_config, source_legend, tinted
-from loaders import filtered_logs, rotowire_lineups, sidebar_filters, superbet_offers, today_props
-from metrics import STATS, absence_adjustments, hit_rates, line_percentile, percentile_band, rotowire_team
+from loaders import (filtered_logs, games as all_games, player_logs, rotowire_lineups, sidebar_filters, snapshot_history,
+                     superbet_offers, today_game_odds, today_props)
+from metrics import STATS, absence_adjustments, hit_rates, percentile_band, rotowire_team
+from models import price_props
+from reasons import prop_reasons
+from tracking import prop_movement
 
 st.title("Today's props")
 seasons, season_types = sidebar_filters()
@@ -14,76 +19,80 @@ top = st.columns([1, 4])
 if top[0].button("Refresh offers"):
     superbet_offers.clear()
     rotowire_lineups.clear()
+    snapshot_history.clear()
 props = today_props()
 lineups = rotowire_lineups()
-by_player = {pid: g for pid, g in logs.sort_values('Date').groupby('player_id_ESPN')}
-current_team = logs.sort_values('Date').groupby('player_id_ESPN')['team'].last()
+by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
+position = logs.groupby('player_id_ESPN')['position_group'].last()
+names = logs.groupby('player_id_ESPN')['player_display_name'].last()
 
 
 @st.cache_data(show_spinner="Adjusting for tonight's absences...")
-def cached_adjustments(seasons, season_types, players, out):
-    part = filtered_logs(list(seasons), list(season_types))
-    return absence_adjustments(part[part['player_id_ESPN'].isin(set(players) | set(out))], players, out, STATS)
+def cached_adjustments(part, players, out, stats):
+    return absence_adjustments(part, players, out, stats)
 
 
-def lineup_adjustments(table: pd.DataFrame) -> pd.Series:
-    """Each line's stat change from RotoWire's out players on the player's team (0 when nobody is out)."""
-    change = pd.Series(0.0, index=table.index)
-    for team, rows in table.groupby('team'):
-        out = rotowire_team(lineups, team)['out']
-        players = tuple(sorted(p for p in rows['player_id'].dropna().unique() if p not in out))
-        if not out or not players:
-            continue
-        adj = cached_adjustments(tuple(seasons), tuple(season_types), players, tuple(sorted(out)))
-        for i, row in rows.iterrows():
-            if row['player_id'] in adj.index and row['bet_type'] in adj.columns:
-                change[i] = adj.loc[row['player_id'], row['bet_type']]
-    return change
+@st.cache_data(ttl=600, show_spinner="Pricing today's lines...")
+def priced(seasons, season_types, props, lineups, odds) -> pd.DataFrame:
+    g = all_games()
+    g = g[g['season_id'].isin(seasons) & g['season_type'].isin(season_types)]
+    table = price_props(props, filtered_logs(list(seasons), list(season_types)), lineups, odds, g,
+                        adjust=cached_adjustments)
+    return prop_movement(snapshot_history('superbet_props'), table)
 
 
-def rotowire_status(player_id, team) -> str:
-    """starter / Out 0% / Ques 50% / bench, from RotoWire; empty when RotoWire doesn't list the game."""
-    if team not in set(lineups['team']):
-        return ''
+def rotowire_entry(player_id) -> dict:
     listed = lineups[lineups['player_id_ESPN'] == player_id]
-    if listed.empty:
-        return 'bench'
-    p = listed.iloc[0]
-    if p['role'] == 'starter':
-        return 'starter' + (' ✔' if p['lineup_status'] == 'confirmed' else '')
-    return f"{p['injury'] or 'may not play'} {p['play_pct']:.0f}%"
+    return listed.iloc[0].to_dict() if len(listed) else {}
 
 
-def assess(row) -> pd.Series:
-    """Compare one line with the player's game logs (the same idea as betfinder.check_bet, with more numbers)."""
-    games = by_player.get(row['player_id_ESPN'], logs.iloc[0:0])
-    values = games[row['bet_type']] if len(games) else pd.Series(dtype=float)
-    season, last10 = hit_rates(values, row['line']), hit_rates(values.tail(10), row['line'])
-    p30, p70 = percentile_band(values) if len(values) else (np.nan, np.nan)
-    out = {'player_id': row['player_id_ESPN'], 'team': current_team.get(row['player_id_ESPN']),
-           'games': len(values), 'avg': values.mean(), 'avg L5': values.tail(5).mean(),
-           'over %': 100 * season['over'], 'under %': 100 * season['under'],
-           'over % L10': 100 * last10['over'], 'under % L10': 100 * last10['under'],
-           'percentile': line_percentile(values, row['line']), 'p30': p30, 'p70': p70,
-           'min L5': games['MIN'].tail(5).mean() if len(games) else np.nan}
-    # edge: hit rate minus the probability implied by the odds, for the better side
-    edges = {'Over': out['over %'] - 100 / row['over_odds'] if pd.notna(row.get('over_odds')) else np.nan,
-             'Under': out['under %'] - 100 / row['under_odds'] if pd.notna(row.get('under_odds')) else np.nan}
-    best = max(edges, key=lambda k: -np.inf if pd.isna(edges[k]) else edges[k])
-    out['best side'], out['edge pp'] = (best, edges[best]) if pd.notna(edges[best]) else (None, np.nan)
-    return pd.Series(out)
+PROP_TIPS = {'model %': "Chance the pick wins: the hit rate pulled toward the market's margin-free chance (worth "
+                        "10 games), averaged with the chance from proj avg and the player's usual spread of results"}
+
+
+def prop_panel(row):
+    """The reasons for and against the selected line, and a link to the full Player page."""
+    games = by_player.get(row['player_id'], logs.iloc[0:0])
+    every = player_logs()
+    history = every[(every['player_id_ESPN'] == row['player_id']) & every['season_type'].isin(season_types)
+                    & (every['OPP'].str.lower() == (row['opp'] or ''))]
+    entry = rotowire_entry(row['player_id'])
+    tip = pd.to_datetime(row['start_time']).tz_convert('US/Eastern').tz_localize(None).normalize()
+    rest = (tip - games['Date'].iloc[-1]).days if len(games) else np.nan
+    starter = row['RotoWire'].startswith('starter') if row['RotoWire'] else \
+        bool(len(games) and games['starter'].tail(10).mean() > 0.5)
+    bet = {'name': row['name'], 'stat': row['bet_type'], 'side': row['best side'], 'line': row['line'],
+           'odds': row['pick odds'], 'model %': row['model %'], 'break-even %': row['break-even %'],
+           'edge pp': row['edge pp'], 'edge low': row['edge low'], 'avg': row['avg'], 'proj avg': row['proj avg'],
+           'lineup adj': row['lineup adj'], 'status': row['RotoWire'], 'play_pct': entry.get('play_pct', np.nan),
+           'out_names': [str(names.get(p, p)) for p in rotowire_team(lineups, row['team'])['out']],
+           'home': row['is_home'], 'rest_days': rest, 'opp': row['opp'] or '', 'team': row['team'] or '',
+           'matchup': row['matchup_info'], 'position': position.get(row['player_id']), 'implied': row['implied'],
+           'team_pts': row['team_pts'], 'spread': row['spread'], 'starter': starter,
+           'line_move': row.get('line move', np.nan)}
+    if bet['side'] is None:
+        st.info("Superbet has no odds for this line.")
+        return
+    reasons_panel(f"{row['name']} {bet['side']} {row['line']:g} {row['bet_type']} @ {row['pick odds']:.2f}",
+                  prop_reasons(bet, games, history), row['edge pp'], row['edge low'], games, row['bet_type'],
+                  row['line'])
+    b = st.columns([1, 1, 4])
+    slip_button({'kind': 'prop', 'event_id': row['event_id'], 'start_time': row['start_time'], 'home': row['home'],
+                 'away': row['away'], 'name': row['name'], 'name_ESPN': row['name_ESPN'],
+                 'player_id_ESPN': row['player_id'], 'bet_type': row['bet_type'], 'side': row['best side'],
+                 'line': row['line'], 'odds': row['pick odds'], 'model_pct': row['model %'], 'edge_pp': row['edge pp'],
+                 'edge_low': row['edge low']}, key='slip_prop', where=b[0])
+    if b[1].button("Open player page", key='open_player'):
+        st.session_state['player_preset'] = {'player_id': row['player_id'], 'stat': row['bet_type'],
+                                             'line': row['line']}
+        st.switch_page("views/player.py")
 
 
 if props.empty:
     st.info("Superbet has no NBA player props right now. During preseason it only offers game markets; "
             "props usually appear from the first regular-season games. Use the line checker below meanwhile.")
 else:
-    table = pd.concat([props.drop(columns='player_id_ESPN'), props.apply(assess, axis=1)], axis=1)
-    table['game'] = table['away'].str.upper() + ' @ ' + table['home'].str.upper()
-    table['RotoWire'] = [rotowire_status(p, t) for p, t in zip(table['player_id'], table['team'])]
-    table['lineup adj'] = lineup_adjustments(table)
-    table['adj avg'] = table['avg'] + table['lineup adj']
-    table['in band'] = (table['p30'] <= table['line']) & (table['line'] <= table['p70'])
+    table = priced(tuple(seasons), tuple(season_types), props, lineups, today_game_odds())
 
     f = st.columns(5)
     game_filter = f[0].multiselect("Games", sorted(table['game'].unique()))
@@ -109,30 +118,28 @@ else:
     shown = shown.sort_values('edge pp', ascending=False).reset_index(drop=True)
 
     st.caption(f"{len(shown)} of {len(table)} lines, best edge first. Hover a column header for what it means. "
-               f"The edge is a hint, not a prediction: with few games it swings a lot. Click a row to open the player.")
+               f"🟢 = even the low end of the model's range beats the price; 🟡 = positive edge, but too little data "
+               f"to be sure. Click a row for the reasons to bet or pass.")
     st.caption(source_legend())
     # who/what -> the decision -> tonight's lineup -> the player's numbers -> both sides' odds
     columns = ['name', 'game', 'bet_type', 'line',
-               'best side', 'signal', 'edge pp', 'pick odds',
-               'RotoWire',
-               'adj avg', 'avg', 'avg L5', 'percentile', 'in band',
+               'best side', 'signal', 'edge pp', 'edge low', 'pick odds', 'model %', 'break-even %', 'market %',
+               'RotoWire', 'line move', 'open line',
+               'proj avg', 'adj avg', 'avg', 'avg L5', 'matchup', 'spread', 'game total', 'percentile', 'in band',
                'over %', 'under %', 'over % L10', 'under % L10', 'games', 'min L5',
                'over_odds', 'under_odds']
-    shown = shown.assign(signal=np.select([shown['edge pp'] >= 10, shown['edge pp'] <= -10], ['🟢', '🔴'], ''),
-                         **{'pick odds': np.where(shown['best side'] == 'Over', shown['over_odds'],
-                                                  np.where(shown['best side'] == 'Under', shown['under_odds'], np.nan))})
     formats = {'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'over %': '%.0f',
                'under %': '%.0f', 'over % L10': '%.0f', 'under % L10': '%.0f', 'percentile': '%.0f',
-               'over_odds': '%.2f', 'under_odds': '%.2f', 'pick odds': '%.2f', 'edge pp': '%+.1f', 'games': '%d',
-               'line': '%g'}
+               'over_odds': '%.2f', 'under_odds': '%.2f', 'pick odds': '%.2f', 'edge pp': '%+.1f', 'edge low': '%+.1f',
+               'model %': '%.0f', 'break-even %': '%.0f', 'market %': '%.0f', 'games': '%d', 'proj avg': '%.1f',
+               'spread': '%+g', 'line move': '%+g', 'open line': '%g', 'game total': '%g', 'line': '%g'}
     event = st.dataframe(tinted(shown[columns], formats), hide_index=True, width='stretch', height=600,
-                         column_config=column_config(columns, formats), on_select='rerun',
-                         selection_mode='single-row')
+                         column_config=column_config(columns, formats, tips=PROP_TIPS), on_select='rerun',
+                         selection_mode='single-row', key='props_table')
     if event.selection.rows:
         row = shown.iloc[event.selection.rows[0]]
         if row['player_id'] is not None and pd.notna(row['player_id']):
-            st.session_state['player_preset'] = {'player_id': row['player_id'], 'stat': row['bet_type'], 'line': row['line']}
-            st.switch_page("views/player.py")
+            prop_panel(row)
         else:
             st.warning(f"No game logs for {row['name']}: the Superbet name didn't match an ESPN player. "
                        f"Add it to OVERRIDES in name_resolver.py.")

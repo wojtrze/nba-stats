@@ -4,7 +4,7 @@ import streamlit as st
 from glossary import STAT_HELP, column_config, source_legend
 from loaders import filtered_logs, games, sidebar_filters, today_props
 from espn_scraper import NBA_TEAM_ABBRS, NBA_TEAM_NAMES
-from metrics import allowed_by_position, team_ratings
+from metrics import allowed_by_position, matchup_verdict, team_ratings
 
 st.title("Teams & matchups")
 st.caption(source_legend(['stats']) + " — every number on this page is calculated from the scraped "
@@ -54,17 +54,6 @@ stat_name = 'PRA' if stat == 'ARP' else stat
 rank = allowed[['G', 'F', 'C']].rank(ascending=False, method='min').astype(int)   # 1 = allows the most
 name = lambda team: NBA_TEAM_NAMES.get(team, team.upper())
 
-
-def verdict(diff: float, average: float):
-    """(matchup word, colour): soft / tough when the defense allows at least 5% more / less than the league
-    average."""
-    if diff >= 0.05 * average:
-        return 'soft', 'green'
-    if diff <= -0.05 * average:
-        return 'tough', 'red'
-    return 'average', 'gray'
-
-
 if away == home:
     st.warning("Pick two different teams.")
 cols = st.columns(2)
@@ -75,7 +64,7 @@ for col, attack, defense in zip(cols, [away, home], [home, away]):
         for group in ['G', 'F', 'C']:
             value, average = allowed.loc[defense, group], league[group]
             diff = value - average
-            word, colour = verdict(diff, average)
+            word, colour = matchup_verdict(diff, average)
             position = POSITIONS[group]
             with st.container(border=True):
                 st.markdown(f"**{name(attack)} {position}** · :{colour}[**{word} matchup**]")

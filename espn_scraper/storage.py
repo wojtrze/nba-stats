@@ -84,6 +84,14 @@ def load_player_gamelogs(seasons: Iterable[int]) -> pd.DataFrame:
     return pd.concat([f for f in frames if not f.empty], ignore_index=True)
 
 
+def load_games(seasons: Iterable[int]) -> pd.DataFrame:
+    """games.csv of several seasons in one DataFrame, with `date` parsed."""
+    frames = [_read(games_file(season)) for season in seasons]
+    df = pd.concat([f for f in frames if not f.empty], ignore_index=True)
+    df['date'] = pd.to_datetime(df['date'])
+    return df
+
+
 def wipe(season: int):
     if os.path.isdir(data_dir(season)):
         shutil.rmtree(data_dir(season))

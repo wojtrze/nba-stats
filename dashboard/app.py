@@ -21,7 +21,12 @@ pages = [
     st.Page(os.path.join(DASHBOARD, "views", "player.py"), title="Player", icon="👤", url_path="player"),
     st.Page(os.path.join(DASHBOARD, "views", "lineup.py"), title="Lineup lab", icon="🧩", url_path="lineup"),
     st.Page(os.path.join(DASHBOARD, "views", "teams.py"), title="Teams & matchups", icon="🛡️", url_path="teams"),
+    st.Page(os.path.join(DASHBOARD, "views", "results.py"), title="Bet slip & results", icon="🧾", url_path="results"),
     st.Page(os.path.join(DASHBOARD, "views", "backtest.py"), title="Rule backtest", icon="📈", url_path="backtest"),
     st.Page(os.path.join(DASHBOARD, "views", "data_status.py"), title="Data status", icon="🗂️", url_path="data"),
 ]
-st.navigation(pages).run()
+navigation = st.navigation(pages)
+slip = st.session_state.get('slip', [])
+if slip:
+    st.sidebar.page_link(pages[5], label=f"Bet slip: {len(slip)} bet{'s' * (len(slip) > 1)}", icon="🧾")
+navigation.run()

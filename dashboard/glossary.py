@@ -44,10 +44,28 @@ HELP = STAT_HELP | {
     'best side': "The side (Over/Under) with the bigger edge: the one to consider betting",
     'pick odds': "Superbet's odds for the picked side",
     'source': "Where the name comes from", 
-    'edge pp': "Picked side's hit rate minus the chance implied by its Superbet odds (1/odds), in percentage "
-               "points. +10 = it hit 10 pp more often than the odds suggest. Small samples swing a lot.",
-    'signal': "🟢 edge of +10 pp or more, 🔴 −10 pp or less",
+    'edge pp': "model % minus break-even %, in percentage points: how much more often the pick should win than "
+               "the price needs. +5 = wins 5 pp more often than needed to break even.",
+    'edge low': "The edge at the low end of the model's 95% range. Above 0 = positive even if the player's "
+                "results so far were on the lucky side; few games make the range wide.",
+    'break-even %': "Chance the pick must win to break even at Superbet's odds: 100 / odds (margin included)",
+    'market %': "Superbet's chance for the pick with the bookmaker's margin removed, so Over + Under = 100%",
+    'signal': "🟢 the edge stays positive even at the low end of the range; 🟡 positive edge, but the range "
+              "reaches below break-even (too little data to be sure)",
     'min L5': "Average minutes over the last 5 games: falling minutes are a warning sign for Overs",
+    'open line': "The line when daily_snapshot.py first saw it",
+    'line move': "Current line minus the opening line: + = the line went up (the market expects more), − = down. "
+                 "Empty without an earlier snapshot.",
+    'proj avg': "adj avg × the game factors: Superbet's implied team total vs the team's usual points, and what "
+                "the opponent allows to the player's position vs the league. Each counts half and at most ±8%.",
+    'matchup': "soft / tough: the opponent allows at least 5% more / less of this stat to the player's position "
+               "than the average NBA defense",
+    'spread': "The player's team handicap on Superbet's main line: −8.5 = favoured by 8.5. 10+ either way = "
+              "blowout risk, when starters sit the fourth quarter.",
+    'game total': "Superbet's main total points line for the game",
+    'odds move': "Current odds minus the first snapshot's for the same outcome and line: falling odds = money "
+                 "came in on it",
+    'line moves': "Superbet's main home handicap and total, first snapshot → now",
 
     # Games
     'start (PL)': "Tip-off, Polish time", 'proj score': "Projected score, away – home",
@@ -143,6 +161,9 @@ SOURCES = {
 COLUMN_SOURCE = {
     'bet_type': 'superbet', 'line': 'superbet', 'over_odds': 'superbet', 'under_odds': 'superbet',
     'pick odds': 'superbet', 'odds': 'superbet', 'implied %': 'superbet', 'start (PL)': 'superbet',
+    'market %': 'superbet', 'break-even %': 'superbet', 'edge low': 'stats', 'open line': 'superbet',
+    'line move': 'superbet', 'spread': 'superbet', 'game total': 'superbet', 'odds move': 'superbet',
+    'line moves': 'superbet', 'proj avg': 'stats', 'matchup': 'stats',
     'RotoWire': 'rotowire', 'out': 'rotowire',
     'best side': 'stats', 'signal': 'stats', 'edge pp': 'stats', 'games': 'stats', 'avg': 'stats',
     'adj avg': 'stats', 'avg L5': 'stats', 'over %': 'stats', 'under %': 'stats', 'over % L10': 'stats',

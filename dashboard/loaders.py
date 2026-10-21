@@ -5,11 +5,11 @@ import os
 import pandas as pd
 import streamlit as st
 
-from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS, SEASONS
-from espn_scraper.storage import checked_through, games_file, load_player_gamelogs, snapshot_file
+from espn_scraper import CURRENT_SEASON, SEASONS
+from espn_scraper.storage import checked_through, load_games, load_player_gamelogs, snapshot_file
 from name_resolver import NameResolver
 
-from metrics import POSITION_GROUPS, add_combined_stats
+from models import DEFAULT_SEASON_TYPES, prepare_logs
 
 log = logging.getLogger(__name__)
 
@@ -20,23 +20,12 @@ def season_label(season: int) -> str:
 @st.cache_data(show_spinner="Loading game logs...")
 def player_logs() -> pd.DataFrame:
     """All stored seasons' player game logs, NBA teams only, sorted by date, with derived columns."""
-    logs = load_player_gamelogs(sorted(SEASONS))
-    logs = logs[logs['team'].isin(NBA_TEAM_ABBRS)].copy()
-    logs['Date'] = pd.to_datetime(logs['Date'])
-    logs = add_combined_stats(logs).sort_values(['Date', 'game_id']).reset_index(drop=True)
-    logs['position_group'] = logs['position'].map(POSITION_GROUPS)
-    logs['rest_days'] = logs.groupby('player_id_ESPN')['Date'].diff().dt.days
-    logs['game_label'] = logs['Date'].dt.strftime('%m-%d') + ' ' + logs['type'].map({'home': 'vs', 'away': '@'}) + \
-        ' ' + logs['OPP']
-    return logs
+    return prepare_logs(load_player_gamelogs(sorted(SEASONS)))
 
 
 @st.cache_data(show_spinner="Loading games...")
 def games() -> pd.DataFrame:
-    frames = [pd.read_csv(games_file(s), dtype={'game_id': str}) for s in sorted(SEASONS) if os.path.exists(games_file(s))]
-    df = pd.concat(frames, ignore_index=True)
-    df['date'] = pd.to_datetime(df['date'])
-    return df
+    return load_games(sorted(SEASONS))
 
 
 @st.cache_data(show_spinner="Loading assessed bets...")
@@ -59,6 +48,13 @@ def _latest_snapshot(name: str) -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.read_csv(path)
     return df[df['fetched_at'] == df['fetched_at'].max()].drop(columns='fetched_at')
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def snapshot_history(name: str) -> pd.DataFrame:
+    """Every fetch stored by daily_snapshot.py (empty if none), for line movement and settling bets."""
+    path = snapshot_file(CURRENT_SEASON, name)
+    return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame()
 
 
 @st.cache_data(ttl=600, show_spinner="Fetching today's Superbet offers...")
@@ -138,7 +134,7 @@ def sidebar_filters():
     st.sidebar.header("Filters")
     labels = {season_label(s): s for s in sorted(SEASONS, reverse=True)}
     _persistent("seasons", [season_label(CURRENT_SEASON)])
-    _persistent("season_types", ['pre', 'regular', 'playin', 'post'])
+    _persistent("season_types", DEFAULT_SEASON_TYPES)
     chosen = st.sidebar.multiselect("Seasons", list(labels), key="seasons", on_change=_remember, args=("seasons",))
     types = st.sidebar.multiselect("Game types", ['pre', 'regular', 'playin', 'post'], key="season_types",
                                    on_change=_remember, args=("season_types",),

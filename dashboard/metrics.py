@@ -62,6 +62,46 @@ def player_summary(games: pd.DataFrame, stat: str, line: Optional[float] = None)
     return summary
 
 
+def no_vig(over_odds: float, under_odds: float):
+    """Chances of Over and Under implied by the odds with the bookmaker's margin removed, so they add up to 1.
+    With one side missing, the other is plain 1 / odds."""
+    over = 1 / over_odds if pd.notna(over_odds) else np.nan
+    under = 1 / under_odds if pd.notna(under_odds) else np.nan
+    if np.isnan(over) or np.isnan(under):
+        return over, under
+    return over / (over + under), under / (over + under)
+
+
+def prop_probability(values: pd.Series, line: float, side: str, market: float, mean: Optional[float] = None,
+                     prior_games: float = 10) -> Dict[str, float]:
+    """Chance that `side` ('Over' / 'Under') wins, with a 95% range.
+
+    - hit: the side's hit rate, pulled toward the margin-free market chance `market` as if the market were worth
+      `prior_games` games, so 4 of 5 doesn't read as 80%
+    - dist: the chance of a result beyond the line if results scatter normally around `mean` (default: the
+      player's average; pass adj avg to include tonight's absences) with the player's standard deviation,
+      pulled toward the market the same way (a 5-game standard deviation is no more reliable than a hit rate)
+    p is the average of the two (only hit with fewer than 3 games). The range is p ± 2 standard deviations of a
+    Beta posterior worth n + prior_games games: wide with few games, so a hot start doesn't look certain."""
+    market = 0.5 if pd.isna(market) else market
+    n = len(values)
+    weight = n / (n + prior_games)
+    hits = int((values > line).sum() if side == 'Over' else (values < line).sum())
+    shrunk = (hits + prior_games * market) / (n + prior_games)
+    dist = np.nan
+    if n >= 3:
+        sd = max(values.std(), 0.5)
+        centre = values.mean() if mean is None or pd.isna(mean) else mean
+        # a whole-number line pushes on the line itself: Over needs line + 1, Under line - 1
+        whole = float(line).is_integer()
+        cut = line + 0.5 if whole and side == 'Over' else line - 0.5 if whole else line
+        over = 1 - _normal_cdf((cut - centre) / sd)
+        dist = weight * (over if side == 'Over' else 1 - over) + (1 - weight) * market
+    p = shrunk if np.isnan(dist) else (shrunk + dist) / 2
+    half = 1.96 * math.sqrt(p * (1 - p) / (n + prior_games + 1))
+    return {'p': p, 'low': max(p - half, 0.0), 'high': min(p + half, 1.0), 'hit': shrunk, 'dist': dist}
+
+
 def splits(games: pd.DataFrame, stat: str, line: Optional[float] = None) -> pd.DataFrame:
     """Average (and hit rate over the line) by home/away, starter/bench, rest and minutes."""
     g = games.assign(
@@ -317,6 +357,55 @@ def allowed_by_position(logs: pd.DataFrame, stat: str) -> pd.DataFrame:
     table = per_game.groupby('defense').mean()
     table['games'] = per_game.groupby('defense').size()
     return table.reindex(columns=['G', 'F', 'C', 'games'])
+
+
+def matchup_verdict(diff: float, average: float):
+    """(matchup word, colour): soft / tough when the defense allows at least 5% more / less than the league
+    average."""
+    if diff >= 0.05 * average:
+        return 'soft', 'green'
+    if diff <= -0.05 * average:
+        return 'tough', 'red'
+    return 'average', 'gray'
+
+
+def matchup(allowed: pd.DataFrame, defense: str, group: str) -> Dict:
+    """What `defense` allows to a position group vs the league average, from an allowed_by_position table:
+    value, average, diff, ratio, rank (1 = allows the most), word and colour. Empty when unknown."""
+    if defense not in allowed.index or group not in ('G', 'F', 'C') or pd.isna(allowed.loc[defense, group]):
+        return {}
+    value, average = allowed.loc[defense, group], allowed[group].mean()
+    word, colour = matchup_verdict(value - average, average)
+    rank = int(allowed[group].rank(ascending=False, method='min')[defense])
+    return {'value': value, 'average': average, 'diff': value - average, 'ratio': value / average if average else 1.0,
+            'rank': rank, 'teams': int(allowed[group].notna().sum()), 'word': word, 'colour': colour}
+
+
+# a game's expected points and its opponent's defense move a player's numbers, but much less than one to one
+# (minutes and role don't change), so each factor is damped and capped; the tracker shows whether it helps
+CONTEXT_DAMPING, CONTEXT_CAP = 0.5, 0.08
+
+
+def context_factor(ratio: float) -> float:
+    """1 + half of (ratio - 1), capped at ±8%."""
+    if pd.isna(ratio):
+        return 1.0
+    return 1 + float(np.clip(CONTEXT_DAMPING * (ratio - 1), -CONTEXT_CAP, CONTEXT_CAP))
+
+
+def game_lines(main: pd.DataFrame) -> pd.DataFrame:
+    """Per event: the home team's handicap and the total of Superbet's main lines (main_lines output), and both
+    implied team totals. A home handicap of −6.5 = home favoured by 6.5."""
+    rows = {}
+    for event_id, g in main.groupby('event_id'):
+        spread = g[(g['market'] == 'SPREAD') & (g['side'] == 'home')]['line']
+        total = g[g['market'] == 'TOTAL']['line']
+        rows[event_id] = {'home_spread': spread.iloc[0] if len(spread) else np.nan,
+                          'total': total.iloc[0] if len(total) else np.nan}
+    out = pd.DataFrame.from_dict(rows, orient='index', columns=['home_spread', 'total'])
+    out['home_implied'] = out['total'] / 2 - out['home_spread'] / 2
+    out['away_implied'] = out['total'] / 2 + out['home_spread'] / 2
+    return out
 
 
 # --- today's games: RotoWire lineups and a simple game model ---

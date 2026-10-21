@@ -7,7 +7,7 @@ import pytest
 
 from metrics import (absence_adjustments, absence_impact, add_combined_stats, allowed_by_position, blended_ratings,
                      game_projection, hit_rates, line_percentile, lineup_scenario, market_edges, model_probability,
-                     percentile_band, roi, rotowire_team, rule_stats, starting_lineup, stint_games, team_rotation,
+                     no_vig, percentile_band, prop_probability, roi, rotowire_team, rule_stats, starting_lineup, stint_games, team_rotation,
                      vote_pattern, wilson_interval, with_without, with_without_matrix)
 
 
@@ -39,6 +39,52 @@ def test_roi_and_wilson():
     assert roi(pd.Series([True, True]), pd.Series([1.5, 1.5])) == pytest.approx(0.5)
     low, high = wilson_interval(50, 100)
     assert low < 0.5 < high and high - low == pytest.approx(0.19, abs=0.01)
+
+
+def test_no_vig_removes_the_margin():
+    assert no_vig(1.9, 1.9) == pytest.approx((0.5, 0.5))
+    over, under = no_vig(1.5, 2.5)
+    assert over + under == pytest.approx(1) and over == pytest.approx(0.625)
+    over, under = no_vig(2.0, np.nan)
+    assert over == 0.5 and math.isnan(under)
+
+
+def test_prop_probability_without_games_is_the_market():
+    chance = prop_probability(pd.Series([], dtype=float), 20.5, 'Over', 0.55)
+    assert chance['p'] == pytest.approx(0.55)
+    # the range is the prior's alone: about ±0.29 for 10 games' worth
+    assert chance['low'] == pytest.approx(0.55 - 1.96 * math.sqrt(0.55 * 0.45 / 11))
+
+
+def test_prop_probability_range_narrows_with_games():
+    few = prop_probability(pd.Series([30.0, 10, 30, 10]), 20.5, 'Over', 0.5)
+    many = prop_probability(pd.Series([30.0, 10] * 30), 20.5, 'Over', 0.5)
+    assert many['high'] - many['low'] < few['high'] - few['low']
+
+
+def test_prop_probability_shrinks_small_samples():
+    values = pd.Series([30.0] * 10)
+    chance = prop_probability(values, 20.5, 'Over', 0.5, prior_games=10)
+    assert chance['hit'] == pytest.approx(0.75)        # (10 + 10 * 0.5) / 20, not 100%
+    assert chance['dist'] == pytest.approx(0.75)      # every game far above the line, shrunk like the hit rate
+    assert chance['low'] < chance['p'] < chance['high']
+    under = prop_probability(values, 20.5, 'Under', 0.5, prior_games=10)
+    assert under['hit'] == pytest.approx(0.25)
+
+
+def test_prop_probability_moves_with_the_adjusted_mean():
+    values = pd.Series([18.0, 22, 19, 21, 20, 23, 17])
+    usual = prop_probability(values, 20.5, 'Over', 0.5)
+    boosted = prop_probability(values, 20.5, 'Over', 0.5, mean=24)
+    assert boosted['p'] > usual['p'] and boosted['hit'] == usual['hit']
+
+
+def test_prop_probability_whole_line_pushes():
+    values = pd.Series([19.0, 20, 21, 20, 20])
+    over = prop_probability(values, 20, 'Over', 0.5)
+    under = prop_probability(values, 20, 'Under', 0.5)
+    assert over['dist'] == pytest.approx(under['dist'])  # symmetric around the line
+    assert over['dist'] + under['dist'] < 1             # the rest is the push
 
 
 def _logs():
