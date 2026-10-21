@@ -1,6 +1,7 @@
 """Cached data loading for the dashboard."""
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
@@ -58,6 +59,21 @@ def snapshot_history(name: str) -> pd.DataFrame:
     """Every fetch stored by daily_snapshot.py (empty if none), for line movement and settling bets."""
     path = snapshot_file(CURRENT_SEASON, name)
     return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame()
+
+
+# --- the run log: every scraper run and Superbet fetch started from a dashboard ---
+
+RUN_LOG = os.path.join('data', 'run_log.csv')
+RUN_LOG_COLUMNS = ['started_at', 'job', 'command', 'exit_code', 'seconds', 'summary']
+
+
+def log_run(started: datetime, job: str, command: str, code: int, seconds: float, summary: str):
+    """Append one run to data/run_log.csv. job: stats, snapshot or fetch; code 0 = success."""
+    row = pd.DataFrame([{'started_at': started.strftime('%Y-%m-%dT%H:%M:%SZ'), 'job': job, 'command': command,
+                         'exit_code': code, 'seconds': round(seconds, 1), 'summary': summary}],
+                       columns=RUN_LOG_COLUMNS)
+    os.makedirs(os.path.dirname(RUN_LOG), exist_ok=True)
+    row.to_csv(RUN_LOG, mode='a', header=not os.path.exists(RUN_LOG), index=False)
 
 
 # --- Superbet, on demand only ---
@@ -134,18 +150,27 @@ def fetch_superbet() -> Optional[str]:
         return f"Superbet was contacted less than {SUPERBET_COOLDOWN.seconds // 60} minutes ago"
     store = _superbet_store()
     note_superbet_contact()
+    started, t0 = datetime.now(timezone.utc), time.monotonic()
+    done = lambda code, summary: log_run(started, 'fetch', "Fetch from Superbet (dashboard)", code,
+                                         time.monotonic() - t0, summary)
     try:
         offers = todays_offers()
     except Exception as e:
         log.warning("Superbet fetch failed: %s", e)
         store['error'] = str(e)
+        done(1, f"failed: {e}"[:200])
         return store['error']
     try:
-        save_superbet(offers, rotowire_lineups(), datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+        counts = save_superbet(offers, rotowire_lineups(), started.strftime('%Y-%m-%dT%H:%M:%SZ'))
     except Exception as e:
         log.error("Superbet's offers were fetched but couldn't be saved: %s", e)
         store['error'] = f"fetched, but couldn't be saved: {e}"
+        done(1, store['error'][:200])
         return store['error']
+    games = len({o['event_id'] for o in offers['game_odds']} | {o['event_id'] for o in offers['props']})
+    plural = lambda n, word: f"{n:,} {word}{'s' * (n != 1)}"
+    done(0, f"saved {plural(counts['superbet_props'], 'player line')} and "
+            f"{plural(counts['superbet_game_odds'], 'game odd')} ({plural(games, 'game')})")
     store['error'] = None
     reload_superbet_snapshot()
     snapshot_history.clear()   # line movement and the results read every fetch

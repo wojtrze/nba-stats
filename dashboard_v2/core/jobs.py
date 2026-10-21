@@ -1,6 +1,7 @@
 """Running the scrapers from the Data center: each job is a subprocess whose output streams into the page, and
 every run is logged to data/run_log.csv."""
 import os
+import re
 import subprocess
 import sys
 import time
@@ -11,10 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from core.data import clear_live, clear_stats
-from loaders import note_superbet_contact
-
-RUN_LOG = os.path.join('data', 'run_log.csv')
-RUN_LOG_COLUMNS = ['started_at', 'job', 'command', 'exit_code', 'seconds', 'summary']
+from loaders import RUN_LOG, RUN_LOG_COLUMNS, log_run as append_run, note_superbet_contact
 
 
 def stats_command(season=None, since=None, until=None, game=None, rebuild=False) -> List[str]:
@@ -38,8 +36,12 @@ def snapshot_command(tomorrow: bool = False) -> List[str]:
 
 
 def summary_line(output: List[str]) -> str:
-    """The run's last meaningful line ("2026/27: added 7 games, ..." for the scraper)."""
+    """The run's last meaningful line ("2026/27: added 7 games, ..." for the scraper); for a snapshot every
+    "<file>: N rows" line it printed, joined ("rotowire_lineups: 176 rows, superbet_props: 2178 rows, ...")."""
     lines = [line.strip() for line in output if line.strip()]
+    counts = [line for line in lines if re.fullmatch(r'\w+: (\d+ rows|failed)', line)]
+    if counts:
+        return ', '.join(counts)[:200]
     return lines[-1][:200] if lines else ''
 
 
@@ -71,11 +73,7 @@ def run(job: str, cmd: List[str], label: str) -> int:
 
 
 def log_run(started: datetime, job: str, cmd: List[str], code: int, seconds: float, summary: str):
-    row = pd.DataFrame([{'started_at': started.strftime('%Y-%m-%dT%H:%M:%SZ'), 'job': job,
-                         'command': ' '.join(['python'] + cmd[1:]), 'exit_code': code, 'seconds': round(seconds, 1),
-                         'summary': summary}], columns=RUN_LOG_COLUMNS)
-    os.makedirs(os.path.dirname(RUN_LOG), exist_ok=True)
-    row.to_csv(RUN_LOG, mode='a', header=not os.path.exists(RUN_LOG), index=False)
+    append_run(started, job, ' '.join(['python'] + cmd[1:]), code, seconds, summary)
 
 
 def recent_runs(n: int = 15) -> pd.DataFrame:

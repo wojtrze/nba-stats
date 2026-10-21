@@ -38,6 +38,10 @@ def test_every_fetch_is_saved(data_dir, monkeypatch):
     assert len(props) == 1 and props['fetched_at'].nunique() == 1          # Over and Under in one row
     assert (props.loc[0, 'over_odds'], props.loc[0, 'under_odds']) == (1.9, 1.85)
     assert len(odds) == 2 and odds['fetched_at'].iloc[0] == props['fetched_at'].iloc[0]
+    run = pd.read_csv(loaders.RUN_LOG).iloc[-1]                          # the Data center's "last fetch"
+    assert (run['job'], run['exit_code']) == ('fetch', 0)
+    assert run['started_at'] == props['fetched_at'].iloc[0]
+    assert run['summary'] == "saved 1 player line and 2 game odds (1 game)"
 
 
 def test_cooldown_blocks_a_second_request(data_dir, monkeypatch):
@@ -55,3 +59,5 @@ def test_a_failed_fetch_saves_nothing(data_dir, monkeypatch):
     assert "403" in loaders.fetch_superbet()
     assert loaders.superbet_error() == "403 Forbidden"
     assert _saved('superbet_props').empty
+    run = pd.read_csv(loaders.RUN_LOG).iloc[-1]
+    assert (run['job'], run['exit_code'], run['summary']) == ('fetch', 1, "failed: 403 Forbidden")

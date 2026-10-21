@@ -40,7 +40,7 @@ Tools for NBA player-prop betting analysis. The project:
 | `data/<season>/superbet_props.csv` | Superbet player lines with over and under odds, one row per line and snapshot. |
 | `data/<season>/superbet_game_odds.csv` | Superbet game markets, every line offered, one row per outcome and snapshot. |
 | `data/<season>/my_bets.csv` | Bets saved from the dashboard's bet slip: what, at which odds, the stake, and the model's chance and edge at the time. |
-| `data/run_log.csv` | One row per scraper run started from dashboard v2's Data center: time, job, command, exit code, duration and the last line of its output. |
+| `data/run_log.csv` | One row per scraper run started from dashboard v2's Data center and per Superbet fetch from either dashboard: time, job (`stats`, `snapshot`, `fetch`), command, exit code, duration and a summary (for a fetch: what was saved, or why it failed). Scheduled runs aren't logged; the Superbet card shows the last saved fetch from the data itself. |
 
 Snapshots taken with this version also store the model's view of each line: `player_id_ESPN`, `pick`, `model_pct`, `edge_pp`, `edge_low` and `proj_avg` for props, `model_pct` and `edge_pp` for game outcomes. Older rows leave them empty.
 

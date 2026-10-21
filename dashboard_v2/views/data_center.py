@@ -61,12 +61,37 @@ status = freshness.overview(LAST_FETCH)
 last = jobs.last_runs()
 
 
-def last_run_caption(job: str):
-    run = last.get(job)
+def stats_run_caption():
+    """The last stats update started from the dashboard (scheduled runs aren't logged)."""
+    run = last.get('stats')
     if run:
         ok = "✅" if run['exit_code'] == 0 else "❌"
         when = pd.to_datetime(run['started_at'], utc=True).tz_convert(freshness.PL).strftime('%a %d %b %H:%M')
-        st.caption(f"{ok} Last run {when}: {run['summary'] or '(no output)'}")
+        st.caption(f"{ok} Last stats update from the dashboard {when}: {run['summary'] or '(no output)'}")
+
+
+HOW = {'fetch': "Fetch & save / Fetch from Superbet", 'snapshot': "snapshot run"}
+
+
+def superbet_caption():
+    """The last saved fetch: the same data the freshness strip and every page read, so they can't disagree. How
+    it was made comes from the run log when it's there (a scheduled snapshot or an older fetch isn't logged); a
+    failed attempt after it is shown too."""
+    offers = superbet()
+    when, s = offers['fetched_at'], offers['status']
+    runs = [r for job, r in last.items() if job in HOW]
+    if when is None:
+        st.caption("No Superbet fetch saved yet.")
+    else:
+        made = [HOW[r['job']] for r in runs if r['exit_code'] == 0
+                and abs((pd.to_datetime(r['started_at'], utc=True) - pd.Timestamp(when)).total_seconds()) < 180]
+        st.caption(f"✅ Last saved fetch {pd.Timestamp(when).tz_convert(freshness.PL):%a %d %b %H:%M}: "
+                   f"{s['lines']:,} player lines, {s['games']} games" + (f" ({made[0]})" if made else ""))
+    failed = [r for r in runs if r['exit_code'] != 0
+              and (when is None or pd.to_datetime(r['started_at'], utc=True) > pd.Timestamp(when))]
+    for r in failed[:1]:
+        st.caption(f"❌ Later attempt {pd.to_datetime(r['started_at'], utc=True).tz_convert(freshness.PL):%a %H:%M} "
+                   f"({HOW[r['job']]}) failed: {r['summary']}")
 
 
 stats_col, odds_col, lineup_col = st.columns(3)
@@ -100,7 +125,7 @@ with stats_col.container(border=True):
                                              f"(takes long)")
         ready = (how != "One game" or options.get('game')) and (how != "Rebuild the season" or options['rebuild'])
         st.button("Run", disabled=not ready, width='stretch', on_click=queue, args=('stats',), kwargs=options)
-    last_run_caption('stats')
+    stats_run_caption()
 
 # --- Superbet ---
 with odds_col.container(border=True):
@@ -129,7 +154,7 @@ with odds_col.container(border=True):
                 on_click=queue, args=('snapshot',),
                 help=f"Possible again in {wait.seconds // 60 + 1} min" if wait else
                 "python daily_snapshot.py: the same as Fetch & save, plus RotoWire's lineups saved with it")
-    last_run_caption('snapshot')
+    superbet_caption()
 
 # --- RotoWire ---
 with lineup_col.container(border=True):
