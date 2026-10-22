@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 from zoneinfo import ZoneInfo
 
-from . import team_code
+from . import play_by_play, team_code
 from .schedule import season_type_name
 
 log = logging.getLogger(__name__)
@@ -86,17 +86,29 @@ def parse_summary(summary: dict) -> Tuple[Dict, List[Dict]]:
         result = f"{'W' if own['score'] > opp['score'] else 'L'}{own['score']}-{opp['score']}"
         block = team["statistics"][0]
         keys = block["keys"]
+        box_ids = {a["athlete"]["id"] for a in block["athletes"] if "id" in a["athlete"]}
         for athlete in block["athletes"]:
             info = athlete["athlete"]
             name = info.get("displayName") or info.get("shortName", "?")
             if athlete.get("didNotPlay") or not athlete.get("stats"):
                 log.info("DNP %s (%s) in game %s: %s", name, team_abbr, game_id, athlete.get("reason", ""))
                 continue
-            if "id" not in info or "displayName" not in info:
-                # ESPN occasionally lists unregistered players (e.g. two-way signings) without id or full name
-                log.warning("Skipping player %r without ESPN id/name in game %s (%s)", name, game_id, team_abbr)
-                continue
-            s = dict(zip(keys, athlete["stats"]))
+            if "id" in info and "displayName" in info:
+                s = dict(zip(keys, athlete["stats"]))
+            else:
+                # ESPN occasionally lists a player (e.g. a two-way signing) without id, name or stats; the
+                # play-by-play still has their plays, tagged with their id
+                found = play_by_play.missing_player(summary.get("plays") or [], team["team"].get("id"),
+                                                    info.get("shortName", ""), box_ids)
+                if found is None:
+                    log.warning("Skipping player %r without ESPN id/name in game %s (%s)", name, game_id, team_abbr)
+                    continue
+                s = play_by_play.player_stats(summary["plays"], found["id"], found["displayName"], side)
+                if _num(s["minutes"]) == 0 and _num(s["points"]) == 0:
+                    continue
+                info = {**info, **found}
+                log.warning("Rebuilt %s (%s, id %s) from the play-by-play in game %s", found["displayName"],
+                            team_abbr, found["id"], game_id)
             fgm, fga = _split(s.get('fieldGoalsMade-fieldGoalsAttempted'))
             tpm, tpa = _split(s.get('threePointFieldGoalsMade-threePointFieldGoalsAttempted'))
             ftm, fta = _split(s.get('freeThrowsMade-freeThrowsAttempted'))

@@ -16,6 +16,11 @@ def players_file(season: int) -> str:
     return os.path.join(data_dir(season), "player_gamelogs.csv")
 
 
+def snapshot_file(season: int, name: str) -> str:
+    """Daily RotoWire/Superbet snapshots: 'rotowire_lineups', 'superbet_props' or 'superbet_game_odds'."""
+    return os.path.join(data_dir(season), f"{name}.csv")
+
+
 def _checked_file(season: int) -> str:
     return os.path.join(data_dir(season), "checked_through.txt")
 
@@ -77,6 +82,14 @@ def load_player_gamelogs(seasons: Iterable[int]) -> pd.DataFrame:
     """Player game logs of several seasons in one DataFrame, e.g. load_player_gamelogs([2024, 2025, 2026])."""
     frames = [_read(players_file(season)) for season in seasons]
     return pd.concat([f for f in frames if not f.empty], ignore_index=True)
+
+
+def load_games(seasons: Iterable[int]) -> pd.DataFrame:
+    """games.csv of several seasons in one DataFrame, with `date` parsed."""
+    frames = [_read(games_file(season)) for season in seasons]
+    df = pd.concat([f for f in frames if not f.empty], ignore_index=True)
+    df['date'] = pd.to_datetime(df['date'])
+    return df
 
 
 def wipe(season: int):

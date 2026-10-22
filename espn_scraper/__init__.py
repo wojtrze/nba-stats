@@ -12,7 +12,8 @@ CURRENT_SEASON = 2026
 
 # lowercase ESPN abbreviations of the 30 NBA teams
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "team_abbr.json")) as _f:
-    NBA_TEAM_ABBRS = frozenset(json.load(_f).values())
+    NBA_TEAM_NAMES = {abbr: name for name, abbr in json.load(_f).items()}   # 'atl' -> 'Atlanta Hawks'
+NBA_TEAM_ABBRS = frozenset(NBA_TEAM_NAMES)
 
 
 def team_code(team: dict) -> str:
