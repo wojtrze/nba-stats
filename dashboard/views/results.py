@@ -6,6 +6,7 @@ from bets import (as_snapshot_rows, bets_file, describe, kelly_stake, load_bets,
                   staking_chance)
 from glossary import column_config, tinted
 from loaders import games, player_logs, snapshot_history
+import night_view
 from tracking import calibration, edge_bucket, results_table, settle_games, settle_props
 
 st.title("Bet slip & results")
@@ -77,10 +78,12 @@ def kpis(settled: pd.DataFrame, stake_col=None):
                 help=RESULT_TIPS['avg CLV %'])
 
 
-NIGHT_TAB = "🌙 Last fetched night"
-# "See how the last night's lines resolved" on Today's props / Games opens the night's tab
-if st.session_state.pop('results_night', None):
+NIGHT_TAB = "🌙 Previous night"
+# "See how the last night's lines resolved" on Today's props / Games opens that night's tab
+night = st.session_state.pop('results_night', None)
+if night:
     st.session_state['results_tab'] = NIGHT_TAB
+    st.session_state['night_pick'] = str(night[-1])
 slip_tab, mine_tab, model_tab, night_tab = st.tabs(["🧾 Slip", "📒 My bets", "📈 Dashboard's picks", NIGHT_TAB],
                                                     default=st.session_state.get('results_tab'))
 
@@ -203,31 +206,7 @@ with model_tab:
         results_tables(games_settled, {"By edge (pp)": 'edge bucket', "By market": 'market'})
         calibration_chart(games_settled, "Games: model chance vs actual")
 
-# --- every line of the last Superbet fetch ---
+# --- the previous night: every line and game against our last projection before tip-off ---
 with night_tab:
-    snaps = snapshot_history('superbet_props')
-    if snaps.empty:
-        st.info("Nothing fetched from Superbet yet.")
-    else:
-        last = snaps['fetched_at'].max()
-        night = settle_props(snaps, player_logs(), games(), bets=snaps[snaps['fetched_at'] == last])
-        when = pd.Timestamp(last).tz_convert('Europe/Warsaw')
-        st.caption(f"Every line of the last Superbet fetch ({when:%a %d %b %H:%M}), with the pick saved with it, "
-                   f"settled against the stored stats. Pending = the game isn't in the stored stats yet: update the "
-                   f"stats on Data status the morning after.")
-        picks = night[night['pick'].notna()]
-        if picks.empty:
-            st.caption("This fetch was saved without picks, so only the results are shown.")
-        else:
-            kpis(picks)
-        cols = ['game_date', 'name', 'game', 'bet_type', 'line', 'pick', 'odds', 'model_pct', 'edge_pp', 'signal',
-                'actual', 'status', 'result', 'profit']
-        formats = {'line': '%g', 'odds': '%.2f', 'model_pct': '%.0f', 'edge_pp': '%+.1f', 'actual': '%g',
-                   'profit': '%+.2f'}
-        shown = night.sort_values(['game_date', 'game', 'name'])[cols]
-        st.dataframe(shown, hide_index=True, width='stretch', height=500,
-                     column_config=column_config(cols, formats, tips={
-                         'model_pct': "Model's chance for the pick when the line was fetched",
-                         'edge_pp': "Edge when the line was fetched", 'profit': "Profit for 1 unit on the pick",
-                         'status': "settled, pending (game not in the stored stats yet) or void (didn't play)"})
-                     | {'game_date': st.column_config.DateColumn("date", format='YYYY-MM-DD')})
+    night_view.render(update_stats=lambda: st.page_link("views/data_status.py", label="Update the stats on Data status",
+                                                         icon="🗂️"), key='night')

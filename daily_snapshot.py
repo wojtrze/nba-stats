@@ -118,11 +118,13 @@ def save_lineups_if_changed(lineups: pd.DataFrame, fetched_at: str) -> str:
 
 
 def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.DataFrame):
-    """props with player_id_ESPN, pick, model_pct, edge_pp, edge_low and proj_avg; game_odds with model_pct and
-    edge_pp. Same models and defaults as the dashboard pages (current season, every game type but All-Star)."""
+    """props with player_id_ESPN, pick, model_pct, edge_pp, edge_low, proj_avg, signal (🟢/🟡/🔴) and red_flag;
+    game_odds with model_pct, edge_pp and the game's projected score (proj_home_pts, proj_away_pts). Same models
+    and defaults as the dashboard pages (current season, every game type but All-Star)."""
     from models import (DEFAULT_SEASON_TYPES, GAME_DEFAULTS, GAME_TYPES, game_ratings, prepare_logs, price_games,
                         price_props)
     from name_resolver import NameResolver
+    from reasons import flag_props
 
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
     games = load_games(sorted(SEASONS))
@@ -133,10 +135,12 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
         props = resolver.add_ids(props, team_cols=('home', 'away'))
         current = logs[(logs['season_id'] == CURRENT_SEASON) & logs['season_type'].isin(DEFAULT_SEASON_TYPES)]
         played = games[(games['season_id'] == CURRENT_SEASON) & games['season_type'].isin(DEFAULT_SEASON_TYPES)]
-        table = price_props(props, current, lineups, game_odds, played)
+        # the red flags known at fetch time (the line hasn't moved yet)
+        table = flag_props(price_props(props, current, lineups, game_odds, played), current, lineups)
         props = props.assign(pick=table['best side'], model_pct=table['model %'].round(1),
                              edge_pp=table['edge pp'].round(1), edge_low=table['edge low'].round(1),
-                             proj_avg=table['proj avg'].round(2))
+                             proj_avg=table['proj avg'].round(2), signal=table['signal'],
+                             red_flag=table['red flag'])
     if not game_odds.empty:
         model = game_ratings(games, CURRENT_SEASON, GAME_DEFAULTS['prior_games'], GAME_DEFAULTS['regress'])
         recent = logs[logs['season_id'].isin([CURRENT_SEASON - 1, CURRENT_SEASON]) & logs['season_type'].isin(GAME_TYPES)]
@@ -146,6 +150,10 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
             edges = pd.concat([g['edges'] for g in priced])[['event_id', 'market', 'side', 'line', 'model %', 'edge pp']]
             game_odds = game_odds.merge(edges.rename(columns={'model %': 'model_pct', 'edge pp': 'edge_pp'}).round(1),
                                         on=['event_id', 'market', 'side', 'line'], how='left')
+            projected = pd.DataFrame([{'event_id': g['event_id'],
+                                       'proj_home_pts': round(g['projection']['home_pts'], 1),
+                                       'proj_away_pts': round(g['projection']['away_pts'], 1)} for g in priced])
+            game_odds = game_odds.merge(projected, on='event_id', how='left')
     return props, game_odds
 
 
