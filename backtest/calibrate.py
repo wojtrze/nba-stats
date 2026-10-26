@@ -9,7 +9,9 @@ before tip-off, with the raw chances saved alongside). Only chances of the curre
 are used: a Superbet line's own if that version priced it, else its replay (daily_snapshot.py --reprice); the
 2022/23 lines when backtest.run was run with it. The held-out check fits on the earlier part of each source
 (2022: Nov–Jan; Superbet: all but the latest HOLD_OUT share of nights) and scores the rest. The 🟢 threshold is the
-smallest edge whose held-out Superbet picks paid (GREEN_CANDIDATES, at least MIN_GREEN_BETS bets); none = no 🟢.
+smallest edge (GREEN_CANDIDATES) whose held-out Superbet picks span MIN_GREEN_NIGHTS+ nights and MIN_GREEN_BETS+
+bets and whose hit rate's 95% range lies above their break-even; none = no 🟢. It's chosen on the same held-out
+nights it's judged on and re-chosen as nights settle, so it is exploratory, not a proven advantage.
 Then everything is refitted for the dashboards: data/backtest/calibration.json (coefficients, green_edge_pp and
 superbet_through, the last settled night used) and the report data/backtest/calibration.md.
 
@@ -41,6 +43,7 @@ SPLIT = pd.Timestamp('2023-02-01')       # 2022: fit before, check from this dat
 HOLD_OUT = 0.3                           # Superbet: the latest share of nights kept for the check
 GREEN_CANDIDATES = (1, 2, 3, 4, 5)       # edge thresholds (pp) tried for 🟢, smallest first
 MIN_GREEN_BETS = 50
+MIN_GREEN_NIGHTS = 10                    # one or two nights are one or two slates of correlated lines, not evidence
 COEFS = ['a', 'b', 'c', 'd']
 # 2022_lines.csv written before backtest.run saved model_version: its raw chances are those of this version
 # (price_props' chances haven't changed since it was generated, at 954ac54)
@@ -171,26 +174,32 @@ def picks(t: pd.DataFrame, coef: Dict, green_edge: Optional[float] = None) -> pd
 
 def _scan_row(t: pd.DataFrame, chosen: pd.DataFrame, keep: pd.Series) -> Dict:
     row = rate_row(t, chosen['side'].where(keep), chosen['odds'])
-    return {'expected %': 100 * chosen.loc[keep, 'p'].mean() if keep.any() else np.nan, **row}
+    decided = keep & (t['actual'] != t['line'])
+    return {'expected %': 100 * chosen.loc[keep, 'p'].mean() if keep.any() else np.nan, **row,
+            'break-even %': 100 * (1 / chosen.loc[decided, 'odds']).mean() if decided.any() else np.nan,
+            'nights': int(t.loc[keep, 'game_date'].nunique())}
 
 
 def threshold_scan(t: pd.DataFrame, coef: Dict, thresholds=(0,) + GREEN_CANDIDATES) -> pd.DataFrame:
     """Betting every line whose calibrated edge is above each threshold: bets, expected % (the calibrated chance),
-    hit %, its 95% range, ROI. Cumulative: a line at +3 pp counts for 0, 1, 2 and 3."""
+    hit %, its 95% range, ROI, the bets' average break-even % and the nights they're on. Cumulative: a line at +3 pp
+    counts for 0, 1, 2 and 3."""
     chosen = picks(t, coef)
     rows = [{'edge ≥ pp': thr, **_scan_row(t, chosen, chosen['edge'] > thr if thr == 0 else chosen['edge'] >= thr)}
             for thr in thresholds]
     return pd.DataFrame(rows)
 
 
-def choose_green_edge(t: pd.DataFrame, coef: Dict, candidates=GREEN_CANDIDATES,
-                      min_bets: int = MIN_GREEN_BETS) -> Optional[float]:
-    """The smallest candidate edge whose picks on t (held-out lines) number at least min_bets and paid (ROI > 0);
-    None when none did."""
+def choose_green_edge(t: pd.DataFrame, coef: Dict, candidates=GREEN_CANDIDATES, min_bets: int = MIN_GREEN_BETS,
+                      min_nights: int = MIN_GREEN_NIGHTS) -> Optional[float]:
+    """The smallest candidate edge whose picks on t (held-out lines) number at least min_bets over at least
+    min_nights nights, paid (ROI > 0) and won clearly more often than their odds need (the low end of the hit
+    rate's 95% range above the average break-even); None when none did. A lucky night or a thin sample can't pass."""
     if t.empty:
         return None
     scan = threshold_scan(t, coef, tuple(candidates))
-    ok = scan[(scan['bets'] >= min_bets) & (scan['ROI %'] > 0)]
+    ok = scan[(scan['bets'] >= min_bets) & (scan['nights'] >= min_nights) & (scan['ROI %'] > 0)
+              & (scan['ci low %'] > scan['break-even %'])]
     return float(ok['edge ≥ pp'].iloc[0]) if len(ok) else None
 
 
@@ -254,10 +263,17 @@ def evaluate(sources: Dict[str, pd.DataFrame]) -> Tuple[Dict, Optional[float], s
     green = choose_green_edge(superbet_test, coef)
     report += ["### 🟢 threshold", "",
                (f"🟢 from an edge of +{green:g} pp: the smallest of {', '.join(f'+{c:g}' for c in GREEN_CANDIDATES)} "
-                f"pp whose picks on the unseen Superbet lines numbered {MIN_GREEN_BETS}+ and paid." if green is not None
+                f"pp whose picks on the unseen Superbet lines numbered {MIN_GREEN_BETS}+ over {MIN_GREEN_NIGHTS}+ "
+                f"nights, paid, and won more often than break-even even at the low end of the 95% range."
+                if green is not None
                 else f"No 🟢: none of the thresholds {', '.join(f'+{c:g}' for c in GREEN_CANDIDATES)} pp had "
-                     f"{MIN_GREEN_BETS}+ picks that paid on the unseen Superbet lines. Lines with a positive edge "
-                     f"get 🟡."), ""]
+                     f"{MIN_GREEN_BETS}+ picks over {MIN_GREEN_NIGHTS}+ unseen Superbet nights that won more often "
+                     f"than break-even at the low end of the 95% range. Lines with a positive edge get 🟡 (an "
+                     f"estimated edge, not a validated one)."),
+               "", f"Selection policy: one bet per line (its last fetch before tip-off), the calibrated pick's side, "
+                   f"1 unit at that fetch's odds. The threshold is chosen on the same held-out nights it's judged "
+                   f"on, among {len(GREEN_CANDIDATES)} candidates, and re-chosen as nights settle: exploratory, "
+                   f"not a proven betting advantage.", ""]
     return held_out, green, "\n".join(report)
 
 

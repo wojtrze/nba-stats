@@ -27,14 +27,14 @@ Betting the unseen lines (1 unit each, at the line's odds):
 
 Signal efficiency: every line whose calibrated edge reaches the threshold (cumulative):
 
-| edge ≥ pp | expected % | bets | hit % | ci low % | ci high % | ROI % | avg odds |
-|---|---|---|---|---|---|---|---|
-| 0 | 64.6 | 58 | 70.7 | 58.0 | 80.8 | 9.3 | 1.6 |
-| 1 | – | 0 | – | – | – | – | – |
-| 2 | – | 0 | – | – | – | – | – |
-| 3 | – | 0 | – | – | – | – | – |
-| 4 | – | 0 | – | – | – | – | – |
-| 5 | – | 0 | – | – | – | – | – |
+| edge ≥ pp | expected % | bets | hit % | ci low % | ci high % | ROI % | avg odds | break-even % | nights |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | 64.6 | 58 | 70.7 | 58.0 | 80.8 | 9.3 | 1.6 | 64.4 | 23 |
+| 1 | – | 0 | – | – | – | – | – | – | 0 |
+| 2 | – | 0 | – | – | – | – | – | – | 0 |
+| 3 | – | 0 | – | – | – | – | – | – | 0 |
+| 4 | – | 0 | – | – | – | – | – | – | 0 |
+| 5 | – | 0 | – | – | – | – | – | – | 0 |
 
 Calibration on the unseen lines (both sides of every line):
 
@@ -74,14 +74,14 @@ Betting the unseen lines (1 unit each, at the line's odds):
 
 Signal efficiency: every line whose calibrated edge reaches the threshold (cumulative):
 
-| edge ≥ pp | expected % | bets | hit % | ci low % | ci high % | ROI % | avg odds |
-|---|---|---|---|---|---|---|---|
-| 0 | – | 0 | – | – | – | – | – |
-| 1 | – | 0 | – | – | – | – | – |
-| 2 | – | 0 | – | – | – | – | – |
-| 3 | – | 0 | – | – | – | – | – |
-| 4 | – | 0 | – | – | – | – | – |
-| 5 | – | 0 | – | – | – | – | – |
+| edge ≥ pp | expected % | bets | hit % | ci low % | ci high % | ROI % | avg odds | break-even % | nights |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | – | 0 | – | – | – | – | – | – | 0 |
+| 1 | – | 0 | – | – | – | – | – | – | 0 |
+| 2 | – | 0 | – | – | – | – | – | – | 0 |
+| 3 | – | 0 | – | – | – | – | – | – | 0 |
+| 4 | – | 0 | – | – | – | – | – | – | 0 |
+| 5 | – | 0 | – | – | – | – | – | – | 0 |
 
 Calibration on the unseen lines (both sides of every line):
 
@@ -102,7 +102,9 @@ Calibration on the unseen lines (both sides of every line):
 
 ### 🟢 threshold
 
-No 🟢: none of the thresholds +1, +2, +3, +4, +5 pp had 50+ picks that paid on the unseen Superbet lines. Lines with a positive edge get 🟡.
+No 🟢: none of the thresholds +1, +2, +3, +4, +5 pp had 50+ picks over 10+ unseen Superbet nights that won more often than break-even at the low end of the 95% range. Lines with a positive edge get 🟡 (an estimated edge, not a validated one).
+
+Selection policy: one bet per line (its last fetch before tip-off), the calibrated pick's side, 1 unit at that fetch's odds. The threshold is chosen on the same held-out nights it's judged on, among 5 candidates, and re-chosen as nights settle: exploratory, not a proven betting advantage.
 
 ## Used by the dashboards (fitted on every line)
 

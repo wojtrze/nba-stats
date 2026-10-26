@@ -207,17 +207,27 @@ def _lines(n, over_won, market=50.0, raw_over=50.0, night='2026-10-21'):
                          'raw under %': 100 - raw_over, 'source': 'superbet'}, index=range(n))
 
 
-def test_choose_green_edge_needs_enough_picks_that_paid():
+def _spread(n, over_won, nights, raw_over=60.0):
+    """n lines spread evenly over `nights` nights from Oct 1."""
+    t = _lines(n, over_won, raw_over=raw_over)
+    return t.assign(game_date=pd.Timestamp('2026-10-01') + pd.to_timedelta(np.arange(n) % nights, unit='D'))
+
+
+def test_choose_green_edge_needs_many_nights_and_a_clear_margin_over_break_even():
     from backtest.calibrate import choose_green_edge, threshold_scan
     coef = {'a': 1.0, 'b': 1.0, 'c': 0.0, 'd': 0.0}                     # identity: the raw chance is the chance
-    # 60 lines where the model says 60% Over (edge 60 − 52.6 = +7.4 pp) and the Over won 40 times
-    good = _lines(60, np.arange(60) < 40, raw_over=60.0)
+    # the model says 60% Over (edge 60 − 52.6 = +7.4 pp); break-even at 1.9 is 52.6%
+    good = _spread(150, np.arange(150) % 3 != 0, nights=12)            # won 2 of 3: 95% range 59–74%
     assert choose_green_edge(good, coef) == 1.0
     scan = threshold_scan(good, coef).set_index('edge ≥ pp')
-    assert scan.loc[0, 'bets'] == scan.loc[5, 'bets'] == 60 and scan.loc[5, 'expected %'] == pytest.approx(60)
-    assert choose_green_edge(good.iloc[:30], coef) is None             # too few bets
-    bad = _lines(60, np.arange(60) < 20, raw_over=60.0)                 # the same edges lost
-    assert choose_green_edge(bad, coef) is None
+    assert scan.loc[5, 'bets'] == 150 and scan.loc[5, 'nights'] == 12
+    assert scan.loc[5, 'break-even %'] == pytest.approx(100 / 1.9) and scan.loc[5, 'expected %'] == pytest.approx(60)
+    assert choose_green_edge(_spread(150, np.arange(150) % 3 != 0, nights=2), coef) is None      # 2 nights
+    assert choose_green_edge(good.iloc[:30], coef) is None                                       # too few bets
+    paid_but_unclear = _spread(60, np.arange(60) < 36, nights=12)      # won 60%, paid, but the range starts at 47%
+    assert threshold_scan(paid_but_unclear, coef).set_index('edge ≥ pp').loc[1, 'ROI %'] > 0
+    assert choose_green_edge(paid_but_unclear, coef) is None
+    assert choose_green_edge(_spread(150, np.arange(150) % 3 == 0, nights=12), coef) is None    # the same edges lost
     assert choose_green_edge(good.iloc[0:0], coef) is None
 
 
