@@ -15,28 +15,35 @@ os.chdir(ROOT)
 
 import streamlit as st  # noqa: E402
 
+from core.state import language, language_picker  # noqa: E402
 from core.ui import PAGES, sidebar_status  # noqa: E402
+from i18n import t  # noqa: E402
 
 st.set_page_config(page_title="NBA props v2", page_icon="🏀", layout="wide")
+lang = language()
 
 
-def page(file, title, icon, key, default=False):
-    PAGES[key] = st.Page(os.path.join(V2, "views", file), title=title, icon=icon, url_path=None if default else key,
-                         default=default)
+def page(file, key, icon, default=False, title=None):
+    """A page under PAGES[key] (its URL too), titled with i18n's 'nav.<title or key>'."""
+    PAGES[key] = st.Page(os.path.join(V2, "views", file), title=t(f'nav.{title or key}', lang), icon=icon,
+                         url_path=None if default else key, default=default)
     return PAGES[key]
 
 
 navigation = st.navigation({
-    "Tonight": [page("overview.py", "Overview", "🏠", 'overview', default=True),
-                page("props.py", "Props", "🎯", 'props'),
-                page("games.py", "Games", "🏟️", 'games')],
-    "Research": [page("player_history.py", "Player history", "👤", 'player'),
-                 page("team_history.py", "Team history", "🛡️", 'team'),
-                 page("lineup_lab.py", "Lineup lab", "🧩", 'lineup')],
-    "Review": [page("results.py", "Results", "📈", 'results'),
-               page("backtest.py", "Backtest 2022/23", "🧪", 'backtest')],
-    "Data": [page("data_center.py", "Data center", "🔄", 'data')],
+    t('nav.tonight', lang): [page("overview.py", 'overview', "🏠", default=True),
+                             page("props.py", 'props', "🎯"),
+                             page("games.py", 'games', "🏟️"),
+                             page("help.py", 'help', "❓")],
+    t('nav.research', lang): [page("player_history.py", 'player', "👤"),
+                              page("team_history.py", 'team', "🛡️"),
+                              page("lineup_lab.py", 'lineup', "🧩")],
+    t('nav.review', lang): [page("results.py", 'results', "📈"),
+                            page("backtest.py", 'backtest', "🧪")],
+    t('nav.data', lang): [page("data_center.py", 'data', "🔄", title='data_center')],
 })
+with st.sidebar:
+    language_picker()
 navigation.run()
 # drawn after the page, so it already knows what the page fetched (pages that stop early use core.ui.stop)
 sidebar_status()

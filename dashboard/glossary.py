@@ -4,6 +4,8 @@ from typing import Dict, Optional
 import pandas as pd
 import streamlit as st
 
+import i18n
+
 # box-score stats, as stored in the game logs
 STAT_HELP = {
     'PTS': "Points", 'REB': "Rebounds (offensive + defensive)", 'AST': "Assists", '3PM': "Three-pointers made",
@@ -192,10 +194,13 @@ GAME_SIGNAL_TIP = ("🔴 a reason to pass whatever the numbers say (see red flag
                    "research, not a betting signal")
 
 
-def signal_legend() -> str:
-    """What 🟢 / 🟡 / 🔴 mean on the props pages, with the current 🟢 threshold."""
+def signal_legend(lang: Optional[str] = None) -> str:
+    """What 🟢 / 🟡 / 🔴 mean on the props pages, with the current 🟢 threshold; in `lang` (dashboard v2)."""
     from models import load_green_edge
     green = load_green_edge()
+    if lang:
+        first = i18n.t('legend.green', lang, edge=green) if green is not None else i18n.t('legend.no_green', lang)
+        return f"{first} {i18n.t('legend.rest', lang)}"
     return ((f"🟢 = an edge of +{green:g} pp or more (the smallest threshold whose picks beat break-even on 10+ "
              f"unseen Superbet nights, even at the low end of their range); " if green is not None else
              "No 🟢 for now: no edge threshold has clearly beaten break-even on 10+ unseen Superbet nights yet; ")
@@ -209,22 +214,28 @@ def source_legend(keys=tuple(SOURCES)) -> str:
 
 
 def column_config(columns, formats: Optional[Dict[str, str]] = None, tips: Optional[Dict[str, str]] = None,
-                  base: Optional[dict] = None, sources: Optional[Dict[str, Optional[str]]] = None) -> dict:
+                  base: Optional[dict] = None, sources: Optional[Dict[str, Optional[str]]] = None,
+                  lang: Optional[str] = None, context: Optional[str] = None) -> dict:
     """column_config for st.dataframe / st.data_editor: a tooltip and readable label for every known column,
     number formats from `formats` ({column: '%.1f'}), page-specific tooltips from `tips`. Columns with a source
     (COLUMN_SOURCE, overridden by `sources`; None = no source mark) get its icon in the label and its name in the
-    tooltip. Entries in `base` (e.g. a CheckboxColumn) are kept as they are."""
+    tooltip. Entries in `base` (e.g. a CheckboxColumn) are kept as they are. lang (dashboard v2): headers and
+    tooltips from i18n.TERMS in that language (with `context`) where there's a term; `tips` still win."""
     formats, tips, base, sources = formats or {}, tips or {}, dict(base or {}), sources or {}
     for col in columns:
         if col in base:
             continue
-        text = tips.get(col, HELP.get(col))
-        label = LABELS.get(col, col)
+        known = lang is not None and i18n.term(col, context) is not None
+        text = tips.get(col, i18n.tooltip(col, lang, context) if known else HELP.get(col))
+        label = i18n.label(col, lang, context) if known else LABELS.get(col, col)
         source = sources.get(col, COLUMN_SOURCE.get(col))
         if source:
             icon, name = SOURCES[source][:2]
             label = f"{icon} {label}"
-            text = f"Source: {name}. {text or ''}".strip()
+            if lang:
+                text = f"{text or ''}\n\n*{i18n.t('source', lang, name=name)}*".strip()
+            else:
+                text = f"Source: {name}. {text or ''}".strip()
         if col in formats:
             base[col] = st.column_config.NumberColumn(label, help=text, format=formats[col])
         else:

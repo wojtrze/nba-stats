@@ -8,7 +8,7 @@ import streamlit as st
 
 from core import freshness
 from core.data import LAST_FETCH
-from core.state import scope, scope_label, scope_picker
+from core.state import language, scope, scope_label, scope_picker
 from glossary import column_config, source_legend, tinted
 
 # the app's pages by key, filled by app.py on every run, so pages can link to each other
@@ -82,15 +82,18 @@ def kpis(items: Sequence[Dict]):
 
 def table(df: pd.DataFrame, columns: List[str], formats: Optional[Dict[str, str]] = None,
           tips: Optional[Dict[str, str]] = None, sources: Optional[Dict[str, Optional[str]]] = None,
-          key: Optional[str] = None, select: bool = False, height='auto', legend: Iterable[str] = ()):
-    """A dataframe with the old dashboard's source marks (icon + tint) and tooltips. select: single-row selection;
-    returns the selected row's position in df, or None."""
+          key: Optional[str] = None, select: bool = False, height='auto', legend: Iterable[str] = (),
+          context: Optional[str] = None):
+    """A dataframe with the old dashboard's source marks (icon + tint) and tooltips, headers and tooltips in the
+    chosen language (i18n.TERMS, with `context`). select: single-row selection; returns the selected row's
+    position in df, or None."""
     formats = {c: f for c, f in (formats or {}).items() if c in columns}
     if legend:
         st.caption(source_legend(list(legend)))
     kwargs = dict(on_select='rerun', selection_mode='single-row', key=key) if select else {}
     event = st.dataframe(tinted(df[columns], formats, sources), hide_index=True, width='stretch', height=height,
-                         column_config=column_config(columns, formats, tips=tips, sources=sources), **kwargs)
+                         column_config=column_config(columns, formats, tips=tips, sources=sources, lang=language(),
+                                                     context=context), **kwargs)
     if select and event.selection.rows:
         return event.selection.rows[0]
     return None

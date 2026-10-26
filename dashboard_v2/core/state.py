@@ -4,6 +4,7 @@ from typing import List, Tuple
 
 import streamlit as st
 
+import i18n
 from espn_scraper import CURRENT_SEASON, SEASONS
 from loaders import season_label
 from models import DEFAULT_SEASON_TYPES
@@ -18,6 +19,20 @@ def persist(key: str, default):
 
 def remember(key: str):
     st.session_state[f"_{key}"] = st.session_state[key]
+
+
+def language() -> str:
+    """The language the pages are shown in ('en' / 'pl'), chosen in the sidebar (language_picker)."""
+    return st.session_state.get('_language', i18n.DEFAULT)
+
+
+def language_picker():
+    """The language switch, drawn where it's called (the sidebar)."""
+    persist('language', i18n.DEFAULT)
+    st.segmented_control(i18n.t('language', language()), list(i18n.LANGS), format_func=i18n.LANGUAGE_NAMES.get,
+                         key='language', on_change=remember, args=('language',), label_visibility='collapsed')
+    if not st.session_state.get('language'):           # a click on the selected option clears it: keep it
+        st.session_state['language'] = st.session_state['_language'] = language()
 
 
 def scope() -> Tuple[List[int], List[str]]:

@@ -111,9 +111,13 @@ def calibration_status(path: Optional[str] = None) -> str:
     return FITTED if saved.get('model_version') == MODEL_VERSION else VERSION_MISMATCH
 
 
-def calibration_warning(status: Optional[str] = None) -> str:
-    """What the pages say when the chances aren't validated ('' when they are)."""
+def calibration_warning(status: Optional[str] = None, lang: Optional[str] = None) -> str:
+    """What the pages say when the chances aren't validated ('' when they are); in `lang` (dashboard v2)."""
     status = status or calibration_status()
+    if lang and status in (MISSING, VERSION_MISMATCH):
+        from i18n import t
+        return t('calibration.missing', lang) if status == MISSING else \
+            t('calibration.mismatch', lang, version=MODEL_VERSION)
     if status == MISSING:
         return ("No calibration (data/backtest/calibration.json): model % is the raw model's chance, which was "
                 "overconfident on past lines. No 🟢 / 🟡 picks and no stakes until `python -m backtest.calibrate` "
