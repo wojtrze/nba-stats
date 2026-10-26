@@ -49,6 +49,20 @@ def nights(prop_snapshots: pd.DataFrame, games: pd.DataFrame, now) -> pd.DataFra
 MODEL_COLUMNS = ['pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag',
                  'raw_over_pct', 'raw_under_pct', 'market_over_pct']
 
+# which model priced a saved line: bump MODEL_VERSION whenever price_props / price_games change what they return,
+# so a calibration is only fitted on (and applied to) chances of one model. calibration_id: models.calibration_id
+# at pricing time. prediction_origin: recorded_live = saved by the fetch itself, historical_replay = priced later
+# as of the fetch (daily_snapshot.py --reprice, kept in its own file). Rows saved before Oct 26 leave them empty.
+MODEL_VERSION = '2026-10-26'
+LINEAGE_COLUMNS = ['model_version', 'calibration_id', 'prediction_origin']
+RECORDED_LIVE, HISTORICAL_REPLAY = 'recorded_live', 'historical_replay'
+
+
+def lineage(origin: str) -> Dict[str, str]:
+    """LINEAGE_COLUMNS for lines priced now with the current model and calibration."""
+    from models import calibration_id
+    return {'model_version': MODEL_VERSION, 'calibration_id': calibration_id(), 'prediction_origin': origin}
+
 
 def night_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame, night,
                 recompute: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None) -> pd.DataFrame:

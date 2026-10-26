@@ -1,5 +1,6 @@
 """The dashboard's two pricing models as plain functions (no Streamlit), shared by the Today's props and Games
 pages, daily_snapshot.py (which saves the edges it would have shown) and the results tracker."""
+import hashlib
 import json
 import os
 from typing import Callable, Dict, Iterable, List, Optional
@@ -93,6 +94,16 @@ def load_calibration(path: Optional[str] = None) -> Dict:
     """The coefficients backtest/calibrate.py fitted (metrics.calibrate), or the identity when there are none."""
     saved = _calibration_file(path)
     return saved['coefficients'] if saved else IDENTITY_CALIBRATION
+
+
+def calibration_id(path: Optional[str] = None) -> str:
+    """A short fingerprint of the calibration in use (coefficients, 🟢 threshold, last Superbet night), saved with
+    every priced line so a later refit can't pass for the one it was priced with. 'none' without a file."""
+    saved = _calibration_file(path)
+    if not saved:
+        return 'none'
+    used = {k: saved.get(k) for k in ('coefficients', 'green_edge_pp', 'superbet_through')}
+    return hashlib.sha256(json.dumps(used, sort_keys=True).encode()).hexdigest()[:10]
 
 
 def load_green_edge(path: Optional[str] = None) -> Optional[float]:

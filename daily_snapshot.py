@@ -2,11 +2,12 @@
 
     python daily_snapshot.py              # today's games
     python daily_snapshot.py --tomorrow   # RotoWire's lineups for tomorrow (Superbet always covers the next 36h)
-    python daily_snapshot.py --reprice    # price every saved line again after a model change
+    python daily_snapshot.py --reprice    # price every saved line again after a model change (to a replay file)
 
 Each run appends rows with a fetched_at timestamp (UTC), so running it several times a day keeps line movement
 and lineup changes. Each line also gets the dashboard's pick and edge at that moment (the default settings of
-Today's props and Games), so the Results tracker settles exactly what the pages showed.
+Today's props and Games), so the Results tracker settles exactly what the pages showed, with the model version
+and calibration that priced it (nightly.LINEAGE_COLUMNS). Saved rows are never priced again in place.
 """
 import argparse
 import logging
@@ -127,7 +128,7 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
     from models import (DEFAULT_SEASON_TYPES, GAME_DEFAULTS, GAME_TYPES, game_ratings, prepare_logs, price_games,
                         price_props, top_up_logs)
     from name_resolver import NameResolver
-    from nightly import model_columns
+    from nightly import MODEL_VERSION, RECORDED_LIVE, lineage, model_columns
     from reasons import flag_props
 
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
@@ -145,7 +146,7 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
         played = games[(games['season_id'] == CURRENT_SEASON) & games['season_type'].isin(DEFAULT_SEASON_TYPES)]
         # the red flags known at fetch time (the line hasn't moved yet)
         table = flag_props(price_props(props, current, lineups, game_odds, played), current, lineups)
-        props = props.assign(**model_columns(table))
+        props = props.assign(**model_columns(table), **lineage(RECORDED_LIVE))
     if not game_odds.empty:
         model = game_ratings(games, CURRENT_SEASON, GAME_DEFAULTS['prior_games'], GAME_DEFAULTS['regress'])
         recent = logs[logs['season_id'].isin([CURRENT_SEASON - 1, CURRENT_SEASON]) & logs['season_type'].isin(GAME_TYPES)]
@@ -158,7 +159,8 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
             projected = pd.DataFrame([{'event_id': g['event_id'],
                                        'proj_home_pts': round(g['projection']['home_pts'], 1),
                                        'proj_away_pts': round(g['projection']['away_pts'], 1)} for g in priced])
-            game_odds = game_odds.merge(projected, on='event_id', how='left')
+            game_odds = game_odds.merge(projected, on='event_id', how='left') \
+                .assign(model_version=MODEL_VERSION, prediction_origin=RECORDED_LIVE)
     return props, game_odds
 
 
@@ -201,14 +203,18 @@ def save_superbet(offers: dict, lineups: pd.DataFrame, fetched_at: str) -> dict:
 def reprice_snapshots() -> int:
     """Price every saved Superbet line again with the current model and defaults, as of its fetch: the games
     finished before that day, the RotoWire version saved by then and the game odds of the same fetch
-    (nightly.recompute_props). Rewrites the model columns of superbet_props.csv, nothing else. Returns the rows."""
+    (nightly.recompute_props). Writes superbet_props_replay.csv (the saved lines with the new model columns,
+    prediction_origin historical_replay); superbet_props.csv, the record of what each fetch showed, is left as it
+    is. Returns the rows."""
     from models import prepare_logs
     from name_resolver import NameResolver
-    from nightly import MODEL_COLUMNS, et_night, lineups_before_tip, recompute_props
+    from nightly import (HISTORICAL_REPLAY, LINEAGE_COLUMNS, MODEL_COLUMNS, et_night, lineage, lineups_before_tip,
+                         recompute_props)
 
     path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    saved = pd.read_csv(path, dtype=str, keep_default_na=False)   # written back as read, but the model columns
-    props = pd.read_csv(path).drop(columns=['player_id_ESPN', *MODEL_COLUMNS], errors='ignore')
+    model_cols = ['player_id_ESPN', *MODEL_COLUMNS, *LINEAGE_COLUMNS]
+    saved = pd.read_csv(path, dtype=str, keep_default_na=False).drop(columns=model_cols, errors='ignore')
+    props = pd.read_csv(path).drop(columns=model_cols, errors='ignore')
     odds = pd.read_csv(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))
     rotowire = pd.read_csv(snapshot_file(CURRENT_SEASON, 'rotowire_lineups'))
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
@@ -225,14 +231,11 @@ def reprice_snapshots() -> int:
         model.loc[rows.index] = priced[MODEL_COLUMNS].values
         log.info("%s, games of %s: %d lines priced", fetched_at, night.date(), len(rows))
 
-    out = saved.copy()
-    for col in ['player_id_ESPN', *MODEL_COLUMNS]:
-        if col not in out:
-            out[col] = ''
-    out['player_id_ESPN'] = pd.array(props['player_id_ESPN'], dtype='Int64')
+    out = saved.assign(player_id_ESPN=pd.array(props['player_id_ESPN'], dtype='Int64'))
     for col in MODEL_COLUMNS:
         out[col] = model[col].values
-    out.to_csv(path, index=False)
+    out = out.assign(**lineage(HISTORICAL_REPLAY))
+    out.to_csv(snapshot_file(CURRENT_SEASON, 'superbet_props_replay'), index=False)
     return len(out)
 
 
@@ -241,10 +244,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--tomorrow', action='store_true', help="RotoWire's lineups for tomorrow")
     parser.add_argument('--reprice', action='store_true',
-                        help="price every saved Superbet line again with the current model (rewrites its model columns)")
+                        help="price every saved Superbet line again with the current model, into "
+                             "superbet_props_replay.csv")
     args = parser.parse_args()
     if args.reprice:
-        print(f"superbet_props: {reprice_snapshots()} rows repriced")
+        print(f"superbet_props_replay: {reprice_snapshots()} rows repriced (superbet_props.csv unchanged)")
         sys.exit()
     for name, n in take_snapshot('tomorrow' if args.tomorrow else 'today').items():
         print(f"{name}: {'failed' if n is None else f'{n} rows'}")

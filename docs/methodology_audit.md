@@ -45,7 +45,7 @@ fetch time. Before the step 1 fix, neither of them records the model version or 
 
 | # | Finding | Class | Where | Status |
 |---|---|---|---|---|
-| F1 | `daily_snapshot.py --reprice` rewrites the model columns of `superbet_props.csv` in place, so the recorded live predictions are lost. All 26,925 saved rows have `raw_*` values, although those columns only exist since commit 11017b5. No row records the model version or the calibration it was priced with. | Confirmed defect | `daily_snapshot.reprice_snapshots`, `add_model_columns` | open |
+| F1 | `daily_snapshot.py --reprice` rewrites the model columns of `superbet_props.csv` in place, so the recorded live predictions are lost. All 26,925 saved rows have `raw_*` values, although those columns only exist since commit 11017b5. No row records the model version or the calibration it was priced with. | Confirmed defect | `daily_snapshot.reprice_snapshots`, `add_model_columns` | fixed: rows carry `model_version`, `calibration_id`, `prediction_origin`; `--reprice` writes `superbet_props_replay.csv`; the live values were recovered from git into `superbet_props_recorded_legacy.csv` (24,423 recorded live, 2,502 Oct 20 replay) |
 | F2 | The calibration is fitted on the saved `raw_*` chances, whichever model wrote them. Live rows, repriced rows and different model versions are pooled. A calibration has to be fitted on the same model it's applied to. | Confirmed defect | `backtest.calibrate.superbet_lines` | open |
 | F3 | Without `calibration.json`, the raw model's chances are used silently (identity coefficients). Their overconfident edges then become 🟡 picks and Kelly stakes. | Confirmed defect | `models.load_calibration` | open |
 | F4 | The 🟢 threshold is chosen on the held-out Superbet nights, and those same nights are its only validation. Today that's 2 nights (30% of 6). It's re-chosen after every settled night, which is repeated selection on the same outcomes. | Methodological limitation (overfitting) | `backtest.calibrate.choose_green_edge`, `refresh` | open |
@@ -59,7 +59,7 @@ fetch time. Before the step 1 fix, neither of them records the model version or 
 
 | Concern | Existing tests | Missing |
 |---|---|---|
-| Lineage (F1) | none | repricing leaves `superbet_props.csv` unchanged; saved rows carry model version, calibration id and origin |
+| Lineage (F1) | `dashboard/test_snapshot.py::test_reprice_writes_a_replay_and_leaves_the_record_alone`, `test_lineage_names_the_model_and_the_calibration` | (was: repricing leaves `superbet_props.csv` unchanged; saved rows carry model version, calibration id and origin) |
 | Calibration source (F2) | `backtest/test_backtest.py::test_superbet_lines_judges_the_last_fetch_before_tip_off`, `test_refresh_refits_only_after_a_new_night` | lines of another model version are left out; a stale replay doesn't refit |
 | Calibration state (F3) | `dashboard/test_calibration.py::test_load_calibration` | missing file → no picks, stake 0, visible status |
 | 🟢 threshold (F4) | `test_choose_green_edge_needs_enough_picks_that_paid` | too few nights or a wide interval → no 🟢 |
