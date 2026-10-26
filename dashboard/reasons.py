@@ -266,12 +266,14 @@ def verdict(reasons: List[Dict], edge_pp: float, edge_low: float = np.nan):
     """('Bet' / 'Lean' / 'Pass', colour, why). Any flag means Pass. Bet needs a strong edge and more reasons for
     than against; Lean a positive edge and at least as many reasons for as against. Strong: for a prop (it has an
     edge low) the 🟢 threshold (models.load_green_edge; none = never), for a game outcome an edge of 5+ pp."""
-    from models import load_green_edge
+    from models import FITTED, calibration_status, load_green_edge
     flags = [r for r in reasons if r['flag']]
     pros = sum(r['supports'] is True for r in reasons)
     cons = sum(r['supports'] is False and not r['flag'] for r in reasons)
     if flags:
         return 'Pass', 'red', flags[0]['text']
+    if pd.notna(edge_low) and calibration_status() != FITTED:
+        return 'Pass', 'gray', "No valid calibration: the model's chance isn't a betting signal (research only)"
     if pd.isna(edge_pp) or edge_pp <= 0:
         return 'Pass', 'gray', "The price doesn't pay enough for the chance"
     if pd.notna(edge_low):

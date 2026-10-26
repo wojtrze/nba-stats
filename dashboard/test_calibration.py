@@ -31,3 +31,16 @@ def test_load_calibration(tmp_path):
     path = tmp_path / 'calibration.json'
     path.write_text(json.dumps({'coefficients': SHRINK}))
     assert load_calibration(str(path)) == SHRINK
+
+
+def test_calibration_status_and_warning(tmp_path):
+    import models
+    assert models.calibration_status(str(tmp_path / 'missing.json')) == models.MISSING
+    path = tmp_path / 'calibration.json'
+    path.write_text(json.dumps({'coefficients': SHRINK}))                       # fitted before versions were saved
+    assert models.calibration_status(str(path)) == models.VERSION_MISMATCH
+    path.write_text(json.dumps({'coefficients': SHRINK, 'model_version': models.MODEL_VERSION}))
+    assert models.calibration_status(str(path)) == models.FITTED
+    assert models.calibration_warning(models.FITTED) == ''
+    assert 'No calibration' in models.calibration_warning(models.MISSING)
+    assert 'another model version' in models.calibration_warning(models.VERSION_MISMATCH)

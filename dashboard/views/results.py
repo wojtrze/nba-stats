@@ -7,7 +7,7 @@ from bets import (as_snapshot_rows, bets_file, describe, kelly_stake, load_bets,
 from glossary import column_config, tinted
 from loaders import games, player_logs, snapshot_history
 import night_view
-from models import load_green_edge
+from models import FITTED, calibration_status, calibration_warning, load_green_edge
 from tracking import calibration, edge_bucket, results_table, settle_games, settle_props, threshold_table
 
 st.title("Bet slip & results")
@@ -103,14 +103,17 @@ with slip_tab:
                               help="Kelly = the stake that grows the bankroll fastest if the model's chances are "
                                    "right. They're not that reliable, so a quarter is the default; every stake is "
                                    "capped at 5% of the bankroll.")
+    calibrated = calibration_status() == FITTED
+    if not calibrated and any(b.get('edge_low') is not None and pd.notna(b.get('edge_low')) for b in slip):
+        st.warning(calibration_warning() + " Props on the slip get no suggested stake.", icon="⚠️")
     if not slip:
         st.info("The slip is empty. Open a prop on Today's props or a game on Games and press 🧾 Add to slip.")
     else:
         rows = pd.DataFrame([{'bet': describe(b), 'odds': b['odds'], 'model %': b['model_pct'],
                               'edge pp': b['edge_pp'],
-                              'suggested': kelly_stake(staking_chance(b), b['odds'], bankroll, fraction),
+                              'suggested': kelly_stake(staking_chance(b, calibrated), b['odds'], bankroll, fraction),
                               'stake': b.get('stake') if b.get('stake') is not None else
-                              kelly_stake(staking_chance(b), b['odds'], bankroll, fraction),
+                              kelly_stake(staking_chance(b, calibrated), b['odds'], bankroll, fraction),
                               'remove': False} for b in slip])
         edited = st.data_editor(
             rows, hide_index=True, width='stretch', key='slip_editor',

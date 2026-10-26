@@ -35,6 +35,11 @@ def test_staking_chance_uses_the_low_end_for_props():
     assert staking_chance(_game()) == pytest.approx(0.6)
 
 
+def test_no_stake_on_an_uncalibrated_prop():
+    assert np.isnan(staking_chance(_prop(edge_low=1.0), calibrated=False))
+    assert kelly_stake(staking_chance(_prop(edge_low=1.0), calibrated=False), 1.9, 1000) == 0
+
+
 def test_describe():
     assert describe(_prop()) == "A Player Over 20.5 PTS"
     assert describe(_game()) == "NYK @ BOS: Total over 210.5"

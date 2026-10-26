@@ -6,6 +6,7 @@ import streamlit as st
 from core.data import game_odds, lineups as rotowire_lineups, priced_games, priced_props, superbet
 from core.ui import PAGES, kpis, no_offers, page_header, pl_time, stop, table
 from espn_scraper import NBA_TEAM_NAMES
+from models import calibration_warning
 from schedule import minutes_to, starts_soon
 from superbet_fetcher import main_lines
 from core.labels import MARKET_LABELS, describe_outcome, winner
@@ -21,6 +22,8 @@ if odds.empty:
 
 lineups = rotowire_lineups()
 props = priced_props(seasons, season_types)
+if warning := calibration_warning(props['calibration'].iloc[0] if len(props) else None):
+    st.warning(warning, icon="⚠️")
 games = priced_games()
 by_event = {g['event_id']: g for g in games}
 main = pd.DataFrame(main_lines(odds.to_dict('records')))

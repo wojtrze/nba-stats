@@ -9,6 +9,7 @@ from typing import Callable, Dict, Optional
 import numpy as np
 import pandas as pd
 
+from models import MODEL_VERSION  # noqa: F401  (re-exported: the version saved with each line)
 from tracking import GAME_KEY, PROP_KEY, edge_signal, settle_games, settle_props
 
 ET = 'US/Eastern'
@@ -49,11 +50,8 @@ def nights(prop_snapshots: pd.DataFrame, games: pd.DataFrame, now) -> pd.DataFra
 MODEL_COLUMNS = ['pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag',
                  'raw_over_pct', 'raw_under_pct', 'market_over_pct']
 
-# which model priced a saved line: bump MODEL_VERSION whenever price_props / price_games change what they return,
-# so a calibration is only fitted on (and applied to) chances of one model. calibration_id: models.calibration_id
-# at pricing time. prediction_origin: recorded_live = saved by the fetch itself, historical_replay = priced later
+# which model priced a saved line: models.MODEL_VERSION. calibration_id: models.calibration_id at pricing time. prediction_origin: recorded_live = saved by the fetch itself, historical_replay = priced later
 # as of the fetch (daily_snapshot.py --reprice, kept in its own file). Rows saved before Oct 26 leave them empty.
-MODEL_VERSION = '2026-10-26'
 LINEAGE_COLUMNS = ['model_version', 'calibration_id', 'prediction_origin']
 RECORDED_LIVE, HISTORICAL_REPLAY = 'recorded_live', 'historical_replay'
 

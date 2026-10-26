@@ -18,6 +18,11 @@ from superbet_fetcher import main_lines
 # fitted by backtest/calibrate.py on Unibet's 2022/23 lines and the settled Superbet ones, with the 🟢 threshold;
 # without it the model's chances are used as they are
 CALIBRATION_FILE = os.path.join('data', 'backtest', 'calibration.json')
+# which model priced a line: bump it whenever price_props / price_games change what they return, so a calibration
+# is only fitted on (and trusted for) chances of one model (nightly.LINEAGE_COLUMNS, backtest/calibrate.py)
+MODEL_VERSION = '2026-10-26'
+# calibration_status: fitted for this model; no file (the raw chances are used); fitted for another model version
+FITTED, MISSING, VERSION_MISMATCH, GIVEN = 'fitted', 'missing', 'version mismatch', 'given'
 FROM_FILE = object()   # price_props' default green_edge: the one saved in CALIBRATION_FILE
 
 # the sidebar's defaults: the current season, regular season, play-in and playoffs. Preseason is opt-in:
@@ -96,6 +101,30 @@ def load_calibration(path: Optional[str] = None) -> Dict:
     return saved['coefficients'] if saved else IDENTITY_CALIBRATION
 
 
+def calibration_status(path: Optional[str] = None) -> str:
+    """FITTED when the calibration file was fitted for MODEL_VERSION, MISSING without one, VERSION_MISMATCH when
+    it was fitted for another model (or before versions were saved). Only FITTED chances may give 🟢 / 🟡 picks
+    and stakes; the others are for research."""
+    saved = _calibration_file(path)
+    if not saved:
+        return MISSING
+    return FITTED if saved.get('model_version') == MODEL_VERSION else VERSION_MISMATCH
+
+
+def calibration_warning(status: Optional[str] = None) -> str:
+    """What the pages say when the chances aren't validated ('' when they are)."""
+    status = status or calibration_status()
+    if status == MISSING:
+        return ("No calibration (data/backtest/calibration.json): model % is the raw model's chance, which was "
+                "overconfident on past lines. No 🟢 / 🟡 picks and no stakes until `python -m backtest.calibrate` "
+                "has been run.")
+    if status == VERSION_MISMATCH:
+        return (f"The calibration was fitted for another model version (now {MODEL_VERSION}). No 🟢 / 🟡 picks and "
+                "no stakes until it's refitted: `python daily_snapshot.py --reprice`, then `python -m "
+                "backtest.calibrate`.")
+    return ''
+
+
 def calibration_id(path: Optional[str] = None) -> str:
     """A short fingerprint of the calibration in use (coefficients, 🟢 threshold, last Superbet night), saved with
     every priced line so a later refit can't pass for the one it was priced with. 'none' without a file."""
@@ -144,7 +173,8 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     when there's a positive edge, else '' = pass) and lean (the projection's side when it's well off the line).
     model %, edge pp and edge low are calibrated (metrics.calibrate with `calibration`, default: the fitted
     coefficients in CALIBRATION_FILE); raw model %, raw over/under % (and their low ends) and market over % are
-    the model's own chances before that, which backtest/calibrate.py fits on.
+    the model's own chances before that, which backtest/calibrate.py fits on. calibration: calibration_status, or
+    GIVEN for coefficients passed in; unless FITTED or GIVEN no line gets 🟢 / 🟡 or a bet (research only).
     """
     adjust = adjust or absence_adjustments
     # last season's games of a few players would distort opponents' defense and teammates' absence effects
@@ -217,6 +247,7 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     table['proj avg'] = table['adj avg'] * table['pace factor'] * table['matchup factor']
 
     coef = load_calibration() if calibration is None else calibration
+    status = calibration_status() if calibration is None else GIVEN
 
     def price(row) -> pd.Series:
         games_ = by_player.get(row['player_id'], empty)
@@ -240,7 +271,10 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
 
     table = pd.concat([table, table.apply(price, axis=1)], axis=1)
     table['in band'] = (table['p30'] <= table['line']) & (table['line'] <= table['p70'])
+    table['calibration'] = status
     table['signal'] = prop_signal(table['edge pp'], load_green_edge() if green_edge is FROM_FILE else green_edge)
+    if status not in (FITTED, GIVEN):
+        table['signal'] = ''
     table['bet'] = bet_side(table['best side'], table['signal'])
     table['lean'] = lean(table['proj avg'], table['line'])
     return table

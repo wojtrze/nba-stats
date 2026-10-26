@@ -22,7 +22,8 @@ def green_at(tmp_path, monkeypatch):
 
     def set_green(edge):
         path = tmp_path / 'calibration.json'
-        path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': edge}))
+        path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': edge,
+                                    'model_version': models.MODEL_VERSION}))
         monkeypatch.setattr(models, 'CALIBRATION_FILE', str(path))
     return set_green
 
@@ -97,6 +98,15 @@ def test_verdict_levels(green_at):
     assert verdict([pro, pro], 6)[0] == 'Bet'          # no range (a game outcome): needs 5+ pp
     green_at(None)
     assert verdict([pro, pro, con], 9, 4)[0] == 'Lean'            # no 🟢 threshold: never a Bet for a prop
+
+
+def test_verdict_is_pass_for_a_prop_without_valid_calibration(tmp_path, monkeypatch):
+    import models
+    pro = {'supports': True, 'text': '', 'flag': False}
+    monkeypatch.setattr(models, 'CALIBRATION_FILE', str(tmp_path / 'missing.json'))
+    level, _, why = verdict([pro, pro], 9, 4)
+    assert level == 'Pass' and 'calibration' in why
+    assert verdict([pro, pro], 6)[0] == 'Bet'                       # a game outcome isn't sized by it (step 5)
 
 
 def test_game_reasons_for_a_total():

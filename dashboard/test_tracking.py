@@ -50,7 +50,8 @@ def green_at_5(tmp_path, monkeypatch):
     import json
     import models
     path = tmp_path / 'calibration.json'
-    path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': 5.0}))
+    path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': 5.0,
+                                'model_version': models.MODEL_VERSION}))
     monkeypatch.setattr(models, 'CALIBRATION_FILE', str(path))
 
 
