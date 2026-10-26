@@ -103,7 +103,7 @@ with left:
             st.session_state['props_focus'] = (r['event_id'], r['name_ESPN'], r['bet_type'])
             st.switch_page(PAGES['props'])
 with right:
-    st.subheader("Best game bets")
+    st.subheader("Biggest game edges")
     if not games:
         st.caption("No game could be priced.")
     else:
@@ -112,7 +112,8 @@ with right:
         top['bet'] = [describe_outcome(r) for _, r in top.iterrows()]
         picked = table(top, ['game', 'bet', 'odds', 'edge pp'], {'odds': '%.2f', 'edge pp': '%+.1f'},
                        sources={'bet': None, 'odds': 'superbet'}, key='top_games', select=True)
-        st.caption(f"Main lines of {', '.join(MARKET_LABELS.values()).lower()}. Pick one to open the game.")
+        st.caption(f"Main lines of {', '.join(MARKET_LABELS.values()).lower()}. Estimates for research, not "
+                   f"bets: the game model isn't calibrated yet. Pick one to open the game.")
         if picked is not None:
             st.session_state['games_focus'] = top.iloc[picked]['event_id']
             st.switch_page(PAGES['games'])

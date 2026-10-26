@@ -288,3 +288,34 @@ def test_refresh_refits_for_a_new_model_version_and_waits_for_its_lines(tmp_path
     monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: nights)
     assert calibrate.refresh(None, None, str(out), missing_2022)        # its lines are there: refitted for it
     assert json.loads(out.read_text())['model_version'] == 'next'
+
+
+def test_game_lines_margin_free_chance_and_report():
+    from backtest.calibrate import game_lines, game_report
+    tip = '2026-10-21T23:30:00Z'
+
+    def odd(fetched, market, side, line, odds, model):
+        return {'fetched_at': fetched, 'market': market, 'side': side, 'line': line, 'odds': odds,
+                'team': {'home': 'bos', 'away': 'ny'}.get(side), 'home': 'bos', 'away': 'ny', 'event_id': 1,
+                'start_time': tip, 'model_pct': model, 'edge_pp': model - 100 / odds}
+    snaps = pd.DataFrame([odd('2026-10-21T10:00:00Z', 'ML', 'home', None, 1.4, 70.0),        # superseded
+                          odd('2026-10-21T10:00:00Z', 'ML', 'away', None, 2.9, 30.0),
+                          odd('2026-10-21T20:00:00Z', 'ML', 'home', None, 1.5, 72.0),
+                          odd('2026-10-21T20:00:00Z', 'ML', 'away', None, 2.6, 28.0),
+                          odd('2026-10-21T20:00:00Z', 'SPREAD', 'home', -4.5, 1.9, 60.0),
+                          odd('2026-10-21T20:00:00Z', 'SPREAD', 'away', 4.5, 1.9, 40.0),
+                          odd('2026-10-21T20:00:00Z', 'TOTAL', 'over', 211.5, 1.9, 45.0),
+                          odd('2026-10-21T20:00:00Z', 'TOTAL', 'under', 211.5, 1.9, 55.0),
+                          odd('2026-10-22T00:00:00Z', 'TOTAL', 'over', 212.5, 1.9, 40.0)])      # after tip-off
+    games = pd.DataFrame({'date': pd.to_datetime(['2026-10-21']), 'home': ['bos'], 'away': ['ny'],
+                          'home_score': [110], 'away_score': [101]})
+    t = game_lines(snaps, games).set_index(['market', 'side'])
+    assert len(t) == 6                                                    # one row per outcome, last pre-tip fetch
+    ml = t.loc[('ML', 'home')]
+    assert ml['model %'] == 72.0 and ml['won'] == 1.0
+    assert ml['market %'] == pytest.approx(100 * (1 / 1.5) / (1 / 1.5 + 1 / 2.6))
+    assert t.loc[('SPREAD', 'away'), 'market %'] == pytest.approx(50)     # -4.5 and +4.5 are one market
+    assert t.loc[('SPREAD', 'home'), 'won'] == 1.0 and t.loc[('TOTAL', 'under'), 'won'] == 1.0
+    report = game_report(t.reset_index())
+    assert 'Game model' in report and 'the old 🟢' in report and '6 settled main-line outcomes on 1 nights' in report
+    assert 'No settled' in game_report(pd.DataFrame())

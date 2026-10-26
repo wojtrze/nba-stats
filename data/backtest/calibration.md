@@ -109,3 +109,31 @@ Selection policy: one bet per line (its last fetch before tip-off), the calibrat
 ## Used by the dashboards (fitted on every line)
 
 a = 1.093, b = 0.079, c = -0.103, d = 0.052 (75106 line sides); no 🟢; Superbet lines through 2026-10-25
+
+## Game markets (not calibrated)
+
+580 settled main-line outcomes on 5 nights (Oct 21 2026 – Oct 25 2026); a calibration is fitted from 300+ outcomes on 10+ nights. Until then game outcomes get no 🟢 / 🟡 and no stake: the model's edges are estimates for research.
+
+How well the chances predict the results (lower is better; both sides of each market count, so the rows aren't independent):
+
+| chances | log loss | Brier |
+|---|---|---|
+| Market (margin-free price) | 0.6719 | 0.2403 |
+| Game model | 0.7011 | 0.2492 |
+
+Betting every outcome whose model edge reached the threshold (1 unit at the saved odds):
+
+| bets | n | nights | expected % | hit % | ci low % | ci high % | break-even % | ROI % |
+|---|---|---|---|---|---|---|---|---|
+| edge > 0 | 243 | 5 | 65.5 | 58.4 | 52.2 | 64.5 | 52.0 | 11.0 |
+| edge ≥ +5 pp (the old 🟢) | 188 | 5 | 68.1 | 55.3 | 48.2 | 62.2 | 51.4 | 6.2 |
+
+By market:
+
+| market | outcomes | model log loss | market log loss |
+|---|---|---|---|
+| AWAY_TOTAL | 138 | 0.7734 | 0.6926 |
+| HOME_TOTAL | 150 | 0.7081 | 0.6942 |
+| ML | 80 | 0.5687 | 0.5496 |
+| SPREAD | 54 | 0.7878 | 0.6696 |
+| TOTAL | 158 | 0.6688 | 0.6955 |

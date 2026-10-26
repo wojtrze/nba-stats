@@ -125,8 +125,8 @@ with slip_tab:
                            'suggested': st.column_config.NumberColumn(
                                "suggested stake", format='%.2f',
                                help="Kelly stake at the chosen fraction. Props are sized on the low end of the "
-                                    "model's range, so 0 = the edge isn't sure enough; games on the model's "
-                                    "chance"),
+                                    "model's range, so 0 = the edge isn't sure enough. Game outcomes get 0: "
+                                    "the game model isn't calibrated yet"),
                            'stake': st.column_config.NumberColumn("stake", min_value=0.0, step=1.0, format='%.2f',
                                                                   help="What you actually bet; edit it"),
                            'remove': st.column_config.CheckboxColumn("remove")})

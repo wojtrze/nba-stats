@@ -27,15 +27,13 @@ def kelly_stake(chance: float, odds: float, bankroll: float, fraction: float = 0
 
 def staking_chance(bet: Dict, calibrated: bool = True) -> float:
     """The chance to size a bet on: for a prop the low end of the model's range (model % minus the gap between
-    edge pp and edge low), so a pick whose edge is thin or rests on few games gets less; a game outcome has no
-    range, so its model %. calibrated False (models.calibration_status isn't FITTED): a prop's chance is the raw
-    model's, so NaN (no stake)."""
+    edge pp and edge low), so a pick whose edge is thin or rests on few games gets less. NaN (no stake) for a prop
+    when calibrated is False (models.calibration_status isn't FITTED: the chance is the raw model's), and for a
+    game outcome (no range; its model isn't calibrated)."""
     low = bet.get('edge_low')
-    if low is not None and not pd.isna(low):
-        if not calibrated:
-            return np.nan
-        return (bet['model_pct'] - (bet['edge_pp'] - low)) / 100
-    return bet['model_pct'] / 100
+    if low is None or pd.isna(low) or not calibrated:
+        return np.nan
+    return (bet['model_pct'] - (bet['edge_pp'] - low)) / 100
 
 
 def describe(bet: Dict) -> str:

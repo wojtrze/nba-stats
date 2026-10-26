@@ -13,7 +13,8 @@ smallest edge (GREEN_CANDIDATES) whose held-out Superbet picks span MIN_GREEN_NI
 bets and whose hit rate's 95% range lies above their break-even; none = no 🟢. It's chosen on the same held-out
 nights it's judged on and re-chosen as nights settle, so it is exploratory, not a proven advantage.
 Then everything is refitted for the dashboards: data/backtest/calibration.json (coefficients, green_edge_pp and
-superbet_through, the last settled night used) and the report data/backtest/calibration.md.
+superbet_through, the last settled night used) and the report data/backtest/calibration.md. The report ends with
+the game markets: their model isn't calibrated, so it tracks how its chances do against the margin-free price.
 
 refresh() refits when a newer Superbet night has settled or the model version changed; daily_snapshot.py calls
 it before pricing a fetch.
@@ -31,7 +32,7 @@ import pandas as pd
 
 import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.run import MIN_GAMES, OUT_DIR, markdown, rate_row
-from metrics import IDENTITY_CALIBRATION, prop_signal
+from metrics import IDENTITY_CALIBRATION, prop_signal, wilson_interval
 from models import CALIBRATION_FILE
 from nightly import MODEL_VERSION
 
@@ -119,6 +120,73 @@ def superbet_lines(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFr
                          'market over %': t['market_over_pct'], 'raw over %': t['raw_over_pct'],
                          'raw under %': t['raw_under_pct'], 'saved edge pp': t['edge_pp'],
                          'saved signal': t['signal'], 'source': 'superbet'}).reset_index(drop=True)
+
+
+# --- game markets: not calibrated yet; the report tracks how the game model's chances hold up ---
+
+GAME_CALIBRATION_MIN = 300               # settled main-line outcomes (over GAME_CALIBRATION_NIGHTS+) before a fit
+GAME_CALIBRATION_NIGHTS = 10
+
+
+def game_lines(snapshots: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
+    """Every game outcome that was Superbet's main line, judged by its last fetch before tip-off and settled:
+    game_date, market, side, line, odds, market % (margin-free, from the two sides of the same fetch), model %
+    (saved with the fetch), edge pp and won (1 / 0; pushes and pending games left out)."""
+    from nightly import et_night
+    from tracking import GAME_KEY, settle_games
+    if snapshots.empty or 'model_pct' not in snapshots:
+        return pd.DataFrame()
+    s = snapshots.copy()
+    # the two sides of one market in one fetch: a handicap's are -x and +x, the rest share the line
+    s['pair'] = np.where(s['market'] == 'SPREAD', s['line'].abs(), s['line'])
+    implied = 1 / s['odds']
+    group = [s['fetched_at'], s['event_id'], s['market'], s['pair'].fillna(-1)]
+    total, sides = implied.groupby(group).transform('sum'), implied.groupby(group).transform('size')
+    s['market %'] = (100 * implied / total).where(sides == 2)
+    fetched = pd.to_datetime(s['fetched_at'], utc=True)
+    last = s[fetched < pd.to_datetime(s['start_time'], utc=True)].sort_values('fetched_at', kind='stable')         .drop_duplicates(GAME_KEY, keep='last').reset_index(drop=True)
+    if last.empty:
+        return pd.DataFrame()
+    settled = settle_games(snapshots, games, bets=last)
+    t = last.assign(game_date=et_night(last['start_time']), result=settled['result'].values,
+                    main=settled['main'].values)
+    t = t[t['main'] & t['result'].isin(['win', 'loss']) & t['model_pct'].notna() & t['market %'].notna()]
+    return pd.DataFrame({'game_date': t['game_date'], 'market': t['market'], 'side': t['side'], 'line': t['line'],
+                         'odds': t['odds'], 'market %': t['market %'], 'model %': t['model_pct'],
+                         'edge pp': t['edge_pp'], 'won': (t['result'] == 'win').astype(float)}).reset_index(drop=True)
+
+
+def game_report(t: pd.DataFrame) -> str:
+    """How the game model's chances did on settled main lines next to the margin-free price, and how its
+    positive and +5 pp edges did as bets."""
+    lines = ["## Game markets (not calibrated)", ""]
+    if t.empty:
+        return "\n".join(lines + ["No settled main-line game outcomes with the model's chance saved yet.", ""])
+    nights = t['game_date'].nunique()
+    lines += [f"{len(t)} settled main-line outcomes on {nights} nights ({_period(t)}); a calibration is fitted from "
+              f"{GAME_CALIBRATION_MIN}+ outcomes on {GAME_CALIBRATION_NIGHTS}+ nights. Until then game outcomes get "
+              f"no 🟢 / 🟡 and no stake: the model's edges are estimates for research.", "",
+              "How well the chances predict the results (lower is better; both sides of each market count, so "
+              "the rows aren't independent):", ""]
+    candidates = {'Market (margin-free price)': t['market %'].values / 100, 'Game model': t['model %'].values / 100}
+    lines += [markdown(pd.DataFrame([{'chances': n, **scores(t, p)} for n, p in candidates.items()]), '{:.4f}'), "",
+              "Betting every outcome whose model edge reached the threshold (1 unit at the saved odds):", ""]
+    rows = []
+    for name, keep in (("edge > 0", t['edge pp'] > 0), ("edge ≥ +5 pp (the old 🟢)", t['edge pp'] >= 5)):
+        part = t[keep]
+        wins, n = int(part['won'].sum()), len(part)
+        low, high = wilson_interval(wins, n)
+        rows.append({'bets': name, 'n': n, 'nights': part['game_date'].nunique(),
+                     'expected %': part['model %'].mean(), 'hit %': 100 * wins / n if n else np.nan,
+                     'ci low %': 100 * low, 'ci high %': 100 * high,
+                     'break-even %': (100 / part['odds']).mean() if n else np.nan,
+                     'ROI %': 100 * (part['won'] * part['odds'] - 1).mean() if n else np.nan})
+    lines += [markdown(pd.DataFrame(rows)), "", "By market:", ""]
+    by = pd.DataFrame([{'market': market, 'outcomes': len(g),
+                        'model log loss': scores(g, g['model %'].values / 100)['log loss'],
+                        'market log loss': scores(g, g['market %'].values / 100)['log loss']}
+                       for market, g in t.groupby('market')])
+    return "\n".join(lines + [markdown(by, '{:.4f}'), ""])
 
 
 def split(t: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -277,8 +345,10 @@ def evaluate(sources: Dict[str, pd.DataFrame]) -> Tuple[Dict, Optional[float], s
     return held_out, green, "\n".join(report)
 
 
-def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE) -> Dict:
-    """evaluate, then refit on everything and write `out` (calibration.json) and the report next to it."""
+def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE,
+              game_outcomes: Optional[pd.DataFrame] = None) -> Dict:
+    """evaluate, then refit on everything and write `out` (calibration.json) and the report next to it, with
+    game_report(game_outcomes) at the end when given."""
     held_out, green, report = evaluate(sources)
     everything = pd.concat([sides(t) for t in sources.values() if len(t)], ignore_index=True)
     coef = fit_coefficients(everything)
@@ -301,7 +371,8 @@ def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE) -> 
                       "## Used by the dashboards (fitted on every line)", "",
                       ", ".join(f"{k} = {v:.3f}" for k, v in coef.items()) + f" ({len(everything)} line sides); "
                       + (f"🟢 from +{green:g} pp" if green is not None else "no 🟢")
-                      + (f"; Superbet lines through {through}" if through else ""), ""])
+                      + (f"; Superbet lines through {through}" if through else ""), ""]
+                     + ([game_report(game_outcomes)] if game_outcomes is not None else []))
     with open(os.path.join(os.path.dirname(out), os.path.basename(REPORT_FILE)), 'w', encoding='utf-8') as f:
         f.write(text)
     return {**result, 'report': text}
@@ -312,8 +383,23 @@ def _superbet_sources(logs: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
     from espn_scraper import CURRENT_SEASON
     from espn_scraper.storage import snapshot_file
     from nightly import priced_by
-    read = lambda name: pd.read_csv(snapshot_file(CURRENT_SEASON, name))         if os.path.exists(snapshot_file(CURRENT_SEASON, name)) else pd.DataFrame()
+    def read(name):
+        path = snapshot_file(CURRENT_SEASON, name)
+        return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame()
     return superbet_lines(priced_by(read('superbet_props'), read('superbet_props_replay')), logs, games)
+
+
+def _game_sources(games: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """game_lines of the saved Superbet game odds; None when they can't be read or settled (the props calibration
+    goes on without the game report)."""
+    from espn_scraper import CURRENT_SEASON
+    from espn_scraper.storage import snapshot_file
+    path = snapshot_file(CURRENT_SEASON, 'superbet_game_odds')
+    try:
+        return game_lines(pd.read_csv(path), games) if os.path.exists(path) else pd.DataFrame()
+    except Exception as e:
+        log.warning("Game markets left out of the report: %s", e)
+        return None
 
 
 def refresh(logs: pd.DataFrame, games: pd.DataFrame, out: str = CALIBRATION_FILE,
@@ -338,7 +424,7 @@ def refresh(logs: pd.DataFrame, games: pd.DataFrame, out: str = CALIBRATION_FILE
             return False
         sources = {'2022': lines_2022(lines_file) if os.path.exists(lines_file) else pd.DataFrame(),
                    'superbet': superbet}
-        result = calibrate(sources, out)
+        result = calibrate(sources, out, _game_sources(games))
         log.info("Calibration refitted through %s: %s, 🟢 from %s", newest, result['coefficients'],
                  result['green_edge_pp'])
         return True
@@ -354,14 +440,15 @@ def main():
     parser.add_argument('--no-superbet', action='store_true', help="fit on the 2022/23 lines only")
     args = parser.parse_args()
 
-    sources = {'2022': lines_2022(args.lines)}
+    sources, game_outcomes = {'2022': lines_2022(args.lines)}, None
     if not args.no_superbet:
         from espn_scraper import SEASONS
         from espn_scraper.storage import load_games, load_player_gamelogs
         from models import prepare_logs
-        sources['superbet'] = _superbet_sources(prepare_logs(load_player_gamelogs(sorted(SEASONS))),
-                                                load_games(sorted(SEASONS)))
-    report = calibrate(sources, args.out)['report']
+        games = load_games(sorted(SEASONS))
+        sources['superbet'] = _superbet_sources(prepare_logs(load_player_gamelogs(sorted(SEASONS))), games)
+        game_outcomes = _game_sources(games)
+    report = calibrate(sources, args.out, game_outcomes)['report']
     sys.stdout.reconfigure(errors='replace')   # a Windows console's code page lacks − and 🟢
     print(report)
 

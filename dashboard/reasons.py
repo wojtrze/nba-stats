@@ -256,31 +256,32 @@ def game_flags(edge_pp: float, games_played: int, rotowire: bool) -> List[str]:
 
 def flag_game_outcomes(edges: pd.DataFrame, games_played: int, rotowire: bool) -> pd.DataFrame:
     """metrics.market_edges rows of one game with 'red flag' (game_flags, joined) and 'signal': 🔴 when flagged,
-    otherwise 🟢 for an edge of +5 pp or more."""
+    otherwise ''. The game model isn't calibrated (it was overconfident on the settled nights: see the game section
+    of data/backtest/calibration.md), so its edges are estimates and never 🟢 / 🟡."""
     flags = pd.Series(['; '.join(game_flags(e, games_played, rotowire)) for e in edges['edge pp']], index=edges.index)
-    signal = np.where(flags != '', '🔴', np.where(edges['edge pp'] >= 5, '🟢', ''))
+    signal = np.where(flags != '', '🔴', '')
     return edges.assign(signal=signal, **{'red flag': flags})
 
 
 def verdict(reasons: List[Dict], edge_pp: float, edge_low: float = np.nan):
     """('Bet' / 'Lean' / 'Pass', colour, why). Any flag means Pass. Bet needs a strong edge and more reasons for
-    than against; Lean a positive edge and at least as many reasons for as against. Strong: for a prop (it has an
-    edge low) the 🟢 threshold (models.load_green_edge; none = never), for a game outcome an edge of 5+ pp."""
+    than against; Lean a positive edge and at least as many reasons for as against. Strong: the 🟢 threshold
+    (models.load_green_edge; none = never). Only props (they have an edge low) with a calibration fitted for the
+    current model get past Pass: a game outcome's chance comes from an uncalibrated model."""
     from models import FITTED, calibration_status, load_green_edge
     flags = [r for r in reasons if r['flag']]
     pros = sum(r['supports'] is True for r in reasons)
     cons = sum(r['supports'] is False and not r['flag'] for r in reasons)
     if flags:
         return 'Pass', 'red', flags[0]['text']
-    if pd.notna(edge_low) and calibration_status() != FITTED:
+    if pd.isna(edge_low):
+        return 'Pass', 'gray', "The game model isn't calibrated against results yet: its edge is an estimate "                                "for research, not a betting signal"
+    if calibration_status() != FITTED:
         return 'Pass', 'gray', "No valid calibration: the model's chance isn't a betting signal (research only)"
     if pd.isna(edge_pp) or edge_pp <= 0:
         return 'Pass', 'gray', "The price doesn't pay enough for the chance"
-    if pd.notna(edge_low):
-        green = load_green_edge()
-        strong = green is not None and edge_pp >= green
-    else:
-        strong = edge_pp >= 5
+    green = load_green_edge()
+    strong = green is not None and edge_pp >= green
     if strong and pros > cons:
         return 'Bet', 'green', f"A strong edge (🟢), and {pros} reasons for vs {cons} against"
     if pros >= cons:
