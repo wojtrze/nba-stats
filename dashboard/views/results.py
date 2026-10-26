@@ -7,7 +7,7 @@ from bets import (as_snapshot_rows, bets_file, describe, kelly_stake, load_bets,
 from glossary import column_config, tinted
 from loaders import games, player_logs, snapshot_history
 import night_view
-from models import load_green_edge
+from models import FITTED, calibration_status, calibration_warning, load_green_edge
 from tracking import calibration, edge_bucket, results_table, settle_games, settle_props, threshold_table
 
 st.title("Bet slip & results")
@@ -74,8 +74,11 @@ def kpis(settled: pd.DataFrame, stake_col=None):
     profit = (settled['profit'] * stake).sum()
     staked = stake[settled['result'].isin(['win', 'loss', 'push'])].sum()
     m = st.columns(5)
-    m[0].metric("Settled", f"{len(decided)}", f"{(settled['status'] == 'pending').sum()} pending", delta_color='off',
-                help="Won or lost; pending = the game isn't in the stored stats yet")
+    m[0].metric("Settled", f"{len(decided)}", f"{(settled['status'] == 'pending').sum()} pending, "
+                f"{(settled['status'] == 'unresolved').sum()} unresolved", delta_color='off',
+                help="Won or lost; pending = the game isn't in the stored stats yet; unresolved = can't be settled "
+                     "from the stored stats (player not identified, incomplete box score, or the game still missing "
+                     "while later ones are stored)")
     m[1].metric("Hit rate", f"{100 * (decided['result'] == 'win').mean():.0f}%" if len(decided) else "–")
     m[2].metric("Profit" if stake_col else "Profit (1 unit each)", f"{profit:+.2f}")
     m[3].metric("ROI", f"{100 * profit / staked:+.1f}%" if staked else "–", help="Profit per 100 staked")
@@ -103,14 +106,17 @@ with slip_tab:
                               help="Kelly = the stake that grows the bankroll fastest if the model's chances are "
                                    "right. They're not that reliable, so a quarter is the default; every stake is "
                                    "capped at 5% of the bankroll.")
+    calibrated = calibration_status() == FITTED
+    if not calibrated and any(b.get('edge_low') is not None and pd.notna(b.get('edge_low')) for b in slip):
+        st.warning(calibration_warning() + " Props on the slip get no suggested stake.", icon="⚠️")
     if not slip:
         st.info("The slip is empty. Open a prop on Today's props or a game on Games and press 🧾 Add to slip.")
     else:
         rows = pd.DataFrame([{'bet': describe(b), 'odds': b['odds'], 'model %': b['model_pct'],
                               'edge pp': b['edge_pp'],
-                              'suggested': kelly_stake(staking_chance(b), b['odds'], bankroll, fraction),
+                              'suggested': kelly_stake(staking_chance(b, calibrated), b['odds'], bankroll, fraction),
                               'stake': b.get('stake') if b.get('stake') is not None else
-                              kelly_stake(staking_chance(b), b['odds'], bankroll, fraction),
+                              kelly_stake(staking_chance(b, calibrated), b['odds'], bankroll, fraction),
                               'remove': False} for b in slip])
         edited = st.data_editor(
             rows, hide_index=True, width='stretch', key='slip_editor',
@@ -122,8 +128,8 @@ with slip_tab:
                            'suggested': st.column_config.NumberColumn(
                                "suggested stake", format='%.2f',
                                help="Kelly stake at the chosen fraction. Props are sized on the low end of the "
-                                    "model's range, so 0 = the edge isn't sure enough; games on the model's "
-                                    "chance"),
+                                    "model's range, so 0 = the edge isn't sure enough. Game outcomes get 0: "
+                                    "the game model isn't calibrated yet"),
                            'stake': st.column_config.NumberColumn("stake", min_value=0.0, step=1.0, format='%.2f',
                                                                   help="What you actually bet; edit it"),
                            'remove': st.column_config.CheckboxColumn("remove")})
@@ -173,7 +179,8 @@ with mine_tab:
                      column_config=column_config(cols, formats, tips={
                          'model_pct': "Model's chance when you added the bet", 'edge_pp': "Edge when you added it",
                          'P&L': "Profit or loss at your stake", 'clv odds %': RESULT_TIPS['avg CLV %'],
-                         'status': "settled, pending (game not in the stored stats yet) or void (didn't play)",
+                         'status': "settled, pending (game not in the stored stats yet), void (didn't play) or "
+                                   "unresolved (can't be settled from the stored stats)",
                          'game_date': "Game date (US Eastern)"})
                      | {'game_date': st.column_config.DateColumn("date", format='YYYY-MM-DD')})
 

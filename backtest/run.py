@@ -22,8 +22,10 @@ import pandas as pd
 
 import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.data_2022 import load_lines_2022, load_logs_2022
-from metrics import absence_adjustments, grouped_rates, wilson_interval
+from metrics import absence_adjustments, grouped_rates, side_profit, side_result as metrics_side_result, wilson_interval
 from models import prepare_logs, price_props
+from nightly import MODEL_VERSION
+from safe_io import atomic_to_csv, atomic_write_text
 from tracking import calibration, edge_bucket
 
 log = logging.getLogger(__name__)
@@ -40,7 +42,7 @@ KEEP = ['game_date', 'name', 'name_ESPN', 'player_id_ESPN', 'team', 'home', 'awa
         'over_odds', 'under_odds', 'games', 'avg', 'avg L5', 'lineup adj', 'adj avg', 'matchup', 'proj avg',
         'over % L10', 'under % L10', 'best side', 'model %', 'market %', 'break-even %', 'edge pp', 'edge low',
         'pick odds', 'signal', 'raw model %', 'raw over %', 'raw under %', 'raw over low %', 'raw under low %',
-        'market over %']
+        'market over %', 'sd', 'over %', 'under %', 'pace factor', 'matchup factor']
 
 
 def known_absences(logs: pd.DataFrame, day: pd.Timestamp, teams) -> pd.DataFrame:
@@ -91,10 +93,8 @@ def settle(table: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
 def side_result(table: pd.DataFrame, side: pd.Series, odds: pd.Series, prefix: str) -> Dict[str, pd.Series]:
     """'<prefix> result' (win / loss / push, NaN without a side) and '<prefix> profit' for betting `side`."""
     margin = (table['actual'] - table['line']) * np.where(side == 'Over', 1, -1)
-    result = pd.Series(np.select([margin > 0, margin < 0], ['win', 'loss'], 'push'), index=table.index, dtype=object)
-    result = result.where(side.isin(['Over', 'Under']))
-    profit = pd.Series(np.select([result == 'win', result == 'loss'], [odds - 1, -1.0], 0.0), index=table.index)
-    return {f'{prefix} result': result, f'{prefix} profit': profit.where(result.notna())}
+    result = metrics_side_result(margin, side.isin(['Over', 'Under']))
+    return {f'{prefix} result': result, f'{prefix} profit': side_profit(result, odds)}
 
 
 # --- summary ---
@@ -184,14 +184,15 @@ def main():
     results = {}
     for variant in variants:
         t0 = time.monotonic()
-        results[variant] = price_season(logs, lines, variant).assign(variant=variant)
+        results[variant] = price_season(logs, lines, variant).assign(variant=variant, model_version=MODEL_VERSION)
         log.info("%s: %d lines priced in %.0f s", variant, len(results[variant]), time.monotonic() - t0)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
-    pd.concat(results.values(), ignore_index=True).to_csv(args.out, index=False)
+    atomic_to_csv(pd.concat(results.values(), ignore_index=True), args.out)
     text = summary(results, [logs_report, lines_report])
-    with open(os.path.join(os.path.dirname(args.out), '2022_summary.md'), 'w', encoding='utf-8') as f:
-        f.write(text)
+    # 2022_lines.csv → 2022_summary.md; another --out gets its own summary, so a side run can't replace it
+    summary_file = os.path.splitext(args.out)[0].replace('_lines', '_summary') + '.md'
+    atomic_write_text(summary_file, text)
     print(text)
 
 

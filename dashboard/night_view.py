@@ -127,8 +127,9 @@ def render(update_stats: Optional[Callable] = None, key: str = 'night'):
     s = night_summary(props, game_part)
     if s.get('lines'):
         c = st.columns(5)
-        _kpi(c[0], "Lines settled", f"{s['settled']:,}", "Lines whose player played; void = didn't play",
-             f"of {s['lines']:,}, {s['void']} void")
+        _kpi(c[0], "Lines settled", f"{s['settled']:,}",
+             "Lines whose player played; void = didn't play; unresolved = can't be settled from the stored stats",
+             f"of {s['lines']:,}, {s['void']} void" + (f", {s['unresolved']} unresolved" if s['unresolved'] else ""))
         _kpi(c[1], "Our picks: hit", _rate(s['picks']), "Every line's pick at the last fetch before tip-off",
              f"ROI {s['picks']['ROI %']:+.1f}%" if s['picks']['picks'] else None)
         _kpi(c[2], "🟢🟡 picks: hit", _rate(s['edge picks']), "Picks with a positive edge",

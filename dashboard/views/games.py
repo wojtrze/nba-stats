@@ -5,7 +5,7 @@ import streamlit as st
 
 from components import no_offers, reasons_panel, slip_button
 from espn_scraper import CURRENT_SEASON
-from glossary import column_config, source_legend, tinted
+from glossary import GAME_SIGNAL_TIP, column_config, source_legend, tinted
 from loaders import (games, player_logs, rotowire_lineups, season_label, snapshot_history, superbet_fetch_controls,
                      superbet_offers, today_game_odds)
 from metrics import absence_impact, game_lines
@@ -125,9 +125,7 @@ st.dataframe(tinted(overview, overview_formats, sources={'best odds': 'superbet'
                                          tips={'RotoWire': "✔ = RotoWire already lists this game's lineups and "
                                                            "injuries, so absences are in the projection",
                                                'best odds': "Superbet's odds for the best bet",
-                                               'signal': "The best bet's signal: 🟢 model edge of +5 pp or more; 🔴 a "
-                                                         "reason to pass whatever the numbers say (see the game's "
-                                                         "markets)"},
+                                               'signal': "The best bet's signal: " + GAME_SIGNAL_TIP},
                                          sources={'best odds': 'superbet'}))
 st.caption("Hover a column header for what it means; expand a game below for every market. Superbet's margin is "
            "about 2–3 pp per side, so small edges are noise.")
@@ -188,7 +186,7 @@ for label, start, home, away, projection, edges, absences, event_id, start_time 
                          market_cols, formats=market_formats,
                          tips={'line': "Handicap: the team's handicap (+1.5 = still wins the bet if it loses by 1). "
                                        "Totals: the points line. Empty for the moneyline.",
-                               'signal': "🟢 model edge of +5 pp or more; 🔴 a reason to pass whatever the numbers say (see red flag)",
+                               'signal': GAME_SIGNAL_TIP,
                                'edge pp': "model % − implied %, in percentage points"}))
         # the selected outcome, or the game's best bet
         picked = table.iloc[event.selection.rows[0]] if event.selection.rows else table.loc[edges['edge pp'].idxmax()]

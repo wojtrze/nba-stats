@@ -10,7 +10,7 @@ from glossary import column_config, signal_legend, source_legend, tinted
 from loaders import (filtered_logs, games as all_games, player_logs, rotowire_lineups, sidebar_filters, snapshot_history,
                      superbet_fetch_controls, superbet_offers, today_game_odds, today_props)
 from metrics import STATS, absence_adjustments, hit_rates, percentile_band, rotowire_team
-from models import price_props, top_up_logs
+from models import calibration_warning, price_props, top_up_logs
 from reasons import flag_props, prop_reasons
 from schedule import tip_label
 from tracking import prop_movement
@@ -109,6 +109,8 @@ elif props.empty:
             "the first regular-season games. Use the line checker below meanwhile.")
 else:
     table = priced(tuple(seasons), tuple(season_types), props, lineups, today_game_odds())
+    if warning := calibration_warning(table['calibration'].iloc[0] if len(table) else None):
+        st.warning(warning, icon="⚠️")
     # the tip-off label changes as the game nears, so it's computed on every run, not cached
     now = datetime.now(timezone.utc)
     table = table.assign(**{'tip-off': [tip_label(t, now) for t in table['start_time']],

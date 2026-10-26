@@ -5,6 +5,8 @@ from typing import Dict, Iterable, List, Optional, Set
 import pandas as pd
 
 from . import CURRENT_SEASON, data_dir
+from safe_io import append_csv, atomic_to_csv, atomic_write_text, locked
+
 from .boxscore import GAME_COLUMNS, PLAYER_COLUMNS
 
 
@@ -50,21 +52,18 @@ def checked_through(season: int) -> Optional[str]:
 
 
 def set_checked_through(season: int, day: str):
-    os.makedirs(data_dir(season), exist_ok=True)
-    with open(_checked_file(season), 'w') as f:
-        f.write(day + '\n')
+    atomic_write_text(_checked_file(season), day + '\n')
 
 
 def _append(season: int, path: str, rows: List[Dict], columns: List[str]):
-    os.makedirs(data_dir(season), exist_ok=True)
-    df = pd.DataFrame(rows, columns=columns)
-    df.to_csv(path, mode='a', header=not os.path.exists(path), index=False)
+    append_csv(pd.DataFrame(rows, columns=columns), path, columns)
 
 
 def _drop_game(path: str, game_id: str):
-    df = _read(path)
-    if not df.empty and (df['game_id'] == game_id).any():
-        df[df['game_id'] != game_id].to_csv(path, index=False)
+    with locked(path):
+        df = _read(path)
+        if not df.empty and (df['game_id'] == game_id).any():
+            atomic_to_csv(df[df['game_id'] != game_id], path)
 
 
 def save_game(season: int, game: Dict, players: List[Dict], replace: bool = False):

@@ -6,6 +6,7 @@ from core.data import game_model, lineups as rotowire_lineups, priced_games, sup
 from core.labels import MARKET_LABELS, describe_outcome, winner
 from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, stop, table
 from espn_scraper import CURRENT_SEASON
+from glossary import GAME_SIGNAL_TIP
 from loaders import season_label, snapshot_history
 from models import GAME_DEFAULTS
 from reasons import flag_game_outcomes, game_reasons
@@ -64,7 +65,7 @@ picked = table(summary, ['game', 'start (PL)', 'proj winner', 'proj score', 'pro
                          'best edge pp', 'best odds', 'RotoWire'],
                {'proj total': '%.1f', 'best edge pp': '%+.1f', 'best odds': '%.2f'},
                tips={'RotoWire': "✔ = RotoWire lists this game's lineups, so absences are in the projection",
-                     'signal': "The best bet's signal: " + "🟢 model edge of +5 pp or more; 🔴 a reason to pass whatever the numbers say (see red flag)",
+                     'signal': "The best bet's signal: " + GAME_SIGNAL_TIP,
                      'best odds': "Superbet's odds for the best bet"},
                sources={'best odds': 'superbet'}, key='games_table', select=True, legend=['superbet', 'stats'])
 
@@ -105,7 +106,7 @@ with st.container(border=True):
                 'fair odds', 'red flag']
         row = table(t, cols, {'implied %': '%.0f', 'model %': '%.0f', 'fair odds': '%.2f', 'odds': '%.2f',
                               'odds move': '%+.2f', 'edge pp': '%+.1f'},
-                    tips={'signal': "🟢 model edge of +5 pp or more; 🔴 a reason to pass whatever the numbers say (see red flag)",
+                    tips={'signal': GAME_SIGNAL_TIP,
                           'edge pp': "model % − implied %, in percentage points"},
                     key=f"markets_{event_id}", select=True)
         outcome = edges.loc[t.index[row]] if row is not None else edges.loc[edges['edge pp'].idxmax()]

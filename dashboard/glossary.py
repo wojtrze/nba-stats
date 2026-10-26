@@ -185,14 +185,20 @@ COLUMN_SOURCE = {
 }
 
 
+# the signal column of the Games pages
+GAME_SIGNAL_TIP = ("🔴 a reason to pass whatever the numbers say (see red flag). No 🟢 / 🟡 for games: their model "
+                   "isn't calibrated (it was overconfident on the settled nights), so edge pp is an estimate for "
+                   "research, not a betting signal")
+
+
 def signal_legend() -> str:
     """What 🟢 / 🟡 / 🔴 mean on the props pages, with the current 🟢 threshold."""
     from models import load_green_edge
     green = load_green_edge()
-    return ((f"🟢 = an edge of +{green:g} pp or more (the smallest threshold whose picks paid on unseen Superbet "
-             f"lines); " if green is not None else
-             "No 🟢 for now: no edge threshold has paid on unseen Superbet lines yet; ")
-            + "🟡 = a positive edge, not proven; 🔴 = a reason to pass whatever the numbers say (red flag), listed "
+    return ((f"🟢 = an edge of +{green:g} pp or more (the smallest threshold whose picks beat break-even on 10+ "
+             f"unseen Superbet nights, even at the low end of their range); " if green is not None else
+             "No 🟢 for now: no edge threshold has clearly beaten break-even on 10+ unseen Superbet nights yet; ")
+            + "🟡 = a positive estimated edge, not a validated one; 🔴 = a reason to pass whatever the numbers say (red flag), listed "
               "last.")
 
 

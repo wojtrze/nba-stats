@@ -1,4 +1,6 @@
 """Run with: python -m pytest backtest"""
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -157,6 +159,22 @@ def test_fit_recovers_known_coefficients():
     assert dict(zip(COEFS, beta)) == {k: pytest.approx(v, abs=0.05) for k, v in truth.items()}
 
 
+def test_fit_coefficients_keeps_the_side_bias_and_offset_at_zero():
+    from backtest.calibrate import FITTED, apply, fit_coefficients
+    assert FITTED == ['a', 'b']
+    rng = np.random.default_rng(5)
+    n = 40000
+    market, model = rng.uniform(0.35, 0.65, n), rng.uniform(0.2, 0.8, n)
+    over = rng.integers(0, 2, n).astype(bool)
+    truth = {'a': 1.0, 'b': 0.25, 'c': 0.0, 'd': 0.0}
+    s = pd.DataFrame({'market': market, 'model': model, 'over': over,
+                      'won': (rng.uniform(size=n) < apply(truth, market, model, over)).astype(float)})
+    coef = fit_coefficients(s)
+    assert coef['c'] == 0.0 and coef['d'] == 0.0
+    assert (coef['a'], coef['b']) == (pytest.approx(1.0, abs=0.05), pytest.approx(0.25, abs=0.05))
+    assert set(fit_coefficients(s, ['a', 'b', 'c', 'd'])) == {'a', 'b', 'c', 'd'}
+
+
 def test_vectorised_apply_matches_metrics_calibrate():
     from backtest.calibrate import apply
     from metrics import calibrate
@@ -207,17 +225,27 @@ def _lines(n, over_won, market=50.0, raw_over=50.0, night='2026-10-21'):
                          'raw under %': 100 - raw_over, 'source': 'superbet'}, index=range(n))
 
 
-def test_choose_green_edge_needs_enough_picks_that_paid():
+def _spread(n, over_won, nights, raw_over=60.0):
+    """n lines spread evenly over `nights` nights from Oct 1."""
+    t = _lines(n, over_won, raw_over=raw_over)
+    return t.assign(game_date=pd.Timestamp('2026-10-01') + pd.to_timedelta(np.arange(n) % nights, unit='D'))
+
+
+def test_choose_green_edge_needs_many_nights_and_a_clear_margin_over_break_even():
     from backtest.calibrate import choose_green_edge, threshold_scan
     coef = {'a': 1.0, 'b': 1.0, 'c': 0.0, 'd': 0.0}                     # identity: the raw chance is the chance
-    # 60 lines where the model says 60% Over (edge 60 − 52.6 = +7.4 pp) and the Over won 40 times
-    good = _lines(60, np.arange(60) < 40, raw_over=60.0)
+    # the model says 60% Over (edge 60 − 52.6 = +7.4 pp); break-even at 1.9 is 52.6%
+    good = _spread(150, np.arange(150) % 3 != 0, nights=12)            # won 2 of 3: 95% range 59–74%
     assert choose_green_edge(good, coef) == 1.0
     scan = threshold_scan(good, coef).set_index('edge ≥ pp')
-    assert scan.loc[0, 'bets'] == scan.loc[5, 'bets'] == 60 and scan.loc[5, 'expected %'] == pytest.approx(60)
-    assert choose_green_edge(good.iloc[:30], coef) is None             # too few bets
-    bad = _lines(60, np.arange(60) < 20, raw_over=60.0)                 # the same edges lost
-    assert choose_green_edge(bad, coef) is None
+    assert scan.loc[5, 'bets'] == 150 and scan.loc[5, 'nights'] == 12
+    assert scan.loc[5, 'break-even %'] == pytest.approx(100 / 1.9) and scan.loc[5, 'expected %'] == pytest.approx(60)
+    assert choose_green_edge(_spread(150, np.arange(150) % 3 != 0, nights=2), coef) is None      # 2 nights
+    assert choose_green_edge(good.iloc[:30], coef) is None                                       # too few bets
+    paid_but_unclear = _spread(60, np.arange(60) < 36, nights=12)      # won 60%, paid, but the range starts at 47%
+    assert threshold_scan(paid_but_unclear, coef).set_index('edge ≥ pp').loc[1, 'ROI %'] > 0
+    assert choose_green_edge(paid_but_unclear, coef) is None
+    assert choose_green_edge(_spread(150, np.arange(150) % 3 == 0, nights=12), coef) is None    # the same edges lost
     assert choose_green_edge(good.iloc[0:0], coef) is None
 
 
@@ -241,3 +269,117 @@ def test_refresh_refits_only_after_a_new_night(tmp_path, monkeypatch):
     monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: (_ for _ in ()).throw(OSError("x")))
     assert not calibrate.refresh(None, None, str(out), missing_2022)                    # error: old file kept
     assert json.loads(out.read_text()) == saved
+
+
+def test_lines_2022_only_of_the_current_model(tmp_path):
+    from backtest.calibrate import LEGACY_2022_VERSION, lines_2022
+    from nightly import MODEL_VERSION
+    rows = pd.DataFrame({'game_date': ['2022-11-10'] * 3, 'variant': 'none', 'main': True, 'games': 10,
+                         'line': [10.5, 11.5, 12.5]})
+    legacy = tmp_path / 'legacy.csv'
+    rows.to_csv(legacy, index=False)                                   # written before model_version was saved
+    assert len(lines_2022(str(legacy), LEGACY_2022_VERSION)) == 3 and lines_2022(str(legacy), 'next').empty
+    tagged = tmp_path / 'tagged.csv'
+    rows.assign(model_version=[MODEL_VERSION, MODEL_VERSION, 'old']).to_csv(tagged, index=False)
+    assert lines_2022(str(tagged))['line'].tolist() == [10.5, 11.5]
+
+
+def test_refresh_refits_for_a_new_model_version_and_waits_for_its_lines(tmp_path, monkeypatch):
+    import json
+    from backtest import calibrate
+    rng = np.random.default_rng(2)
+    nights = pd.concat([_lines(200, rng.uniform(size=200) < 0.5, night=f'2026-10-{d}') for d in (21, 22, 23)],
+                       ignore_index=True)
+    nights['market over %'] = rng.uniform(40, 60, len(nights))
+    nights['raw over %'] = rng.uniform(30, 70, len(nights))
+    nights['raw under %'] = 100 - nights['raw over %']
+    monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: nights)
+    out, missing_2022 = tmp_path / 'calibration.json', str(tmp_path / 'none.csv')
+    assert calibrate.refresh(None, None, str(out), missing_2022)
+    assert json.loads(out.read_text())['model_version'] == calibrate.MODEL_VERSION
+    assert not calibrate.refresh(None, None, str(out), missing_2022)                    # same model, nothing new
+    monkeypatch.setattr(calibrate, 'MODEL_VERSION', 'next')
+    monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: pd.DataFrame())
+    before = out.read_text()
+    assert not calibrate.refresh(None, None, str(out), missing_2022)    # no lines of the new model yet: kept
+    assert out.read_text() == before
+    monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: nights)
+    assert calibrate.refresh(None, None, str(out), missing_2022)        # its lines are there: refitted for it
+    assert json.loads(out.read_text())['model_version'] == 'next'
+
+
+def test_game_lines_margin_free_chance_and_report():
+    from backtest.calibrate import game_lines, game_report
+    tip = '2026-10-21T23:30:00Z'
+
+    def odd(fetched, market, side, line, odds, model):
+        return {'fetched_at': fetched, 'market': market, 'side': side, 'line': line, 'odds': odds,
+                'team': {'home': 'bos', 'away': 'ny'}.get(side), 'home': 'bos', 'away': 'ny', 'event_id': 1,
+                'start_time': tip, 'model_pct': model, 'edge_pp': model - 100 / odds}
+    snaps = pd.DataFrame([odd('2026-10-21T10:00:00Z', 'ML', 'home', None, 1.4, 70.0),        # superseded
+                          odd('2026-10-21T10:00:00Z', 'ML', 'away', None, 2.9, 30.0),
+                          odd('2026-10-21T20:00:00Z', 'ML', 'home', None, 1.5, 72.0),
+                          odd('2026-10-21T20:00:00Z', 'ML', 'away', None, 2.6, 28.0),
+                          odd('2026-10-21T20:00:00Z', 'SPREAD', 'home', -4.5, 1.9, 60.0),
+                          odd('2026-10-21T20:00:00Z', 'SPREAD', 'away', 4.5, 1.9, 40.0),
+                          odd('2026-10-21T20:00:00Z', 'TOTAL', 'over', 211.5, 1.9, 45.0),
+                          odd('2026-10-21T20:00:00Z', 'TOTAL', 'under', 211.5, 1.9, 55.0),
+                          odd('2026-10-22T00:00:00Z', 'TOTAL', 'over', 212.5, 1.9, 40.0)])      # after tip-off
+    games = pd.DataFrame({'date': pd.to_datetime(['2026-10-21']), 'home': ['bos'], 'away': ['ny'],
+                          'home_score': [110], 'away_score': [101]})
+    t = game_lines(snaps, games).set_index(['market', 'side'])
+    assert len(t) == 6                                                    # one row per outcome, last pre-tip fetch
+    ml = t.loc[('ML', 'home')]
+    assert ml['model %'] == 72.0 and ml['won'] == 1.0
+    assert ml['market %'] == pytest.approx(100 * (1 / 1.5) / (1 / 1.5 + 1 / 2.6))
+    assert t.loc[('SPREAD', 'away'), 'market %'] == pytest.approx(50)     # -4.5 and +4.5 are one market
+    assert t.loc[('SPREAD', 'home'), 'won'] == 1.0 and t.loc[('TOTAL', 'under'), 'won'] == 1.0
+    report = game_report(t.reset_index())
+    assert 'Game model' in report and 'the old 🟢' in report and '6 settled main-line outcomes on 1 nights' in report
+    assert 'No settled' in game_report(pd.DataFrame())
+
+
+# --- the ablation ladder ---
+
+def test_ablation_chance_is_the_models_own():
+    from backtest.ablation import chance
+    from metrics import hit_rates, prop_probability
+    rng = np.random.default_rng(3)
+    rows, expected = [], []
+    for n, line, mean in ((12, 20.5, 23.0), (4, 7.5, 6.1), (2, 3.5, 4.0), (9, 15.0, 15.4)):
+        values = pd.Series(rng.normal(18, 5, n).round())
+        rates = hit_rates(values, line)
+        rows.append({'line': line, 'games': n, 'over %': 100 * rates['over'], 'under %': 100 * rates['under'],
+                     'sd': values.std(), 'avg': values.mean(), 'proj avg': mean, 'market over %': 47.0})
+        expected.append({side: prop_probability(values, line, side, 0.47 if side == 'Over' else 0.53, mean=mean)['p']
+                         for side in ('Over', 'Under')})
+    t = pd.DataFrame(rows)
+    for side in ('Over', 'Under'):
+        assert chance(t, side, t['proj avg']) == pytest.approx([e[side] for e in expected])
+
+
+def test_night_bootstrap():
+    from backtest.ablation import night_bootstrap
+    nights = np.repeat(['a', 'b', 'c'], 4)
+    assert night_bootstrap(nights, np.full(12, -0.01)) == pytest.approx((-0.01, -0.01))
+    assert np.isnan(night_bootstrap(np.repeat(['a'], 4), np.zeros(4))[0])          # one night: no range
+
+
+def test_ablation_ladder_finds_an_informative_average():
+    from backtest.ablation import _rungs, ladder
+    rng = np.random.default_rng(4)
+    n = 4000
+    avg = rng.uniform(10, 30, n)
+    line = np.round(avg + rng.normal(0, 3, n)) + 0.5                  # lines off the average: the average knows
+    actual = rng.normal(avg, 4).round()
+    t = pd.DataFrame({'game_date': pd.Timestamp('2026-10-01') + pd.to_timedelta(np.arange(n) % 40, unit='D'),
+                      'line': line, 'actual': actual, 'over_odds': 1.9, 'under_odds': 1.9, 'market over %': 50.0,
+                      'games': 20, 'sd': 4.0, 'avg': avg, 'adj avg': avg, 'pace factor': 1.0, 'matchup factor': 1.0,
+                      'proj avg': avg, 'source': 'superbet'})
+    t['over %'] = 100 * (1 - 0.5 * (1 + np.vectorize(math.erf)((line - avg) / (4 * math.sqrt(2)))))
+    t['under %'] = 100 - t['over %']
+    t['market over %'] = rng.uniform(45, 55, n)                        # a market that doesn't know the average
+    result = ladder(t, _rungs()).get('scores').set_index('model')
+    assert result.loc["1. Market (margin-free price)", 'vs market'] == 0
+    full = result.loc["8. + matchup = the full model"]
+    assert full['vs market'] < 0 and full['range high'] < 0            # clearly beats the price, nights resampled

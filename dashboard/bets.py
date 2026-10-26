@@ -10,6 +10,7 @@ import pandas as pd
 
 from espn_scraper import CURRENT_SEASON
 from espn_scraper.storage import snapshot_file
+from safe_io import append_csv
 
 BET_FIELDS = ['bet_id', 'placed_at', 'kind', 'event_id', 'start_time', 'home', 'away', 'name', 'name_ESPN',
               'player_id_ESPN', 'bet_type', 'market', 'side', 'team', 'line', 'odds', 'stake', 'model_pct', 'edge_pp',
@@ -25,14 +26,15 @@ def kelly_stake(chance: float, odds: float, bankroll: float, fraction: float = 0
     return round(bankroll * float(np.clip(full * fraction, 0, cap)), 2)
 
 
-def staking_chance(bet: Dict) -> float:
+def staking_chance(bet: Dict, calibrated: bool = True) -> float:
     """The chance to size a bet on: for a prop the low end of the model's range (model % minus the gap between
-    edge pp and edge low), so a pick whose edge is thin or rests on few games gets less; a game outcome has no
-    range, so its model %."""
+    edge pp and edge low), so a pick whose edge is thin or rests on few games gets less. NaN (no stake) for a prop
+    when calibrated is False (models.calibration_status isn't FITTED: the chance is the raw model's), and for a
+    game outcome (no range; its model isn't calibrated)."""
     low = bet.get('edge_low')
-    if low is not None and not pd.isna(low):
-        return (bet['model_pct'] - (bet['edge_pp'] - low)) / 100
-    return bet['model_pct'] / 100
+    if low is None or pd.isna(low) or not calibrated:
+        return np.nan
+    return (bet['model_pct'] - (bet['edge_pp'] - low)) / 100
 
 
 def describe(bet: Dict) -> str:
@@ -107,9 +109,7 @@ def save_bets(slip: List[Dict], path: str = None) -> int:
         .reindex(columns=BET_FIELDS)
     if rows.empty:
         return 0
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    rows.to_csv(path, mode='a', header=not os.path.exists(path), index=False)
-    return len(rows)
+    return append_csv(rows, path, BET_FIELDS)
 
 
 def as_snapshot_rows(bets: pd.DataFrame) -> Dict[str, pd.DataFrame]:

@@ -76,9 +76,12 @@ with saved_tab:
 
     avg_decided = done[done['pre avg result'].isin(['win', 'loss'])]
     kpis([{'label': "Settled lines", 'value': len(done),
-           'delta': f"{(view['status'] == 'pending').sum()} pending, {(view['status'] == 'void').sum()} void",
+           'delta': f"{(view['status'] == 'pending').sum()} pending, {(view['status'] == 'void').sum()} void, "
+                    f"{(view['status'] == 'unresolved').sum()} unresolved",
            'delta_color': 'off',
-           'help': "pending = the game isn't in the stored stats yet; void = the player didn't play"},
+           'help': "pending = the game isn't in the stored stats yet; void = the player didn't play; unresolved = "
+                   "can't be settled from the stored stats (player not identified, incomplete box score, or the "
+                   "game still missing while later ones are stored)"},
           {'label': "Over hit rate",
            'value': f"{100 * (done['actual'] > done['line']).mean():.0f}%" if len(done) else "–",
            'help': "How often the result went over the line. Far from 50% = the lines were set too low or high."},

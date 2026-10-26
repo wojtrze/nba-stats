@@ -9,6 +9,7 @@ from typing import Callable, Dict, Optional
 import numpy as np
 import pandas as pd
 
+from models import MODEL_VERSION  # noqa: F401  (re-exported: the version saved with each line)
 from tracking import GAME_KEY, PROP_KEY, edge_signal, settle_games, settle_props
 
 ET = 'US/Eastern'
@@ -48,6 +49,30 @@ def nights(prop_snapshots: pd.DataFrame, games: pd.DataFrame, now) -> pd.DataFra
 # the calibration from the settled lines without pricing them again
 MODEL_COLUMNS = ['pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag',
                  'raw_over_pct', 'raw_under_pct', 'market_over_pct']
+
+# which model priced a saved line: models.MODEL_VERSION. calibration_id: models.calibration_id at pricing time. prediction_origin: recorded_live = saved by the fetch itself, historical_replay = priced later
+# as of the fetch (daily_snapshot.py --reprice, kept in its own file). Rows saved before Oct 26 leave them empty.
+LINEAGE_COLUMNS = ['model_version', 'calibration_id', 'prediction_origin']
+RECORDED_LIVE, HISTORICAL_REPLAY = 'recorded_live', 'historical_replay'
+
+
+def lineage(origin: str) -> Dict[str, str]:
+    """LINEAGE_COLUMNS for lines priced now with the current model and calibration."""
+    from models import calibration_id
+    return {'model_version': MODEL_VERSION, 'calibration_id': calibration_id(), 'prediction_origin': origin}
+
+
+def priced_by(recorded: pd.DataFrame, replay: pd.DataFrame, version: str = MODEL_VERSION) -> pd.DataFrame:
+    """Every saved line with the chances of one model version: the fetch's own (recorded_live) where that version
+    priced it, else the replay of that version (daily_snapshot.py --reprice). Lines neither has are left out, so
+    chances of different models never mix (what the calibration is fitted on)."""
+    def of_version(df):
+        return df[df['model_version'].astype(str) == version] if 'model_version' in df else df.iloc[0:0]
+    live, again = of_version(recorded), of_version(replay)
+    key = ['fetched_at', *PROP_KEY]
+    seen = set(zip(*(live[k] for k in key)))
+    again = again[[k not in seen for k in zip(*(again[c] for c in key))]]
+    return pd.concat([live, again], ignore_index=True)
 
 
 def night_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame, night,
@@ -111,11 +136,11 @@ def _player_context(lines: pd.DataFrame, logs: pd.DataFrame, night) -> Dict[str,
 
 
 def recompute_props(rows: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame, lineups: pd.DataFrame,
-                    game_odds: pd.DataFrame, night) -> pd.DataFrame:
+                    game_odds: pd.DataFrame, night, full: bool = False) -> pd.DataFrame:
     """The model's numbers for saved lines (with player_id_ESPN) as the dashboard would have shown them before
     that night: models.price_props on that season's games before the night (the default game types, topped up
     with the season before's), the lineups and game odds saved before tip-off, then reasons.flag_props.
-    MODEL_COLUMNS on rows' index."""
+    MODEL_COLUMNS on rows' index; full: the whole priced table (every component, backtest/ablation.py)."""
     from models import DEFAULT_SEASON_TYPES, price_props, top_up_logs
     from reasons import flag_props
     night = pd.Timestamp(night)
@@ -128,7 +153,7 @@ def recompute_props(rows: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
     lines = rows[['name', 'name_ESPN', 'home', 'away', 'bet_type', 'line', 'event_id', 'start_time', 'over_odds',
                   'under_odds', 'player_id_ESPN']]
     table = flag_props(price_props(lines, scope, lineups, game_odds, played), scope, lineups)
-    return model_columns(table).set_axis(rows.index)
+    return (table if full else model_columns(table)).set_axis(rows.index)
 
 
 def model_columns(table: pd.DataFrame) -> pd.DataFrame:
@@ -280,7 +305,7 @@ def night_summary(props: pd.DataFrame, games: Dict[str, pd.DataFrame]) -> Dict:
         picks = props[props['pick'].notna()]
         out.update({
             'lines': len(props), 'settled': len(settled), 'pending': int((props['status'] == 'pending').sum()),
-            'void': int((props['status'] == 'void').sum()),
+            'void': int((props['status'] == 'void').sum()), 'unresolved': int((props['status'] == 'unresolved').sum()),
             'picks': _rate(picks), 'edge picks': _rate(picks[picks['signal'].isin(['🟢', '🟡'])]),
             'red picks': _rate(picks[picks['signal'] == '🔴']), 'plain picks': _rate(picks[picks['signal'] == '']),
             'median proj miss': settled['proj error'].abs().median() if len(settled) else np.nan,

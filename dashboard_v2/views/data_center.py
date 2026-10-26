@@ -7,9 +7,10 @@ import streamlit as st
 from core import freshness, jobs
 from core.data import LAST_FETCH, clear_live, game_odds, lineups, props, rotowire, superbet
 from core.ui import page_header
-from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS, SEASONS
+from espn_scraper import CURRENT_SEASON, SEASONS
 from espn_scraper.storage import snapshot_file
 from glossary import column_config
+from metrics import score_check
 from loaders import (SUPERBET_COOLDOWN, clear_rotowire, fetch_superbet, games, player_logs, season_label,
                      season_status, snapshot_history, superbet_error, superbet_wait)
 
@@ -249,16 +250,11 @@ with names_tab:
         st.success("Every RotoWire and Superbet name matches a player in the game logs.")
 
 with quality_tab:
-    g, p = games(), player_logs()
-    points = p.groupby(['game_id', 'type'])['PTS'].sum().unstack().add_suffix(' pts (players)')
-    # the player logs hold NBA teams only, so skip All-Star games and exhibitions against foreign clubs
-    nba = g[g['home'].isin(NBA_TEAM_ABBRS) & g['away'].isin(NBA_TEAM_ABBRS)].set_index('game_id')
-    check = nba[['date', 'season_id', 'season_type', 'home', 'away', 'home_score', 'away_score']].join(points)
-    bad = check[(check['home pts (players)'] != check['home_score'])
-                | (check['away pts (players)'] != check['away_score'])]
+    bad = score_check(games(), player_logs())
     if bad.empty:
         st.success("In every stored game the players' points add up to the team score.")
     else:
         st.warning(f"{len(bad)} games where the players' points don't add up to the score. Usually ESPN listed a "
-                   f"player without an id or name and the play-by-play didn't have them either.")
+                   f"player without an id or name and the play-by-play didn't have them either. Lines of these "
+                   f"games whose player has no row stay unresolved instead of void.")
         st.dataframe(bad, width='stretch')

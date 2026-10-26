@@ -140,3 +140,35 @@ def test_threshold_table_is_cumulative():
     t = threshold_table(settled).set_index('edge ≥ pp')
     assert t['bets'].to_dict() == {0: 4, 1: 3, 2: 2, 3: 2, 5: 1}         # the push and the negative edge left out
     assert t.loc[3, 'hit %'] == 50.0 and t.loc[5, 'expected %'] == 59.0
+
+
+def _priced_without_explicit_calibration(monkeypatch, tmp_path, saved):
+    """price_props on a line the raw model likes (player 2 scored 20 in each of 12 games; the line is 15.5) with
+    `saved` as the calibration file (None = no file)."""
+    import json
+    path = tmp_path / 'calibration.json'
+    path.unlink(missing_ok=True)
+    if saved is not None:
+        path.write_text(json.dumps(saved))
+    monkeypatch.setattr(models, 'CALIBRATION_FILE', str(path))
+    logs = _logs()
+    props = pd.DataFrame([{'name': 'A', 'name_ESPN': 'A', 'home': 'bos', 'away': 'ny', 'bet_type': 'PTS',
+                           'line': 15.5, 'event_id': 9, 'start_time': '2026-10-27T23:30:00Z', 'over_odds': 1.9,
+                           'under_odds': 1.9, 'player_id_ESPN': 2}])
+    lineups = pd.DataFrame(columns=['team', 'player_id_ESPN', 'role', 'play_pct', 'lineup_status', 'injury'])
+    return price_props(props, top_up_logs(_scoped(logs), logs, 2026, [2]), lineups, pd.DataFrame(),
+                       pd.DataFrame(columns=['home', 'away']), adjust=lambda *a: pd.DataFrame()).iloc[0]
+
+
+def test_no_valid_calibration_means_no_pick(monkeypatch, tmp_path):
+    fitted = {'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': None,
+              'model_version': models.MODEL_VERSION}
+    row = _priced_without_explicit_calibration(monkeypatch, tmp_path, fitted)
+    assert row['calibration'] == models.FITTED and row['edge pp'] > 0
+    assert row['signal'] == '🟡' and row['bet'] == row['best side']
+    for saved, status in ((None, models.MISSING),
+                          ({k: v for k, v in fitted.items() if k != 'model_version'}, models.VERSION_MISMATCH),
+                          (fitted | {'model_version': 'old'}, models.VERSION_MISMATCH)):
+        row = _priced_without_explicit_calibration(monkeypatch, tmp_path, saved)
+        assert row['calibration'] == status and row['edge pp'] > 0     # the raw numbers stay for research
+        assert row['signal'] == '' and row['bet'] == ''                 # but they're not a pick

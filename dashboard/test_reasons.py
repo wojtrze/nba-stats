@@ -22,7 +22,8 @@ def green_at(tmp_path, monkeypatch):
 
     def set_green(edge):
         path = tmp_path / 'calibration.json'
-        path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': edge}))
+        path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': edge,
+                                    'model_version': models.MODEL_VERSION}))
         monkeypatch.setattr(models, 'CALIBRATION_FILE', str(path))
     return set_green
 
@@ -94,9 +95,17 @@ def test_verdict_levels(green_at):
     assert verdict([pro, pro, con], 2, 1)[0] == 'Lean'            # positive but below the threshold: 🟡
     assert verdict([pro, con, con], 5, 1)[0] == 'Pass'
     assert verdict([pro, pro], -1, -5)[0] == 'Pass'
-    assert verdict([pro, pro], 6)[0] == 'Bet'          # no range (a game outcome): needs 5+ pp
+    assert verdict([pro, pro], 6)[0] == 'Pass'         # no range (a game outcome): never past Pass
     green_at(None)
     assert verdict([pro, pro, con], 9, 4)[0] == 'Lean'            # no 🟢 threshold: never a Bet for a prop
+
+
+def test_verdict_is_pass_for_a_prop_without_valid_calibration(tmp_path, monkeypatch):
+    import models
+    pro = {'supports': True, 'text': '', 'flag': False}
+    monkeypatch.setattr(models, 'CALIBRATION_FILE', str(tmp_path / 'missing.json'))
+    level, _, why = verdict([pro, pro], 9, 4)
+    assert level == 'Pass' and 'calibration' in why
 
 
 def test_game_reasons_for_a_total():
@@ -110,7 +119,8 @@ def test_game_reasons_for_a_total():
     reasons = game_reasons(outcome, ctx)
     assert any('Projected 232.0' in t for t in texts(reasons, True))
     assert not texts(reasons, flag=True)
-    assert verdict(reasons, 11.4)[0] == 'Bet'
+    level, _, why = verdict(reasons, 11.4)
+    assert level == 'Pass' and "isn't calibrated" in why          # a game edge is an estimate, never a bet
     spread = game_reasons({**outcome, 'market': 'SPREAD', 'side': 'away', 'line': 5.5}, ctx)
     assert any('missing +5.5 by 2.5' in t for t in texts(spread, False))
 
@@ -171,7 +181,7 @@ def test_game_outcomes_red_only_for_flags():
     from reasons import flag_game_outcomes
     edges = pd.DataFrame({'edge pp': [6.0, -8.0, 18.0]})
     settled = flag_game_outcomes(edges, games_played=20, rotowire=True)
-    assert settled['signal'].tolist() == ['🟢', '', '🔴']      # a bad price alone isn't red any more
+    assert settled['signal'].tolist() == ['', '', '🔴']        # no 🟢 for an uncalibrated model; red for flags
     assert "Edge over 15 pp" in settled['red flag'].iloc[2]
     early = flag_game_outcomes(edges, games_played=2, rotowire=False)
     assert early['signal'].tolist() == ['🔴'] * 3 and "Early season" in early['red flag'].iloc[0]

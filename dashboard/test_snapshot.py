@@ -1,4 +1,5 @@
 """Run with: python -m pytest dashboard"""
+import json
 import os
 
 import pandas as pd
@@ -36,11 +37,13 @@ def test_a_new_column_keeps_the_saved_rows_as_they_were(data_dir):
     assert text[1:3] == ['2026-10-20T10:00:00Z,A,4397475,', '2026-10-20T10:00:00Z,B,,']
 
 
-def test_reprice_rewrites_only_the_model_columns(data_dir, monkeypatch):
+def test_reprice_writes_a_replay_and_leaves_the_record_alone(data_dir, monkeypatch):
     saved = pd.DataFrame([_line('2026-10-21T10:00:00Z', 4397475.0, pick='Under', model_pct=51.0, signal='🔴'),
                           _line('2026-10-21T10:00:00Z', None, name='Nobody'),
                           _line('2026-10-21T20:00:00Z', 4397475.0, pick='Under', model_pct=52.0)])
     saved.to_csv(PATH, index=False)
+    with open(PATH, 'rb') as f:
+        record = f.read()
     odds = pd.DataFrame([{'fetched_at': f, 'event_id': 1, 'market': 'ML'} for f in saved['fetched_at'].unique()])
     odds.to_csv(os.path.join('data', '2026', 'superbet_game_odds.csv'), index=False)
     pd.DataFrame([{'fetched_at': '2026-10-21T09:00:00Z', 'game_date': '2026-10-21', 'team': 'bos', 'name': 'X'}]) \
@@ -69,9 +72,41 @@ def test_reprice_rewrites_only_the_model_columns(data_dir, monkeypatch):
 
     assert daily_snapshot.reprice_snapshots() == 3
     assert calls == [('2026-10-21T10:00:00Z', 1, 1, '2026-10-21'), ('2026-10-21T20:00:00Z', 1, 1, '2026-10-21')]
-    out = pd.read_csv(PATH, dtype=str, keep_default_na=False)
+    with open(PATH, 'rb') as f:
+        assert f.read() == record   # what each fetch showed is never priced again in place
+    out = pd.read_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), dtype=str, keep_default_na=False)
     assert out['player_id_ESPN'].tolist() == ['4397475', '', '4397475']
     assert out['pick'].tolist() == ['Over'] * 3 and out['signal'].tolist() == ['🟢'] * 3
     assert out['raw_over_pct'].tolist() == ['63.5'] * 3 and out['market_over_pct'].tolist() == ['49.2'] * 3
     assert out['fetched_at'].tolist() == saved['fetched_at'].tolist() and out['name'].tolist() == ['A', 'Nobody', 'A']
     assert out['line'].tolist() == ['20.5'] * 3 and out['under_odds'].tolist() == ['1.85'] * 3
+    assert out['prediction_origin'].tolist() == ['historical_replay'] * 3
+    assert out['model_version'].tolist() == [nightly.MODEL_VERSION] * 3
+    assert out['calibration_id'].tolist() == ['none'] * 3   # no calibration file in the test folder
+
+    # another model's replay is kept next to this one's, which a second reprice replaces
+    out.assign(model_version='old', raw_over_pct='70.0').to_csv(
+        os.path.join('data', '2026', 'superbet_props_replay.csv'), index=False)
+    pd.concat([pd.read_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), dtype=str), out])         .to_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), index=False)
+    assert daily_snapshot.reprice_snapshots() == 3
+    both = pd.read_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), dtype=str, keep_default_na=False)
+    assert both.groupby('model_version').size().to_dict() == {nightly.MODEL_VERSION: 3, 'old': 3}
+    assert set(both.loc[both['model_version'] == 'old', 'raw_over_pct']) == {'70.0'}
+
+
+def test_lineage_names_the_model_and_the_calibration(data_dir):
+    assert nightly.lineage(nightly.RECORDED_LIVE) == {'model_version': nightly.MODEL_VERSION,
+                                                      'calibration_id': 'none', 'prediction_origin': 'recorded_live'}
+    fitted = {'coefficients': {'a': 1.09, 'b': 0.08, 'c': -0.1, 'd': 0.05}, 'green_edge_pp': None,
+              'superbet_through': '2026-10-25', 'fitted_on': '2026-10-26'}
+    os.makedirs(os.path.dirname(models.CALIBRATION_FILE))
+    with open(models.CALIBRATION_FILE, 'w') as f:
+        json.dump(fitted, f)
+    first = models.calibration_id()
+    assert len(first) == 10 and nightly.lineage(nightly.RECORDED_LIVE)['calibration_id'] == first
+    with open(models.CALIBRATION_FILE, 'w') as f:
+        json.dump(fitted | {'fitted_on': '2026-10-27'}, f)   # refitted to the same numbers: the same calibration
+    assert models.calibration_id() == first
+    with open(models.CALIBRATION_FILE, 'w') as f:
+        json.dump(fitted | {'superbet_through': '2026-10-26'}, f)
+    assert models.calibration_id() != first

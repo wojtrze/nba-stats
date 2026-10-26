@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from core.data import clear_live, clear_stats
-from loaders import RUN_LOG, RUN_LOG_COLUMNS, log_run as append_run, note_superbet_contact
+from loaders import RUN_LOG, RUN_LOG_COLUMNS, log_run as append_run
 
 
 def stats_command(season=None, since=None, until=None, game=None, rebuild=False) -> List[str]:
@@ -96,8 +96,8 @@ def update_stats(**options) -> int:
 
 
 def save_snapshot(tomorrow: bool = False) -> int:
-    """daily_snapshot.py, which fetches Superbet (and RotoWire) once: callers check data.superbet_wait() first."""
-    note_superbet_contact()
+    """daily_snapshot.py, which fetches Superbet (and RotoWire) once: callers check data.superbet_wait() first; the
+    run claims the contact itself (daily_snapshot.claim_superbet) and skips Superbet if another process just did."""
     code = run('snapshot', snapshot_command(tomorrow), "Saving a RotoWire & Superbet snapshot"
                + (" (tomorrow's lineups)" if tomorrow else ""))
     clear_live()

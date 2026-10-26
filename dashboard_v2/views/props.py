@@ -11,6 +11,7 @@ from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, st
 from glossary import column_config, signal_legend
 from loaders import filtered_logs, player_logs, snapshot_history
 from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits
+from models import calibration_warning
 from reasons import prop_reasons
 from tracking import PROP_KEY
 
@@ -20,6 +21,8 @@ seasons, season_types = page_header(
 logs = filtered_logs(seasons, season_types)
 lineups = rotowire_lineups()
 table_all = priced_props(seasons, season_types)
+if warning := calibration_warning(table_all['calibration'].iloc[0] if len(table_all) else None):
+    st.warning(warning, icon="⚠️")
 
 DEFAULT_TYPES = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP']
 SIGNALS = {'all': "All", 'positive': "🟢🟡 Positive edge", 'sure': "🟢 Strong"}

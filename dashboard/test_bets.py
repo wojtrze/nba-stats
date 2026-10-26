@@ -32,7 +32,13 @@ def test_kelly_stake():
 def test_staking_chance_uses_the_low_end_for_props():
     assert staking_chance(_prop(model_pct=60.0, edge_pp=7.4, edge_low=1.0)) == pytest.approx(0.536)
     assert kelly_stake(staking_chance(_prop(edge_low=-3.0)), 1.9, 1000) == 0      # 🟡: no stake
-    assert staking_chance(_game()) == pytest.approx(0.6)
+    assert np.isnan(staking_chance(_game()))                                       # an uncalibrated game model
+    assert kelly_stake(staking_chance(_game()), 1.9, 1000) == 0
+
+
+def test_no_stake_on_an_uncalibrated_prop():
+    assert np.isnan(staking_chance(_prop(edge_low=1.0), calibrated=False))
+    assert kelly_stake(staking_chance(_prop(edge_low=1.0), calibrated=False), 1.9, 1000) == 0
 
 
 def test_describe():

@@ -5,7 +5,7 @@ from typing import Iterable, Optional
 import numpy as np
 import pandas as pd
 
-from metrics import team_rotation, with_without_matrix
+from metrics import side_profit as metrics_side_profit, side_result, team_rotation, with_without_matrix
 from tracking import PROP_KEY, settle_props
 
 GAP_LABELS = ['line 15%+ under avg', '5–15% under', 'within 5%', '5–15% over', 'line 15%+ over avg']
@@ -50,17 +50,14 @@ def toward(df: pd.DataFrame, reference: str) -> pd.DataFrame:
     side = pd.Series(np.select([ref > df['line'], ref < df['line']], ['Over', 'Under'], ''), index=df.index)
     side = side.where(ref.notna() & (side != ''))
     margin = (df['actual'] - df['line']) * np.where(side == 'Over', 1, -1)
-    result = pd.Series(np.select([margin > 0, margin < 0], ['win', 'loss'], 'push'), index=df.index, dtype=object)
-    result = result.where(side.notna() & (df['status'] == 'settled') & df['actual'].notna())
+    result = side_result(margin, side.notna() & (df['status'] == 'settled'))
     return df.assign(**{f'{reference} side': side, f'{reference} result': result})
 
 
 def side_profit(df: pd.DataFrame, reference: str) -> pd.Series:
     """Profit per unit of betting the side `reference` points to, at that side's opening odds."""
     odds = np.where(df[f'{reference} side'] == 'Over', df['over_odds'], df['under_odds'])
-    result = df[f'{reference} result']
-    profit = pd.Series(np.select([result == 'win', result == 'loss'], [odds - 1, -1.0], 0.0), index=df.index)
-    return profit.where(result.notna())
+    return metrics_side_profit(df[f'{reference} result'], odds)
 
 
 def gap_bucket(line: pd.Series, average: pd.Series) -> pd.Series:
