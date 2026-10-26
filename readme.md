@@ -21,10 +21,11 @@ Tools for NBA player-prop betting analysis. The project:
 | `betfinder.py` | Takes today's Superbet props and checks whether each line falls between the player's 30th and 70th percentile. |
 | `bet_analyst.py` | Rule engine (`BetAssessment`): each rule votes Over or Under for a bet. Also resolves past offers against actual results. |
 | `bet_analizator.py` | Helpers for loading game logs (`game_players`, `all_nba_players`, `NBA_TEAMS`) and older percentile analysis. |
-| `bet_fetcher.py`, `bet_scrapper.py` | Unibet/Kambi offer fetchers. Unibet's feed currently doesn't respond (see [Known limitations](#known-limitations)). |
+| `bet_fetcher.py`, `bet_scrapper.py` | **Legacy, doesn't work:** Unibet/Kambi offer fetchers. Unibet's feed doesn't respond (see [Known limitations](#known-limitations)). |
 | `mappings.py`, `team_abbr.json` | Team and player name mappings between data sources. |
-| `nba2024/` | Older Selenium-based Superbet crawler. Superseded by `superbet_fetcher.py`. |
-| `Untitled6.ipynb` | Old analysis notebook. It imports modules that no longer exist, so it no longer runs. |
+| `nba2024/` | **Legacy:** older Selenium-based Superbet crawler. Superseded by `superbet_fetcher.py`. |
+| `Untitled6.ipynb` | **Legacy, doesn't work:** old analysis notebook. It imports modules that no longer exist. |
+| `indicators_aggregation.py` | **Legacy, doesn't work:** 2023 analysis of the rule votes; its input file is no longer in the repository. |
 
 ### Data files
 
@@ -128,7 +129,7 @@ Opens `http://localhost:8501` with eight pages. Superbet blocks frequent request
 - **Player:** game-log chart with the line and a 5-game average, hit rates, splits (home/away, starter/bench, back-to-back, minutes), results against each opponent, and with/without a chosen teammate.
 - **Lineup lab:** pick a team's starting five and who's out (default: RotoWire's projected lineup and out players for teams playing today; otherwise their last game's starters, or the most frequent starters of the last 10 games). A heatmap shows how each player's stat changes when each rotation teammate doesn't play; the scenario table turns the absences into an estimate per player (the exact-match average from games with the same starters and absences, plus a sample-size-weighted estimate).
 - **Teams & matchups:** points/rebounds/assists each defense allows to guards, forwards and centers compared with the league average, plus offensive/defensive ratings and pace.
-- **Bet slip & results:** the bets you added, with a suggested stake (a quarter Kelly by default, at most 5% of the bankroll; props are sized on the low end of the model's range, so a thin edge gets less; game outcomes and props without a valid calibration get no suggested stake) and warnings about bets that win or lose together (one player, several Overs in one game, both sides of a line, too much of the bankroll on one night). "Save as placed" writes them to `my_bets.csv`. *My bets* settles them against the stored stats (profit, ROI, closing line value). Every line and bet is settled by one rule set (`tracking.settle_props` / `settle_games`, with `metrics.side_result` / `side_profit`): *settled* (win / loss / push; a push needs a whole-number line and returns the stake), *void* (the game is stored with a complete box score and the player didn't play: Superbet refunds those), *pending* (the game isn't stored yet) or *unresolved* (it can't be settled from what's stored: the player isn't identified, the game's players' points don't add up to its score, or the game is still missing while later games are stored, e.g. postponed); unresolved lines are counted, never guessed; *Dashboard's picks* settles every snapshotted line with the pick the dashboard showed then, by signal, edge, bet type, side and market, with a calibration chart (does a 60% pick win 60% of the time?). *Signal efficiency* shows every pick whose edge reached +0, 1, 2, 3 and 5 pp, with the chance the model expected next to how often it won: an accurate signal wins about as often as it said.
+- **Bet slip & results:** the bets you added, with a suggested stake (a quarter Kelly by default, at most 5% of the bankroll; props are sized on the low end of the model's range, so a thin edge gets less; game outcomes and props without a valid calibration get no suggested stake) and warnings about bets that win or lose together (one player, several Overs in one game, both sides of a line, too much of the bankroll on one night). "Save as placed" writes them to `my_bets.csv`. *My bets* settles them against the stored stats (profit, ROI, odds vs the last pregame quote). Every line and bet is settled by one rule set (`tracking.settle_props` / `settle_games`, with `metrics.side_result` / `side_profit`): *settled* (win / loss / push; a push needs a whole-number line and returns the stake), *void* (the game is stored with a complete box score and the player didn't play: Superbet refunds those), *pending* (the game isn't stored yet) or *unresolved* (it can't be settled from what's stored: the player isn't identified, the game's players' points don't add up to its score, or the game is still missing while later games are stored, e.g. postponed); unresolved lines are counted, never guessed; *Dashboard's picks* settles every snapshotted line with the pick the dashboard showed then, by signal, edge, bet type, side and market, with a calibration chart (does a 60% pick win 60% of the time?). *Signal efficiency* shows every pick whose edge reached +0, 1, 2, 3 and 5 pp, with the chance the model expected next to how often it won: an accurate signal wins about as often as it said.
 - **Rule backtest:** how `bet_analyst.py`'s rules did on the stored 2022/23 bets (`assessed_bets.csv`): hit rate and ROI per rule, by number of agreeing rules, by rule combination (with confidence intervals), by odds and bet type.
 - **Data status:** stored games per season, an "Update stats" button that runs the scraper, the RotoWire/Superbet snapshot files with a "Take snapshot now" button, today's names that don't match an ESPN player, and data-quality checks.
 
@@ -191,7 +192,7 @@ python daily_snapshot.py --tomorrow   # RotoWire's lineups for tomorrow
 
 Each run adds rows with a `fetched_at` time, so running it a few times a day (morning, an hour before tip-off) keeps the changes. The dashboards read Superbet's offers from the newest saved fetch (a snapshot run or a dashboard fetch, see above); they fetch RotoWire live every 30 minutes and save it whenever it changed (logged in `data/run_log.csv` with what changed, e.g. "Jaylen Brown (BOS): Ques 50% → Out 0%"); if RotoWire can't be reached, they fall back to its latest saved version. Each run also prices every line with the dashboard's default settings (about 15 seconds); if that fails, the odds are saved without picks. Before pricing, a run (or a dashboard fetch) refits the calibration and the 🟢 threshold when a newer night has settled since the last fit (`backtest.calibrate.refresh`). After a model change, `python daily_snapshot.py --reprice` prices every saved line again as of its fetch, into `superbet_props_replay.csv`; what each fetch showed stays in `superbet_props.csv` as it was saved.
 
-The results tracker treats a line's first snapshot before tip-off as the bet and its last one as the closing line, so schedule two runs a day. On Windows, run these once in a Command Prompt (not PowerShell: `%CD%` must expand to the repository folder) opened in the repository root:
+The results tracker treats a line's first snapshot before tip-off as the bet and its last one as the *last observed pregame quote* (`last line`, `last odds`; with a few snapshots a day it isn't the true closing line, so the tables say "last" and show how many hours before tip-off each quote was taken: `h before tip`, `last h before tip`), so schedule two runs a day. On Windows, run these once in a Command Prompt (not PowerShell: `%CD%` must expand to the repository folder) opened in the repository root:
 
 ```
 schtasks /Create /TN "nba-snapshot-morning" /SC DAILY /ST 10:00 /TR "cmd /c cd /d %CD% && python daily_snapshot.py"
@@ -199,7 +200,7 @@ schtasks /Create /TN "nba-snapshot-evening" /SC DAILY /ST 23:30 /TR "cmd /c cd /
 schtasks /Create /TN "nba-stats-update"     /SC DAILY /ST 09:00 /TR "cmd /c cd /d %CD% && python -m espn_scraper"
 ```
 
-Times are local (Polish) time: most games start between 00:00 and 04:30, so 23:30 is close to the first tip-off; weekend afternoon games tip off earlier and only get the morning snapshot (no closing line). The scraper run in the morning stores last night's games, which settles their lines.
+Times are local (Polish) time: most games start between 00:00 and 04:30, so 23:30 is close to the first tip-off; weekend afternoon games tip off earlier and only get the morning snapshot (their last quote is then the morning one: see `last h before tip`). The scraper run in the morning stores last night's games, which settles their lines.
 
 ### 4. Check today's lines against the statistics
 
@@ -260,7 +261,7 @@ assessment = BetAssessment([bet])
 print(assessment.assess_bets_from_list([bet]))
 ```
 
-Creating `BetAssessment` fetches RotoWire's lineups page, so it needs an internet connection. Running `python bet_analyst.py` directly uses Unibet as its source of offers, which doesn't work at the moment.
+Assessing a bet needs RotoWire's may-not-play list: pass it as `BetAssessment(bets, doubtful_players=...)` (from `lineup_fetcher.players_unlikely_to_play()`, or recorded data for a repeatable run); otherwise it's fetched from RotoWire the first time a bet is assessed (creating or importing `BetAssessment` no longer touches the network). Running `python bet_analyst.py` directly uses Unibet as its source of offers, which doesn't work at the moment.
 
 ### 7. Backtest the props model on 2022/23
 

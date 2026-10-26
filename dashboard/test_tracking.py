@@ -59,10 +59,12 @@ def test_settle_props(green_at_5):
     settled = settle_props(_props(), _logs(), _games()).set_index('bet_type', drop=False)
     pts = settled[(settled['bet_type'] == 'PTS') & (settled['game'] == 'NYK @ BOS')].iloc[0]
     # the first snapshot before tip-off is the bet; the last one before tip-off is the close
-    assert pts['line'] == 20.5 and pts['close line'] == 21.5 and pts['signal'] == '🟢'      # edge 7.4 ≥ 5
+    assert pts['line'] == 20.5 and pts['last line'] == 21.5 and pts['signal'] == '🟢'       # edge 7.4 ≥ 5
+    # fetched 08:00 and 22:00 UTC for a 23:30 UTC tip-off
+    assert pts['h before tip'] == 15.5 and pts['last h before tip'] == 1.5
     assert settled.loc['REB', 'signal'] == '🟡'                                              # edge 2.4
     assert pts['actual'] == 25 and pts['result'] == 'win' and pts['profit'] == pytest.approx(0.9)
-    assert pts['clv line'] == 1.0 and np.isnan(pts['clv odds %'])
+    assert pts['line vs last'] == 1.0 and np.isnan(pts['odds vs last %'])
     reb = settled.loc['REB']
     assert reb['result'] == 'push' and reb['profit'] == 0
     ast = settled.loc['AST']
@@ -107,7 +109,7 @@ def test_settle_games():
     assert by[('SPREAD', 'away')]['result'] == 'loss'
     over = by[('TOTAL', 'over')]
     assert over['result'] == 'win' and over['profit'] == pytest.approx(0.9)   # 110 + 104 = 214 > 210.5
-    assert over['clv odds %'] == pytest.approx(100 * (1.9 / 1.8 - 1))
+    assert over['odds vs last %'] == pytest.approx(100 * (1.9 / 1.8 - 1))
     assert over['score'] == '104 – 110' and over['main']
 
 
@@ -126,9 +128,9 @@ def test_movement():
 def test_results_table_and_calibration():
     settled = pd.DataFrame({'result': ['win', 'loss', 'win', 'push', 'void'], 'odds': [2.0, 2.0, 1.5, 1.9, 1.9],
                             'signal': ['🟢', '🟢', '🟡', '🟢', '🟢'], 'model_pct': [62.0, 64, 55, 60, 60],
-                            'clv odds %': [2.0, -1.0, np.nan, 0, 0]})
+                            'odds vs last %': [2.0, -1.0, np.nan, 0, 0]})
     table = results_table(settled, 'signal').set_index('signal')
-    assert table.loc['🟢', 'bets'] == 2 and table.loc['🟢', 'ROI %'] == 0 and table.loc['🟢', 'avg CLV %'] == 0.5
+    assert table.loc['🟢', 'bets'] == 2 and table.loc['🟢', 'ROI %'] == 0 and table.loc['🟢', 'avg odds vs last %'] == 0.5
     cal = calibration(settled).set_index('bin')
     assert cal.loc[60, 'bets'] == 2 and cal.loc[60, 'actual %'] == 50 and cal.loc[50, 'actual %'] == 100
 

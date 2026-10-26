@@ -17,7 +17,7 @@ seasons, season_types = page_header(
                "the players' averages, and did the dashboard's picks win?", with_scope=True)
 
 RATE_FORMATS = {'lines': '%d', 'bets': '%d', 'expected %': '%.0f', 'hit %': '%.0f', 'ROI %': '%+.1f',
-                'ci low %': '%.0f', 'ci high %': '%.0f', 'avg odds': '%.2f', 'avg CLV %': '%+.1f', 'edge ≥ pp': '%d'}
+                'ci low %': '%.0f', 'ci high %': '%.0f', 'avg odds': '%.2f', 'avg odds vs last %': '%+.1f', 'edge ≥ pp': '%d'}
 RATE_TIPS = {'lines': "Won or lost (pushes and voids left out)", 'hit %': "How often that side won",
              'expected %': "How often the model expected these picks to win (its average chance). An accurate "
                            "signal's hit % lands close to it",
@@ -163,8 +163,8 @@ with saved_tab:
                   {'label': "Hit rate", 'value': f"{100 * (picks_done['result'] == 'win').mean():.0f}%"},
                   {'label': "Profit (1 unit each)", 'value': f"{picks['profit'].sum():+.2f}"},
                   {'label': "ROI", 'value': f"{100 * picks_done['profit'].mean():+.1f}%"},
-                  {'label': "Avg CLV", 'value': f"{picks_done['clv odds %'].mean():+.1f}%"
-                   if picks_done['clv odds %'].notna().any() else "–",
+                  {'label': "Odds vs last quote", 'value': f"{picks_done['odds vs last %'].mean():+.1f}%"
+                   if picks_done['odds vs last %'].notna().any() else "–",
                    'help': "Opening odds vs the last snapshot before tip-off: beating the close is the best early sign "
                            "of a real edge"}])
             picks = picks.assign(**{'edge bucket': edge_bucket(picks['edge_pp']),
@@ -231,12 +231,12 @@ with saved_tab:
     with all_tab:
         cols = ['game_date', 'name', 'game', 'bet_type', 'line', 'pre avg', 'pre avg L10', 'pre games', 'proj_avg',
                 'actual', 'status', 'pre avg side', 'pre avg result', 'pick', 'result', 'over_odds', 'under_odds',
-                'close line']
+                'last line']
         st.dataframe(view.sort_values(['game_date', 'name'], ascending=[False, True])[cols], hide_index=True,
                      width='stretch', height=480,
                      column_config=column_config(cols, {'line': '%g', 'pre avg': '%.1f', 'pre avg L10': '%.1f',
                                                         'proj_avg': '%.1f', 'actual': '%g', 'over_odds': '%.2f',
-                                                        'under_odds': '%.2f', 'close line': '%g', 'pre games': '%d'},
+                                                        'under_odds': '%.2f', 'last line': '%g', 'pre games': '%d'},
                                                  tips={'pre avg': "Player's average before the game (scope seasons)",
                                                        'pre avg L10': "Average of the 10 games before",
                                                        'pre games': "Games behind the pre-game average",

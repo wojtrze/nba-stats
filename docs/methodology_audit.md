@@ -31,7 +31,7 @@ Dashboards: newest fetch ─ price_props / price_games (live, current RotoWire, 
             bet slip ─ bets.kelly_stake(staking_chance) ─ bets.save_bets ─► my_bets.csv
 
 Settlement / evaluation:
-  tracking.settle_props / settle_games   first pre-tip snapshot = the bet, last = "closing" quote
+  tracking.settle_props / settle_games   first pre-tip snapshot = the bet, last = last observed pregame quote
   nightly.night_props                     last pre-tip snapshot; recomputes missing picks (marked recomputed)
   backtest.calibrate.superbet_lines       last pre-tip snapshot's raw_* → calibration fit
   backtest.run.settle                     2022/23 lines
@@ -67,6 +67,15 @@ fetch time. Before the step 1 fix, neither of them records the model version or 
 | Staking (F6) | `dashboard/test_bets.py::test_kelly_stake`, `test_staking_chance_uses_the_low_end_for_props` | (covered by F3/F5 tests) |
 | Settlement (F7, F8) | `test_settle_props`, `test_side_result_push_and_profit`, `test_save_and_settle_my_bets`, `dashboard/test_tracking.py::test_side_result_and_profit`, `test_settle_props_statuses`, `test_settle_games_postponed_is_unresolved` | – |
 | Persistence (F9) | `tests/test_safe_io.py` (4 concurrent writer processes, byte-exact appends, interrupted write, exclusive / reentrant / stale lock, shared Superbet cooldown, one RotoWire change saved once) | – |
+
+## P2: wording and side effects (Oct 26)
+
+- "Closing line" → *last observed pregame quote*: `last line`, `last odds`, `line vs last`, `odds vs last %` (was `close line`, `clv line`, `clv odds %`, `avg CLV %`), with `h before tip` / `last h before tip` (`tracking.settle_props` / `settle_games`).
+- Signals mean the same on every page (the `signal` tip and `GAME_SIGNAL_TIP` in `dashboard/glossary.py`): 🟢 = held up on 10+ unseen nights, 🟡 = a positive *estimated* edge, 🔴 = a reason to pass; game outcomes only 🔴.
+- The calibration report says how to read b (how much of the model's disagreement held up; not interval coverage, not a betting edge).
+- Legacy entry points are labelled in the README and in the files (`bet_fetcher.py`, `bet_scrapper.py`, `indicators_aggregation.py`, `bet_analyst.py`'s Unibet mode, `nba2024/`, `Untitled6.ipynb`).
+- `bet_analyst` fetched RotoWire at import (a class attribute); `BetAssessment(bets, doubtful_players=...)` now takes the list, fetched only when a bet needs it (`tests/test_feeds.py::test_bet_assessment_needs_no_network_until_asked`).
+- `safe_io.locked` on Windows: a writer waiting for a lock that was being deleted got PermissionError and crashed (the intermittent `test_appends_from_several_processes_all_land`); now treated as busy (0 failures in 15 stress runs, 2 in 8 before).
 
 ## Model contribution (step 7, `backtest/ablation.py`)
 

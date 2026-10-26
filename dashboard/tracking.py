@@ -55,11 +55,14 @@ def opening_game_lines(snapshots: pd.DataFrame) -> pd.DataFrame:
 
 # --- settling: what happened to every line the snapshots saw ---
 
+# 'last line' / 'last odds': the last quote the snapshots saw before tip-off (two or three snapshots a day, so
+# not the true closing line); 'h before tip': how long before tip-off the bet's quote / that last quote was taken
 PROP_RESULT_COLUMNS = ['game_date', 'name', 'game', 'bet_type', 'line', 'pick', 'odds', 'model_pct', 'edge_pp',
-                       'edge_low', 'signal', 'actual', 'status', 'result', 'profit', 'close line', 'close odds',
-                       'clv line', 'clv odds %']
+                       'edge_low', 'signal', 'actual', 'status', 'result', 'profit', 'h before tip', 'last line',
+                       'last odds', 'last h before tip', 'line vs last', 'odds vs last %']
 GAME_RESULT_COLUMNS = ['game_date', 'game', 'market', 'side', 'team', 'line', 'odds', 'model_pct', 'edge_pp',
-                       'main', 'score', 'status', 'result', 'profit', 'close odds', 'clv odds %']
+                       'main', 'score', 'status', 'result', 'profit', 'h before tip', 'last odds', 'last h before tip',
+                       'odds vs last %']
 # columns of a bet-slip row (bets.py) that settling keeps
 BET_COLUMNS = ['bet_id', 'placed_at', 'stake']
 
@@ -70,7 +73,7 @@ def _et_date(start_time: pd.Series) -> pd.Series:
 
 
 def _open_and_close(snapshots: pd.DataFrame, key):
-    """Each key's first and last snapshot before tip-off: the line as first offered, and the closing line."""
+    """Each key's first and last snapshot before tip-off: the line as first offered, and the last observed one."""
     fetched = pd.to_datetime(snapshots['fetched_at'], utc=True)
     pre = snapshots[fetched < pd.to_datetime(snapshots['start_time'], utc=True)].sort_values('fetched_at')
     return pre.drop_duplicates(key, keep='first'), pre.drop_duplicates(key, keep='last')
@@ -98,10 +101,18 @@ def _signal(bets: pd.DataFrame) -> pd.Series:
     return saved.where(saved.notna() & (saved != '') | bets['edge_pp'].isna(), computed).fillna('')
 
 
-def _closing(snapshots: pd.DataFrame, key, cols) -> pd.DataFrame:
+def _hours_before_tip(fetched_at: pd.Series, start_time: pd.Series) -> pd.Series:
+    """How many hours before tip-off a quote was fetched."""
+    gap = pd.to_datetime(start_time, utc=True) - pd.to_datetime(fetched_at, utc=True)
+    return (gap.dt.total_seconds() / 3600).round(1)
+
+
+def _last_quote(snapshots: pd.DataFrame, key, cols) -> pd.DataFrame:
+    """Each key's last snapshot before tip-off: `cols` and 'last h before tip'."""
     if snapshots.empty:
-        return pd.DataFrame(columns=key + cols)
-    return _open_and_close(snapshots, key)[1][key + cols]
+        return pd.DataFrame(columns=key + cols + ['last h before tip'])
+    last = _open_and_close(snapshots, key)[1]
+    return last[key + cols].assign(**{'last h before tip': _hours_before_tip(last['fetched_at'], last['start_time'])})
 
 
 def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
@@ -114,20 +125,22 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     didn't play (Superbet refunds those); pending = the game isn't in games.csv yet (run the scraper); unresolved =
     it can't be settled from what's stored: the player isn't identified (no saved id, and the name matches no
     player or several), the game's box score is incomplete (metrics.score_check), or the game is still missing
-    while later games are stored (postponed?). Only settled lines get a win / loss / push. clv line: how much better the line was than the closing one in
-    the pick's direction (+1 = an Over at 20.5 that closed at 21.5); clv odds %: the same with the odds, when the
-    line didn't change.
+    while later games are stored (postponed?). Only settled lines get a win / loss / push. h before tip: how long before tip-off the
+    bet's quote was fetched; last line / last odds / last h before tip: the last quote the snapshots saw before
+    tip-off (not the true closing line: there are only a few snapshots a day); line vs last: how much better the
+    bet's line was than that last one in the pick's direction (+1 = an Over at 20.5 whose last quote was 21.5);
+    odds vs last %: the same with the odds, when the line didn't change.
     logs: prepare_logs output; games: games.csv rows (date parsed). bets: rows in the snapshot format (with a
     pick) to settle instead of every line's first snapshot, e.g. the bet slip; the snapshots then only give the
-    closing line."""
+    last quote."""
     if bets is None:
         bets = _open_and_close(snapshots, PROP_KEY)[0] if len(snapshots) else snapshots
     if bets.empty:
         return pd.DataFrame(columns=PROP_RESULT_COLUMNS)
     keep = [c for c in BET_COLUMNS if c in bets]
-    close = _closing(snapshots, PROP_KEY, ['line', 'over_odds', 'under_odds']).rename(
-        columns={'line': 'close line', 'over_odds': 'close over', 'under_odds': 'close under'})
-    bets = bets.merge(close, on=PROP_KEY, how='left')
+    last = _last_quote(snapshots, PROP_KEY, ['line', 'over_odds', 'under_odds']).rename(
+        columns={'line': 'last line', 'over_odds': 'last over', 'under_odds': 'last under'})
+    bets = bets.merge(last, on=PROP_KEY, how='left')
     for col in ['pick', 'model_pct', 'edge_pp', 'edge_low', 'player_id_ESPN']:
         if col not in bets:
             bets[col] = np.nan
@@ -165,9 +178,11 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     bets.loc[bets['status'] == 'void', 'result'] = 'void'
     bets['result'] = bets['result'].where(bets['pick'].notna())
     bets['profit'] = side_profit(bets['result'], bets['odds'])
-    bets['close odds'] = np.where(over, bets['close over'], bets['close under'])
-    bets['clv line'] = ((bets['close line'] - bets['line']) * direction).where(bets['pick'].notna())
-    bets['clv odds %'] = (100 * (bets['odds'] / bets['close odds'] - 1)).where(bets['close line'] == bets['line'])
+    bets['h before tip'] = _hours_before_tip(bets['fetched_at'], bets['start_time']) if 'fetched_at' in bets \
+        else np.nan
+    bets['last odds'] = np.where(over, bets['last over'], bets['last under'])
+    bets['line vs last'] = ((bets['last line'] - bets['line']) * direction).where(bets['pick'].notna())
+    bets['odds vs last %'] = (100 * (bets['odds'] / bets['last odds'] - 1)).where(bets['last line'] == bets['line'])
     bets['signal'] = _signal(bets).where(bets['pick'].notna(), '')
     return bets[PROP_RESULT_COLUMNS + ['player_id', 'start_time'] + keep]
 
@@ -184,8 +199,8 @@ def _main_keys(snapshots: pd.DataFrame) -> set:
 def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     """One row per snapshotted game outcome (event, market, side, line) as first offered before tip-off, with the
     model's chance and edge at that moment (saved by daily_snapshot.py), the final score and the result.
-    main = it was Superbet's main line in a snapshot. clv odds %: the odds vs the closing odds of the same
-    outcome (+ = a better price than the close). status: settled, pending (not stored yet) or unresolved (still
+    main = it was Superbet's main line in a snapshot. h before tip / last odds / last h before tip / odds vs last
+    %: as in settle_props (+ = a better price than the last quote before tip-off). status: settled, pending (not stored yet) or unresolved (still
     missing while later games are stored). bets: as in settle_props."""
     if bets is None:
         bets = _open_and_close(snapshots, GAME_KEY)[0] if len(snapshots) else snapshots
@@ -193,8 +208,8 @@ def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd
         return pd.DataFrame(columns=GAME_RESULT_COLUMNS)
     keep = [c for c in BET_COLUMNS if c in bets]
     main = _main_keys(snapshots) if len(snapshots) else set()
-    close = _closing(snapshots, GAME_KEY, ['odds']).rename(columns={'odds': 'close odds'})
-    bets = bets.merge(close, on=GAME_KEY, how='left')
+    last = _last_quote(snapshots, GAME_KEY, ['odds']).rename(columns={'odds': 'last odds'})
+    bets = bets.merge(last, on=GAME_KEY, how='left')
     for col in ['model_pct', 'edge_pp']:
         if col not in bets:
             bets[col] = np.nan
@@ -221,7 +236,9 @@ def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd
     bets['result'] = side_result(margin, bets['status'] == 'settled')
     bets['profit'] = side_profit(bets['result'], bets['odds'])
     bets['score'] = [f"{x:.0f} – {y:.0f}" if pd.notna(y) else '' for x, y in zip(a, h)]
-    bets['clv odds %'] = 100 * (bets['odds'] / bets['close odds'] - 1)
+    bets['h before tip'] = _hours_before_tip(bets['fetched_at'], bets['start_time']) if 'fetched_at' in bets \
+        else np.nan
+    bets['odds vs last %'] = 100 * (bets['odds'] / bets['last odds'] - 1)
     return bets[GAME_RESULT_COLUMNS + keep]
 
 
@@ -247,14 +264,15 @@ def threshold_table(settled: pd.DataFrame, thresholds=EDGE_THRESHOLDS) -> pd.Dat
 
 
 def results_table(settled: pd.DataFrame, by) -> pd.DataFrame:
-    """metrics.grouped_rates of the won and lost bets (pushes and voids left out), plus the average CLV."""
+    """metrics.grouped_rates of the won and lost bets (pushes and voids left out), plus the average odds vs the
+    last quote before tip-off."""
     decided = settled[settled['result'].isin(['win', 'loss'])].assign(is_hit=lambda d: d['result'] == 'win')
     if decided.empty:
         return pd.DataFrame()
     table = grouped_rates(decided, by)
     keys = [by] if isinstance(by, str) else list(by)
-    clv = decided.groupby(keys, observed=True)['clv odds %'].mean().rename('avg CLV %').reset_index()
-    return table.merge(clv, on=keys, how='left')
+    vs_last = decided.groupby(keys, observed=True)['odds vs last %'].mean().rename('avg odds vs last %').reset_index()
+    return table.merge(vs_last, on=keys, how='left')
 
 
 def calibration(settled: pd.DataFrame, width: float = 10) -> pd.DataFrame:

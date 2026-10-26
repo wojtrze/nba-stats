@@ -42,12 +42,14 @@ class BetAssessment():
     temp_players_to_map = []
     gamelogs = pd.DataFrame()
     bets_resolved = pd.DataFrame()
-    doubtful_players = players_unlikely_to_play()
     player_gamelogs = pd.DataFrame()
     reasons = []
 
-    def __init__(self, bets):
+    def __init__(self, bets, doubtful_players=None):
+        """doubtful_players: RotoWire's may-not-play list (lineup_fetcher.players_unlikely_to_play); when not given
+        it's fetched the first time a bet needs it, so creating an assessment doesn't touch the network."""
         self.bets = bets
+        self._doubtful_players = doubtful_players
         with open('offers_resolved.csv', 'r') as file:
             self.bets_resolved = pd.read_csv(file)
             self.bets_resolved = self.bets_resolved.drop_duplicates(subset=['over_under', 'player_ESPN', 'closed_date', 'bet_type'])
@@ -295,7 +297,9 @@ class BetAssessment():
         self.averages_rule(bet, number_of_games_for_average=5)
 
         # TODO: lineup-based reasons
-        game_doubtful_players = [d for d in self.doubtful_players if d['team'].upper() in [bet['home'].upper(), bet['away'].upper()]]
+        if self._doubtful_players is None:
+            self._doubtful_players = players_unlikely_to_play()
+        game_doubtful_players = [d for d in self._doubtful_players if d['team'].upper() in [bet['home'].upper(), bet['away'].upper()]]
 
         reason = {"over_under": "Info",
                   "description": f"Game doubtful players: {game_doubtful_players}",
@@ -328,6 +332,8 @@ class BetAssessment():
 
 
 if __name__ == '__main__':
+    # Legacy: "analyze today" takes its offers from Unibet (bet_fetcher), whose feed doesn't respond any more;
+    # BetAssessment itself still works on bets you pass in (README section 6)
     def fetch_and_analyze_today_games():
         # if you want to assess only todays offers:
         bets = all_today_bets()

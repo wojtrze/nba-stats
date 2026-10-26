@@ -373,7 +373,11 @@ def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE,
                       "The model's chance for a side is mapped to sigmoid(a·logit(market) + b·(logit(model) − "
                       "logit(market)) + c·[Over] + d): a = weight of the bookmaker's margin-free chance, b = weight "
                       "of the model's opinion beyond it, c = Over/Under bias, d = offset. Identity: a = b = 1, "
-                      "c = d = 0. Lines: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + ".", "", report,
+                      "c = d = 0. Lines: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + ".", "",
+                      "How to read b: it's how much of the model's disagreement with the price held up on past "
+                      "lines (b = 0.1 keeps a tenth of it). It calibrates the model's point chance only; it says "
+                      "nothing about whether the model's 95% range (edge low) is right, and a well-calibrated chance "
+                      "close to the price is not a betting edge.", "", report,
                       "## Used by the dashboards (fitted on every line)", "",
                       ", ".join(f"{k} = {v:.3f}" for k, v in coef.items()) + f" ({len(everything)} line sides); "
                       + (f"🟢 from +{green:g} pp" if green is not None else "no 🟢")

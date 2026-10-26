@@ -1,3 +1,6 @@
+"""Legacy: Unibet/Kambi offer scraper. Unibet's feed doesn't respond any more, so it times out.
+Kept for reference; nothing in the dashboards or the daily runs uses it.
+"""
 import requests
 from random import randint
 from time import sleep

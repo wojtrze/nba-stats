@@ -55,9 +55,10 @@ HELP = STAT_HELP | {
                 "results so far were on the lucky side; few games make the range wide.",
     'break-even %': "Chance the pick must win to break even at Superbet's odds: 100 / odds (margin included)",
     'market %': "Superbet's chance for the pick with the bookmaker's margin removed, so Over + Under = 100%",
-    'signal': "🟢 an edge at least as big as the threshold whose picks paid on unseen Superbet lines (none = no "
-              "🟢; see Results → Signal efficiency); 🟡 any other positive edge; 🔴 a reason to pass whatever the "
-              "numbers say (see red flag)",
+    'signal': "🟢 an edge at least as big as the threshold whose picks beat break-even on 10+ unseen Superbet "
+              "nights, even at the low end of their range (none = no 🟢 yet); 🟡 any other positive estimated edge, "
+              "not a validated one; 🔴 a reason to pass whatever the numbers say (see red flag). The same on every "
+              "page; game outcomes only get 🔴, their model isn't calibrated",
     'red flag': "Why not to trust this line, whatever its numbers: too few games, preseason only, may not play, "
                 "minutes swinging, the line moving against the pick (props); early season, no RotoWire lineup, an "
                 "edge too big to be true (games)",
