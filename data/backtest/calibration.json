@@ -7,6 +7,7 @@
   },
   "green_edge_pp": null,
   "superbet_through": "2026-10-25",
+  "model_version": "2026-10-26",
   "fitted_on": "2026-10-26",
   "source": "Unibet 2022/23 main lines (players with 5+ games, backtest variant 'none') and every settled Superbet line (last fetch before tip-off)",
   "lines": {

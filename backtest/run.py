@@ -24,6 +24,7 @@ import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.data_2022 import load_lines_2022, load_logs_2022
 from metrics import absence_adjustments, grouped_rates, wilson_interval
 from models import prepare_logs, price_props
+from nightly import MODEL_VERSION
 from tracking import calibration, edge_bucket
 
 log = logging.getLogger(__name__)
@@ -184,7 +185,7 @@ def main():
     results = {}
     for variant in variants:
         t0 = time.monotonic()
-        results[variant] = price_season(logs, lines, variant).assign(variant=variant)
+        results[variant] = price_season(logs, lines, variant).assign(variant=variant, model_version=MODEL_VERSION)
         log.info("%s: %d lines priced in %.0f s", variant, len(results[variant]), time.monotonic() - t0)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)

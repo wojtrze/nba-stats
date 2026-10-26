@@ -203,13 +203,14 @@ def save_superbet(offers: dict, lineups: pd.DataFrame, fetched_at: str) -> dict:
 def reprice_snapshots() -> int:
     """Price every saved Superbet line again with the current model and defaults, as of its fetch: the games
     finished before that day, the RotoWire version saved by then and the game odds of the same fetch
-    (nightly.recompute_props). Writes superbet_props_replay.csv (the saved lines with the new model columns,
-    prediction_origin historical_replay); superbet_props.csv, the record of what each fetch showed, is left as it
-    is. Returns the rows."""
+    (nightly.recompute_props). Writes them to superbet_props_replay.csv (the saved lines with the new model
+    columns, prediction_origin historical_replay), replacing that file's rows of the current MODEL_VERSION and
+    keeping other versions'; superbet_props.csv, the record of what each fetch showed, is left as it is. Returns
+    the rows of the current version."""
     from models import prepare_logs
     from name_resolver import NameResolver
-    from nightly import (HISTORICAL_REPLAY, LINEAGE_COLUMNS, MODEL_COLUMNS, et_night, lineage, lineups_before_tip,
-                         recompute_props)
+    from nightly import (HISTORICAL_REPLAY, LINEAGE_COLUMNS, MODEL_COLUMNS, MODEL_VERSION, et_night, lineage,
+                         lineups_before_tip, recompute_props)
 
     path = snapshot_file(CURRENT_SEASON, 'superbet_props')
     model_cols = ['player_id_ESPN', *MODEL_COLUMNS, *LINEAGE_COLUMNS]
@@ -235,8 +236,14 @@ def reprice_snapshots() -> int:
     for col in MODEL_COLUMNS:
         out[col] = model[col].values
     out = out.assign(**lineage(HISTORICAL_REPLAY))
-    out.to_csv(snapshot_file(CURRENT_SEASON, 'superbet_props_replay'), index=False)
-    return len(out)
+    # one block per model version, so several models can be compared on the same lines; this one's is replaced
+    replay = snapshot_file(CURRENT_SEASON, 'superbet_props_replay')
+    if os.path.exists(replay):
+        others = pd.read_csv(replay, dtype=str, keep_default_na=False)
+        others = others[others['model_version'] != MODEL_VERSION]
+        out = pd.concat([others, out.astype(str).replace({'<NA>': '', 'nan': ''})], ignore_index=True)
+    out.to_csv(replay, index=False)
+    return int((out['model_version'] == MODEL_VERSION).sum())
 
 
 if __name__ == '__main__':

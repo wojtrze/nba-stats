@@ -241,3 +241,40 @@ def test_refresh_refits_only_after_a_new_night(tmp_path, monkeypatch):
     monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: (_ for _ in ()).throw(OSError("x")))
     assert not calibrate.refresh(None, None, str(out), missing_2022)                    # error: old file kept
     assert json.loads(out.read_text()) == saved
+
+
+def test_lines_2022_only_of_the_current_model(tmp_path):
+    from backtest.calibrate import LEGACY_2022_VERSION, lines_2022
+    from nightly import MODEL_VERSION
+    rows = pd.DataFrame({'game_date': ['2022-11-10'] * 3, 'variant': 'none', 'main': True, 'games': 10,
+                         'line': [10.5, 11.5, 12.5]})
+    legacy = tmp_path / 'legacy.csv'
+    rows.to_csv(legacy, index=False)                                   # written before model_version was saved
+    assert len(lines_2022(str(legacy), LEGACY_2022_VERSION)) == 3 and lines_2022(str(legacy), 'next').empty
+    tagged = tmp_path / 'tagged.csv'
+    rows.assign(model_version=[MODEL_VERSION, MODEL_VERSION, 'old']).to_csv(tagged, index=False)
+    assert lines_2022(str(tagged))['line'].tolist() == [10.5, 11.5]
+
+
+def test_refresh_refits_for_a_new_model_version_and_waits_for_its_lines(tmp_path, monkeypatch):
+    import json
+    from backtest import calibrate
+    rng = np.random.default_rng(2)
+    nights = pd.concat([_lines(200, rng.uniform(size=200) < 0.5, night=f'2026-10-{d}') for d in (21, 22, 23)],
+                       ignore_index=True)
+    nights['market over %'] = rng.uniform(40, 60, len(nights))
+    nights['raw over %'] = rng.uniform(30, 70, len(nights))
+    nights['raw under %'] = 100 - nights['raw over %']
+    monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: nights)
+    out, missing_2022 = tmp_path / 'calibration.json', str(tmp_path / 'none.csv')
+    assert calibrate.refresh(None, None, str(out), missing_2022)
+    assert json.loads(out.read_text())['model_version'] == calibrate.MODEL_VERSION
+    assert not calibrate.refresh(None, None, str(out), missing_2022)                    # same model, nothing new
+    monkeypatch.setattr(calibrate, 'MODEL_VERSION', 'next')
+    monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: pd.DataFrame())
+    before = out.read_text()
+    assert not calibrate.refresh(None, None, str(out), missing_2022)    # no lines of the new model yet: kept
+    assert out.read_text() == before
+    monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: nights)
+    assert calibrate.refresh(None, None, str(out), missing_2022)        # its lines are there: refitted for it
+    assert json.loads(out.read_text())['model_version'] == 'next'

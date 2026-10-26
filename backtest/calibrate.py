@@ -5,13 +5,16 @@
 
 Fits a, b, c, d of sigmoid(a·logit(market) + b·(logit(model) − logit(market)) + c·[Over] + d) on two sources:
 Unibet's 2022/23 lines (the backtest) and every settled Superbet line saved by daily_snapshot.py (its last fetch
-before tip-off, with the raw chances saved alongside). The held-out check fits on the earlier part of each source
+before tip-off, with the raw chances saved alongside). Only chances of the current model (nightly.MODEL_VERSION)
+are used: a Superbet line's own if that version priced it, else its replay (daily_snapshot.py --reprice); the
+2022/23 lines when backtest.run was run with it. The held-out check fits on the earlier part of each source
 (2022: Nov–Jan; Superbet: all but the latest HOLD_OUT share of nights) and scores the rest. The 🟢 threshold is the
 smallest edge whose held-out Superbet picks paid (GREEN_CANDIDATES, at least MIN_GREEN_BETS bets); none = no 🟢.
 Then everything is refitted for the dashboards: data/backtest/calibration.json (coefficients, green_edge_pp and
 superbet_through, the last settled night used) and the report data/backtest/calibration.md.
 
-refresh() refits when a newer Superbet night has settled; daily_snapshot.py calls it before pricing a fetch.
+refresh() refits when a newer Superbet night has settled or the model version changed; daily_snapshot.py calls
+it before pricing a fetch.
 """
 import argparse
 import json
@@ -28,6 +31,7 @@ import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.run import MIN_GAMES, OUT_DIR, markdown, rate_row
 from metrics import IDENTITY_CALIBRATION, prop_signal
 from models import CALIBRATION_FILE
+from nightly import MODEL_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +42,9 @@ HOLD_OUT = 0.3                           # Superbet: the latest share of nights 
 GREEN_CANDIDATES = (1, 2, 3, 4, 5)       # edge thresholds (pp) tried for 🟢, smallest first
 MIN_GREEN_BETS = 50
 COEFS = ['a', 'b', 'c', 'd']
+# 2022_lines.csv written before backtest.run saved model_version: its raw chances are those of this version
+# (price_props' chances haven't changed since it was generated, at 954ac54)
+LEGACY_2022_VERSION = '2026-10-26'
 
 
 def _logit(p):
@@ -75,10 +82,12 @@ def fit(X: np.ndarray, y: np.ndarray, iterations: int = 50) -> np.ndarray:
 
 # --- the lines: 2022/23 backtest and settled Superbet snapshots, in one shape ---
 
-def lines_2022(path: str = LINES_FILE) -> pd.DataFrame:
-    """The backtest's main lines of players with MIN_GAMES+ games (variant 'none'), source '2022'."""
+def lines_2022(path: str = LINES_FILE, version: str = MODEL_VERSION) -> pd.DataFrame:
+    """The backtest's main lines of players with MIN_GAMES+ games (variant 'none') priced by model `version`,
+    source '2022'. Empty when the backtest was run with another version (run it again)."""
     t = pd.read_csv(path, parse_dates=['game_date'])
-    t = t[(t['variant'] == 'none') & t['main'] & (t['games'] >= MIN_GAMES)]
+    priced_by = t['model_version'].astype(str) if 'model_version' in t else LEGACY_2022_VERSION
+    t = t[(t['variant'] == 'none') & t['main'] & (t['games'] >= MIN_GAMES) & (priced_by == version)]
     return t.assign(source='2022').reset_index(drop=True)
 
 
@@ -260,7 +269,7 @@ def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE) -> 
     superbet = sources.get('superbet', pd.DataFrame())
     through = f"{superbet['game_date'].max():%Y-%m-%d}" if len(superbet) else None
     counts = {SOURCE_NAMES[n]: int(len(t)) for n, t in sources.items() if len(t)}
-    result = {'coefficients': coef, 'green_edge_pp': green, 'superbet_through': through,
+    result = {'coefficients': coef, 'green_edge_pp': green, 'superbet_through': through, 'model_version': MODEL_VERSION,
               'fitted_on': date.today().isoformat(),
               'source': "Unibet 2022/23 main lines (players with 5+ games, backtest variant 'none') and every "
                         "settled Superbet line (last fetch before tip-off)",
@@ -283,17 +292,20 @@ def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE) -> 
 
 
 def _superbet_sources(logs: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
+    """superbet_lines of every saved line priced by the current model (nightly.priced_by)."""
     from espn_scraper import CURRENT_SEASON
     from espn_scraper.storage import snapshot_file
-    path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    return superbet_lines(pd.read_csv(path), logs, games) if os.path.exists(path) else pd.DataFrame()
+    from nightly import priced_by
+    read = lambda name: pd.read_csv(snapshot_file(CURRENT_SEASON, name))         if os.path.exists(snapshot_file(CURRENT_SEASON, name)) else pd.DataFrame()
+    return superbet_lines(priced_by(read('superbet_props'), read('superbet_props_replay')), logs, games)
 
 
 def refresh(logs: pd.DataFrame, games: pd.DataFrame, out: str = CALIBRATION_FILE,
             lines_file: str = LINES_FILE) -> bool:
-    """Refit (calibrate) when a Superbet night newer than the file's superbet_through has settled. logs:
-    prepare_logs output; games: games.csv rows (date parsed). True when refitted; errors are logged, not raised
-    (the old file stays)."""
+    """Refit (calibrate) when a Superbet night newer than the file's superbet_through has settled, or the file was
+    fitted for another model version. logs: prepare_logs output; games: games.csv rows (date parsed). True when
+    refitted; errors are logged, not raised (the old file stays). Without Superbet lines of the current model
+    (after a version change, before --reprice) nothing is refitted and the reason is logged."""
     try:
         saved = {}
         if os.path.exists(out):
@@ -301,9 +313,12 @@ def refresh(logs: pd.DataFrame, games: pd.DataFrame, out: str = CALIBRATION_FILE
                 saved = json.load(f)
         superbet = _superbet_sources(logs, games)
         if superbet.empty:
+            log.warning("No settled Superbet lines priced by model %s: run daily_snapshot.py --reprice; "
+                        "calibration not refitted", MODEL_VERSION)
             return False
         newest = f"{superbet['game_date'].max():%Y-%m-%d}"
-        if saved.get('superbet_through') and newest <= saved['superbet_through']:
+        same_model = saved.get('model_version') == MODEL_VERSION
+        if same_model and saved.get('superbet_through') and newest <= saved['superbet_through']:
             return False
         sources = {'2022': lines_2022(lines_file) if os.path.exists(lines_file) else pd.DataFrame(),
                    'superbet': superbet}

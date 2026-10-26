@@ -133,3 +133,19 @@ def test_group_outcomes_best_side_first():
     assert pts['under ROI %'] == pytest.approx(100 / 3) and pts['our picks'] == 3
     assert pts['ci low %'] < pts['best side %'] < pts['ci high %']
     assert group_outcomes(lines, ['bet_type'], min_lines=4).empty
+
+
+def test_priced_by_never_mixes_model_versions():
+    from nightly import MODEL_VERSION, priced_by
+    recorded = pd.DataFrame([_prop('2026-10-21T10:00:00Z', model_version=MODEL_VERSION, raw_over_pct=60.0),
+                             _prop('2026-10-21T12:00:00Z', model_version='old', raw_over_pct=70.0),
+                             _prop('2026-10-21T14:00:00Z', raw_over_pct=80.0)])      # saved before versions
+    replay = pd.DataFrame([_prop(f, model_version=v, raw_over_pct=p) for f, v, p in (
+        ('2026-10-21T10:00:00Z', MODEL_VERSION, 61.0),     # the fetch's own chance of this version wins
+        ('2026-10-21T12:00:00Z', MODEL_VERSION, 62.0),
+        ('2026-10-21T14:00:00Z', 'old', 72.0))])           # only an old model priced it: left out
+    out = priced_by(recorded, replay).sort_values('fetched_at')
+    assert out['fetched_at'].tolist() == ['2026-10-21T10:00:00Z', '2026-10-21T12:00:00Z']
+    assert out['raw_over_pct'].tolist() == [60.0, 62.0]
+    assert priced_by(recorded, replay, 'old')['raw_over_pct'].tolist() == [70.0, 72.0]
+    assert priced_by(recorded.drop(columns='model_version'), replay.iloc[0:0]).empty

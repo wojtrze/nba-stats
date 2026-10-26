@@ -64,6 +64,19 @@ def lineage(origin: str) -> Dict[str, str]:
     return {'model_version': MODEL_VERSION, 'calibration_id': calibration_id(), 'prediction_origin': origin}
 
 
+def priced_by(recorded: pd.DataFrame, replay: pd.DataFrame, version: str = MODEL_VERSION) -> pd.DataFrame:
+    """Every saved line with the chances of one model version: the fetch's own (recorded_live) where that version
+    priced it, else the replay of that version (daily_snapshot.py --reprice). Lines neither has are left out, so
+    chances of different models never mix (what the calibration is fitted on)."""
+    def of_version(df):
+        return df[df['model_version'].astype(str) == version] if 'model_version' in df else df.iloc[0:0]
+    live, again = of_version(recorded), of_version(replay)
+    key = ['fetched_at', *PROP_KEY]
+    seen = set(zip(*(live[k] for k in key)))
+    again = again[[k not in seen for k in zip(*(again[c] for c in key))]]
+    return pd.concat([live, again], ignore_index=True)
+
+
 def night_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame, night,
                 recompute: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None) -> pd.DataFrame:
     """Every prop line of the night, judged by its last fetch before tip-off: tracking.settle_props columns (pick,

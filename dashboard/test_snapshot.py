@@ -84,6 +84,15 @@ def test_reprice_writes_a_replay_and_leaves_the_record_alone(data_dir, monkeypat
     assert out['model_version'].tolist() == [nightly.MODEL_VERSION] * 3
     assert out['calibration_id'].tolist() == ['none'] * 3   # no calibration file in the test folder
 
+    # another model's replay is kept next to this one's, which a second reprice replaces
+    out.assign(model_version='old', raw_over_pct='70.0').to_csv(
+        os.path.join('data', '2026', 'superbet_props_replay.csv'), index=False)
+    pd.concat([pd.read_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), dtype=str), out])         .to_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), index=False)
+    assert daily_snapshot.reprice_snapshots() == 3
+    both = pd.read_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), dtype=str, keep_default_na=False)
+    assert both.groupby('model_version').size().to_dict() == {nightly.MODEL_VERSION: 3, 'old': 3}
+    assert set(both.loc[both['model_version'] == 'old', 'raw_over_pct']) == {'70.0'}
+
 
 def test_lineage_names_the_model_and_the_calibration(data_dir):
     assert nightly.lineage(nightly.RECORDED_LIVE) == {'model_version': nightly.MODEL_VERSION,
