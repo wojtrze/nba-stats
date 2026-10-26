@@ -13,12 +13,14 @@ import argparse
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import pandas as pd
 
 from espn_scraper import CURRENT_SEASON, SEASONS
 from espn_scraper.storage import load_games, load_player_gamelogs, snapshot_file
+from safe_io import append_csv, atomic_to_csv, atomic_write_text, locked
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dashboard'))
 
@@ -36,22 +38,54 @@ def merge_over_under(props: pd.DataFrame) -> pd.DataFrame:
 
 
 def _append(name: str, df: pd.DataFrame, fetched_at: str) -> int:
+    """Append df to a snapshot file with fetched_at first, under the file's lock and atomically (safe_io)."""
     if df.empty:
         return 0
     path = snapshot_file(CURRENT_SEASON, name)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
     df.insert(0, 'fetched_at', fetched_at)
-    if os.path.exists(path):
-        # keep the file's column order; new columns go at the end
-        existing = list(pd.read_csv(path, nrows=0).columns)
-        if set(df.columns) - set(existing):
-            # as text, so the saved rows are written back unchanged (ids with gaps would otherwise become floats)
-            old = pd.read_csv(path, dtype=str, keep_default_na=False)
-            pd.concat([old, df], ignore_index=True).to_csv(path, index=False)
-            return len(df)
-        df = df.reindex(columns=existing)
-    df.to_csv(path, mode='a', header=not os.path.exists(path), index=False)
-    return len(df)
+    with locked(path):
+        if os.path.exists(path):
+            # keep the file's column order; new columns go at the end
+            existing = list(pd.read_csv(path, nrows=0).columns)
+            if set(df.columns) - set(existing):
+                # as text, so the saved rows are written back unchanged (ids with gaps would otherwise become floats)
+                old = pd.read_csv(path, dtype=str, keep_default_na=False)
+                atomic_to_csv(pd.concat([old, df], ignore_index=True), path)
+                return len(df)
+        return append_csv(df, path)
+
+
+# --- Superbet blocks frequent requests: one shared cooldown for the dashboards and the scheduled runs ---
+
+SUPERBET_COOLDOWN = timedelta(minutes=5)
+CONTACT_FILE = os.path.join('data', 'superbet_contact.txt')
+
+
+def last_superbet_contact() -> Optional[datetime]:
+    """When any process last contacted Superbet (a dashboard fetch or a snapshot run), from CONTACT_FILE."""
+    try:
+        with open(CONTACT_FILE, encoding='utf-8') as f:
+            return datetime.fromisoformat(f.read().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def superbet_wait(now: Optional[datetime] = None) -> Optional[timedelta]:
+    """How long until Superbet may be contacted again; None = now."""
+    last = last_superbet_contact()
+    left = last + SUPERBET_COOLDOWN - (now or datetime.now(timezone.utc)) if last else None
+    return left if left and left > timedelta(0) else None
+
+
+def claim_superbet() -> Optional[timedelta]:
+    """Record a contact now unless one was made within SUPERBET_COOLDOWN, checked and written under one lock so
+    two processes can't both go ahead. None = claimed (go ahead); otherwise how long to wait."""
+    with locked(CONTACT_FILE):
+        wait = superbet_wait()
+        if wait:
+            return wait
+        atomic_write_text(CONTACT_FILE, datetime.now(timezone.utc).isoformat() + '\n')
+        return None
 
 
 # --- RotoWire: the dashboards save every fetch that differs from the last saved version of that day ---
@@ -105,14 +139,15 @@ def save_lineups_if_changed(lineups: pd.DataFrame, fetched_at: str) -> str:
     if lineups.empty:
         return ''
     path = snapshot_file(CURRENT_SEASON, 'rotowire_lineups')
-    saved = pd.read_csv(path) if os.path.exists(path) else pd.DataFrame(columns=['fetched_at'] + LINEUP_COLUMNS)
-    days = set(lineups['game_date'].astype(str))
-    same_day = saved[saved['game_date'].astype(str).isin(days)]
-    last = same_day[same_day['fetched_at'] == same_day['fetched_at'].max()] if len(same_day) else same_day
-    changes = lineup_changes(last, lineups) if len(last) else None
-    if changes == []:
-        return ''
-    _append('rotowire_lineups', lineups.reindex(columns=LINEUP_COLUMNS).copy(), fetched_at)
+    with locked(path):      # two dashboards seeing the same change save it once
+        saved = pd.read_csv(path) if os.path.exists(path) else pd.DataFrame(columns=['fetched_at'] + LINEUP_COLUMNS)
+        days = set(lineups['game_date'].astype(str))
+        same_day = saved[saved['game_date'].astype(str).isin(days)]
+        last = same_day[same_day['fetched_at'] == same_day['fetched_at'].max()] if len(same_day) else same_day
+        changes = lineup_changes(last, lineups) if len(last) else None
+        if changes == []:
+            return ''
+        _append('rotowire_lineups', lineups.reindex(columns=LINEUP_COLUMNS).copy(), fetched_at)
     when = ', '.join(f"{pd.Timestamp(d):%b %d}" for d in sorted(days))
     if changes is None:
         return f"saved {len(lineups)} players for {when} (first fetch of the day)"
@@ -165,7 +200,8 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
 
 
 def take_snapshot(date: str = 'today') -> dict:
-    """Fetch both sources and append them. A source that fails is reported and skipped."""
+    """Fetch both sources and append them. A source that fails is reported and skipped. Superbet is skipped too
+    when any process (a dashboard, another run) contacted it within SUPERBET_COOLDOWN: that fetch is saved."""
     from lineup_fetcher import fetch_lineups
     from superbet_fetcher import todays_offers
 
@@ -178,6 +214,12 @@ def take_snapshot(date: str = 'today') -> dict:
     except Exception as e:
         log.error("RotoWire failed: %s", e)
         counts['rotowire_lineups'] = None
+    wait = claim_superbet()
+    if wait:
+        log.warning("Superbet was contacted %.0f s ago by another run: not fetched again (that fetch is saved)",
+                    (SUPERBET_COOLDOWN - wait).total_seconds())
+        counts['superbet_props'] = counts['superbet_game_odds'] = None
+        return counts
     try:
         offers = todays_offers()
     except Exception as e:
@@ -242,7 +284,7 @@ def reprice_snapshots() -> int:
         others = pd.read_csv(replay, dtype=str, keep_default_na=False)
         others = others[others['model_version'] != MODEL_VERSION]
         out = pd.concat([others, out.astype(str).replace({'<NA>': '', 'nan': ''})], ignore_index=True)
-    out.to_csv(replay, index=False)
+    atomic_to_csv(out, replay)
     return int((out['model_version'] == MODEL_VERSION).sum())
 
 

@@ -38,6 +38,7 @@ import pandas as pd
 import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.calibrate import _logit, _sigmoid, fit, scores, split
 from backtest.run import MIN_GAMES, OUT_DIR, markdown, rate_row
+from safe_io import atomic_to_csv, atomic_write_text
 
 log = logging.getLogger(__name__)
 
@@ -265,7 +266,7 @@ def superbet_components(refresh: bool = False) -> pd.DataFrame:
     out = table.assign(game_date=et_night(last['start_time']), actual=settled['actual'].values,
                        status=settled['status'].values, model_version=MODEL_VERSION)
     out = out[[c for c in COLUMNS + ['status', 'model_version'] if c in out]]
-    out.to_csv(cache, index=False)
+    atomic_to_csv(out, cache)
     return pd.read_csv(cache, parse_dates=['game_date'])
 
 
@@ -334,8 +335,7 @@ def main():
     superbet = superbet_components(args.refresh)
     sources['superbet'] = eligible(superbet[superbet['status'] == 'settled']).assign(source='superbet')
     text = report(sources)
-    with open(args.out, 'w', encoding='utf-8') as f:
-        f.write(text)
+    atomic_write_text(args.out, text)
     sys.stdout.reconfigure(errors='replace')
     print(text)
 

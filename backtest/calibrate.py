@@ -36,6 +36,7 @@ from backtest.run import MIN_GAMES, OUT_DIR, markdown, rate_row
 from metrics import IDENTITY_CALIBRATION, prop_signal, wilson_interval
 from models import CALIBRATION_FILE
 from nightly import MODEL_VERSION
+from safe_io import atomic_write_text, locked
 
 log = logging.getLogger(__name__)
 
@@ -367,9 +368,7 @@ def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE,
               'source': "Unibet 2022/23 main lines (players with 5+ games, backtest variant 'none') and every "
                         "settled Superbet line (last fetch before tip-off)",
               'lines': counts, 'rows': int(len(everything)), 'held_out': held_out, 'identity': IDENTITY_CALIBRATION}
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    with open(out, 'w', encoding='utf-8') as f:
-        json.dump(result, f, indent=2)
+    atomic_write_text(out, json.dumps(result, indent=2))
     text = "\n".join(["# Calibration of the props model", "",
                       "The model's chance for a side is mapped to sigmoid(a·logit(market) + b·(logit(model) − "
                       "logit(market)) + c·[Over] + d): a = weight of the bookmaker's margin-free chance, b = weight "
@@ -380,8 +379,7 @@ def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE,
                       + (f"🟢 from +{green:g} pp" if green is not None else "no 🟢")
                       + (f"; Superbet lines through {through}" if through else ""), ""]
                      + ([game_report(game_outcomes)] if game_outcomes is not None else []))
-    with open(os.path.join(os.path.dirname(out), os.path.basename(REPORT_FILE)), 'w', encoding='utf-8') as f:
-        f.write(text)
+    atomic_write_text(os.path.join(os.path.dirname(out), os.path.basename(REPORT_FILE)), text)
     return {**result, 'report': text}
 
 
@@ -416,28 +414,33 @@ def refresh(logs: pd.DataFrame, games: pd.DataFrame, out: str = CALIBRATION_FILE
     refitted; errors are logged, not raised (the old file stays). Without Superbet lines of the current model
     (after a version change, before --reprice) nothing is refitted and the reason is logged."""
     try:
-        saved = {}
-        if os.path.exists(out):
-            with open(out, encoding='utf-8') as f:
-                saved = json.load(f)
-        superbet = _superbet_sources(logs, games)
-        if superbet.empty:
-            log.warning("No settled Superbet lines priced by model %s: run daily_snapshot.py --reprice; "
-                        "calibration not refitted", MODEL_VERSION)
-            return False
-        newest = f"{superbet['game_date'].max():%Y-%m-%d}"
-        same_model = saved.get('model_version') == MODEL_VERSION
-        if same_model and saved.get('superbet_through') and newest <= saved['superbet_through']:
-            return False
-        sources = {'2022': lines_2022(lines_file) if os.path.exists(lines_file) else pd.DataFrame(),
-                   'superbet': superbet}
-        result = calibrate(sources, out, _game_sources(games))
-        log.info("Calibration refitted through %s: %s, 🟢 from %s", newest, result['coefficients'],
-                 result['green_edge_pp'])
-        return True
+        with locked(out):           # two processes refreshing at once: the second finds the first's refit
+            return _refresh(logs, games, out, lines_file)
     except Exception as e:
         log.error("Calibration refresh failed, keeping the old one: %s", e)
         return False
+
+
+def _refresh(logs: pd.DataFrame, games: pd.DataFrame, out: str, lines_file: str) -> bool:
+    saved = {}
+    if os.path.exists(out):
+        with open(out, encoding='utf-8') as f:
+            saved = json.load(f)
+    superbet = _superbet_sources(logs, games)
+    if superbet.empty:
+        log.warning("No settled Superbet lines priced by model %s: run daily_snapshot.py --reprice; "
+                    "calibration not refitted", MODEL_VERSION)
+        return False
+    newest = f"{superbet['game_date'].max():%Y-%m-%d}"
+    same_model = saved.get('model_version') == MODEL_VERSION
+    if same_model and saved.get('superbet_through') and newest <= saved['superbet_through']:
+        return False
+    sources = {'2022': lines_2022(lines_file) if os.path.exists(lines_file) else pd.DataFrame(),
+               'superbet': superbet}
+    result = calibrate(sources, out, _game_sources(games))
+    log.info("Calibration refitted through %s: %s, 🟢 from %s", newest, result['coefficients'],
+             result['green_edge_pp'])
+    return True
 
 
 def main():

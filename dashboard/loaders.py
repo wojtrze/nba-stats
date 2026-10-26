@@ -2,17 +2,19 @@
 import logging
 import os
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 import pandas as pd
 import streamlit as st
 
 from espn_scraper import CURRENT_SEASON, SEASONS
+from daily_snapshot import SUPERBET_COOLDOWN, claim_superbet, superbet_wait  # noqa: F401  (pages import them here)
 from espn_scraper.storage import checked_through, load_games, load_player_gamelogs, snapshot_file
 from name_resolver import NameResolver
 
 from models import DEFAULT_SEASON_TYPES, prepare_logs
+from safe_io import append_csv
 from schedule import offers_status, upcoming
 
 log = logging.getLogger(__name__)
@@ -72,8 +74,7 @@ def log_run(started: datetime, job: str, command: str, code: int, seconds: float
     row = pd.DataFrame([{'started_at': started.strftime('%Y-%m-%dT%H:%M:%SZ'), 'job': job, 'command': command,
                          'exit_code': code, 'seconds': round(seconds, 1), 'summary': summary}],
                        columns=RUN_LOG_COLUMNS)
-    os.makedirs(os.path.dirname(RUN_LOG), exist_ok=True)
-    row.to_csv(RUN_LOG, mode='a', header=not os.path.exists(RUN_LOG), index=False)
+    append_csv(row, RUN_LOG, RUN_LOG_COLUMNS)
 
 
 # --- Superbet, on demand only ---
@@ -81,8 +82,8 @@ def log_run(started: datetime, job: str, command: str, code: int, seconds: float
 # (fetch_superbet, behind a "Fetch from Superbet" button, or a snapshot run) and is always saved to the snapshot
 # files, so the pages read one source, the newest snapshot, and a restart shows exactly what was fetched.
 
-# the shortest gap between two requests to Superbet (fetches and snapshot runs)
-SUPERBET_COOLDOWN = timedelta(minutes=5)
+# SUPERBET_COOLDOWN, the shortest gap between two requests to Superbet, is shared by every process through
+# daily_snapshot.CONTACT_FILE: both dashboards and the scheduled runs claim a contact there before making it
 # the snapshot's model columns; the pages price the lines themselves
 _MODEL_COLUMNS = ['player_id_ESPN', 'pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag',
                   'raw_over_pct', 'raw_under_pct', 'market_over_pct', 'model_version', 'calibration_id',
@@ -91,8 +92,7 @@ _MODEL_COLUMNS = ['player_id_ESPN', 'pick', 'model_pct', 'edge_pp', 'edge_low', 
 
 @st.cache_resource(show_spinner=False)
 def _superbet_store() -> Dict:
-    """The last request to Superbet ('tried_at') and the last fetch's error, shared by every browser tab so two
-    tabs can't double the requests."""
+    """The last on-demand fetch's error, shared by every browser tab."""
     return {}
 
 
@@ -125,21 +125,9 @@ def superbet_offers() -> dict:
             'status': offers_status(snapshot['props'], snapshot['game_odds'], snapshot['fetched_at'], now)}
 
 
-def superbet_wait() -> Optional[timedelta]:
-    """How long until Superbet may be contacted again; None = now."""
-    tried = _superbet_store().get('tried_at')
-    left = tried + SUPERBET_COOLDOWN - datetime.now(timezone.utc) if tried else None
-    return left if left and left > timedelta(0) else None
-
-
 def superbet_error() -> Optional[str]:
     """The last on-demand fetch's error, None if it worked."""
     return _superbet_store().get('error')
-
-
-def note_superbet_contact():
-    """daily_snapshot.py contacts Superbet too: start the cooldown before running it."""
-    _superbet_store()['tried_at'] = datetime.now(timezone.utc)
 
 
 def fetch_superbet() -> Optional[str]:
@@ -148,10 +136,9 @@ def fetch_superbet() -> Optional[str]:
     None when it worked. A failed fetch saves nothing; the pages keep the previous fetch."""
     from daily_snapshot import save_superbet
     from superbet_fetcher import todays_offers
-    if superbet_wait():
+    if claim_superbet():
         return f"Superbet was contacted less than {SUPERBET_COOLDOWN.seconds // 60} minutes ago"
     store = _superbet_store()
-    note_superbet_contact()
     started, t0 = datetime.now(timezone.utc), time.monotonic()
     done = lambda code, summary: log_run(started, 'fetch', "Fetch from Superbet (dashboard)", code,
                                          time.monotonic() - t0, summary)

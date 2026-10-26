@@ -10,6 +10,7 @@ import pandas as pd
 
 from espn_scraper import CURRENT_SEASON
 from espn_scraper.storage import snapshot_file
+from safe_io import append_csv
 
 BET_FIELDS = ['bet_id', 'placed_at', 'kind', 'event_id', 'start_time', 'home', 'away', 'name', 'name_ESPN',
               'player_id_ESPN', 'bet_type', 'market', 'side', 'team', 'line', 'odds', 'stake', 'model_pct', 'edge_pp',
@@ -108,9 +109,7 @@ def save_bets(slip: List[Dict], path: str = None) -> int:
         .reindex(columns=BET_FIELDS)
     if rows.empty:
         return 0
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    rows.to_csv(path, mode='a', header=not os.path.exists(path), index=False)
-    return len(rows)
+    return append_csv(rows, path, BET_FIELDS)
 
 
 def as_snapshot_rows(bets: pd.DataFrame) -> Dict[str, pd.DataFrame]:

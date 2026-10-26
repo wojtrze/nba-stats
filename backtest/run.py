@@ -25,6 +25,7 @@ from backtest.data_2022 import load_lines_2022, load_logs_2022
 from metrics import absence_adjustments, grouped_rates, side_profit, side_result as metrics_side_result, wilson_interval
 from models import prepare_logs, price_props
 from nightly import MODEL_VERSION
+from safe_io import atomic_to_csv, atomic_write_text
 from tracking import calibration, edge_bucket
 
 log = logging.getLogger(__name__)
@@ -187,12 +188,11 @@ def main():
         log.info("%s: %d lines priced in %.0f s", variant, len(results[variant]), time.monotonic() - t0)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
-    pd.concat(results.values(), ignore_index=True).to_csv(args.out, index=False)
+    atomic_to_csv(pd.concat(results.values(), ignore_index=True), args.out)
     text = summary(results, [logs_report, lines_report])
     # 2022_lines.csv → 2022_summary.md; another --out gets its own summary, so a side run can't replace it
     summary_file = os.path.splitext(args.out)[0].replace('_lines', '_summary') + '.md'
-    with open(summary_file, 'w', encoding='utf-8') as f:
-        f.write(text)
+    atomic_write_text(summary_file, text)
     print(text)
 
 

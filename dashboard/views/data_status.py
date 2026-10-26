@@ -5,7 +5,7 @@ import sys
 import pandas as pd
 import streamlit as st
 
-from loaders import (SUPERBET_COOLDOWN, clear_rotowire, games, name_resolver, note_superbet_contact, player_logs,
+from loaders import (SUPERBET_COOLDOWN, clear_rotowire, games, name_resolver, player_logs,
                      reload_superbet_snapshot, rotowire_lineups, season_label, season_status, snapshot_history,
                      superbet_wait, today_props)
 from espn_scraper import CURRENT_SEASON
@@ -48,8 +48,7 @@ if st.button("Take snapshot now", disabled=wait is not None,
              help=f"Superbet was contacted recently; possible again in {wait.seconds // 60 + 1} min" if wait else
              "Runs daily_snapshot.py: appends today's RotoWire lineups and Superbet offers. Superbet blocks frequent "
              f"requests, so this is possible at most once every {SUPERBET_COOLDOWN.seconds // 60} minutes."):
-    note_superbet_contact()
-    with st.spinner("Fetching RotoWire and Superbet..."):
+    with st.spinner("Fetching RotoWire and Superbet..."):   # the run claims the Superbet contact itself
         result = subprocess.run([sys.executable, "daily_snapshot.py"], capture_output=True, text=True)
     st.code((result.stdout + result.stderr)[-5000:] or "(no output)")
     reload_superbet_snapshot()
