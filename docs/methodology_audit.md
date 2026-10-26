@@ -86,7 +86,7 @@ Implication: no component earns more complexity yet. The next model changes shou
 - Distribution only (no hit rate): +0.0001, worse on 3PM (+0.0005).
 - No candidate's positive-edge picks beat break-even in a way the interval supports.
 
-Next: take the count distribution to Superbet (a new `MODEL_VERSION`, reprice, compare in the ablation as Superbet nights settle); drop recency weighting.
+Adopted (Oct 26) as model `2026-10-26-count` (`metrics.count_over` in `metrics.prop_probability`); the 2022 backtest rerun and the Superbet lines repriced (the replay keeps both versions), calibration refitted: a = 1.116, b = 0.121; held-out log loss 2022 0.6894 (price 0.6895, normal model 0.6896), Superbet 0.6876 (price 0.6877). Recency weighting dropped. The F6 docstring is corrected (the range is the hit rate's sampling noise, not a Beta posterior or a prediction interval), and on whole-number lines the distribution's P(over) + P(under) + P(push) = 1 (`test_prop_probability_whole_line_pushes`). Judge it on Superbet as nights settle (`python -m backtest.ablation --refresh`).
 
 ## Fix order
 

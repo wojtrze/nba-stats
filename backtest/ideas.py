@@ -1,6 +1,6 @@
 """Candidate changes to the props model, scored against the current one on the 2022/23 lines (exploratory).
 
-    python -m backtest.ideas      # after python -m backtest.run --out data/backtest/2022_lines_components.csv
+    python -m backtest.ideas      # after python -m backtest.run
 
 Every candidate changes how the model turns the player's games into a chance; everything else stays as in
 metrics.prop_probability (the market prior worth 10 games, the projection's adjustments, the average of the hit
@@ -8,9 +8,9 @@ rate and the distribution). Each is calibrated the way the dashboards are (backt
 on Nov–Jan and scored on Feb–May, on exactly the lines the current model is scored on. The score is the log loss
 difference from the current model per line side, with a 95% range from resampling whole nights.
 
-Candidates:
-- count distribution: a negative binomial (Poisson when the player's results vary less than their average) with the
-  player's own spread, for low-count stats (3PM), for every count stat but PTS (3PM, AST, REB), or for all stats;
+Candidates (the current model, MODEL_VERSION 2026-10-26-count, uses a count distribution: a negative binomial, or
+Poisson when the player's results vary less than their average, with the player's own variance; chosen here):
+- normal distribution: the model before it (2026-10-26), a normal curve with the player's standard deviation;
 - recency: the average, spread and hit rate weighted toward recent games (half-life 5, 10 or 20 games), the
   projection's adjustments applied to the weighted average;
 - distribution only: the hit-rate half dropped (the ablation found it adds nothing).
@@ -24,14 +24,14 @@ import logging
 import math
 import os
 import sys
-from typing import Callable, Dict, List
+from typing import Callable, Dict
 
 import numpy as np
 import pandas as pd
 
 import backtest  # noqa: F401  (puts dashboard/ on the path)
-from backtest.ablation import COMPONENTS_2022, PRIOR_GAMES, _loss, chance, eligible, night_bootstrap
-from backtest.calibrate import FITTED, _logit, _sigmoid, fit, scores, split
+from backtest.ablation import COMPONENTS_2022, PRIOR_GAMES, _loss, chance, count_over_array, eligible, night_bootstrap
+from backtest.calibrate import FITTED, _logit, _sigmoid, fit, split
 from backtest.run import OUT_DIR, markdown, rate_row
 from safe_io import atomic_write_text
 
@@ -40,30 +40,9 @@ log = logging.getLogger(__name__)
 REPORT = os.path.join(OUT_DIR, 'ideas_2022.md')
 HALF_LIVES = (5, 10, 20)
 LOW_COUNT = {'3PM'}
-COUNT_STATS = {'3PM', 'AST', 'REB'}
 
 
 # --- the candidates' distributions ---
-
-def count_over(mean: np.ndarray, var: np.ndarray, line: np.ndarray) -> np.ndarray:
-    """P(X > line) for a count with this mean and variance: negative binomial when var > mean, else Poisson
-    (lines are half points, so X > line means X ≥ floor(line) + 1)."""
-    mean = np.clip(np.asarray(mean, dtype=float), 1e-6, None)
-    var = np.asarray(var, dtype=float)
-    k_max = np.floor(np.asarray(line, dtype=float)).astype(int)
-    nb = var > mean * 1.0001
-    r = np.where(nb, mean ** 2 / np.where(nb, var - mean, 1.0), np.inf)
-    q = np.where(nb, 1 - mean / np.where(nb, var, 1.0), 0.0)      # NB: pmf(k+1) / pmf(k) = (k + r) / (k + 1) · q
-    # pmf(0) and the step pmf(k+1)/pmf(k) for both families
-    log_p0 = np.where(nb, np.where(nb, r, 1.0) * np.log(np.clip(1 - q, 1e-12, None)), -mean)
-    pmf = np.exp(log_p0)
-    cdf = pmf.copy()
-    for k in range(int(k_max.max()) if len(k_max) else 0):
-        step = np.where(nb, (k + np.where(nb, r, 0.0)) / (k + 1) * q, mean / (k + 1))
-        pmf = pmf * step
-        cdf = cdf + np.where(k + 1 <= k_max, pmf, 0.0)
-    return np.clip(1 - cdf, 0.0, 1.0)
-
 
 def _combine(t: pd.DataFrame, side: str, over: np.ndarray, hit: bool, n=None, hits=None) -> np.ndarray:
     """The side's chance from P(over) like metrics.prop_probability: the distribution pulled toward the market as if
@@ -82,28 +61,8 @@ def _combine(t: pd.DataFrame, side: str, over: np.ndarray, hit: bool, n=None, hi
     return np.where(np.isnan(dist), shrunk, (shrunk + dist) / 2)
 
 
-def count_candidate(stats: set) -> Callable:
-    """The current model with a count distribution for the lines of `stats` (normal for the rest)."""
-    def side_chance(t: pd.DataFrame, side: str) -> np.ndarray:
-        base = chance(t, side, t['proj avg'])
-        use = t['bet_type'].isin(stats).values
-        if not use.any():
-            return base
-        # the player's variance, scaled with the projection (a count's spread grows with its mean)
-        ratio = (t['proj avg'] / t['avg'].where(t['avg'] > 0)).fillna(1.0)
-        var = t['sd'].fillna(0).values ** 2 * ratio.values
-        over = count_over(t['proj avg'].values, var, t['line'].values)
-        return np.where(use, _combine(t, side, over, hit=True), base)
-    return side_chance
-
-
 def distribution_only(t: pd.DataFrame, side: str) -> np.ndarray:
     return chance(t, side, t['proj avg'], hit=False)
-
-
-def _normal_over(mean, sd, line):
-    z = (np.asarray(line, dtype=float) - np.asarray(mean, dtype=float)) / np.clip(np.asarray(sd, dtype=float), 0.5, None)
-    return 1 - 0.5 * (1 + np.vectorize(math.erf)(z / math.sqrt(2)))
 
 
 def recency_candidate(half_life: int) -> Callable:
@@ -112,7 +71,7 @@ def recency_candidate(half_life: int) -> Callable:
     def side_chance(t: pd.DataFrame, side: str) -> np.ndarray:
         h = f'h{half_life}'
         ratio = (t['proj avg'] / t['avg'].where(t['avg'] > 0)).fillna(1.0)
-        over = _normal_over(t[f'ew mean {h}'] * ratio, t[f'ew sd {h}'], t['line'])
+        over = count_over_array(t[f'ew mean {h}'] * ratio, t[f'ew sd {h}'].fillna(0) ** 2 * ratio, t['line'])
         hits = t[f'ew over {h}'] if side == 'Over' else t[f'ew n {h}'] - t[f'ew over {h}']
         return _combine(t, side, over, hit=True, n=t[f'ew n {h}'].values, hits=hits.values)
     return side_chance
@@ -213,10 +172,9 @@ def main():
     log.info("recency features: %d of %d lines rebuilt with a different game count", mismatch, len(lines))
 
     candidates = {"Current model": lambda t_, side: chance(t_, side, t_['proj avg']),
-                  "Distribution only (no hit rate)": distribution_only,
-                  "Count distribution: 3PM": count_candidate(LOW_COUNT),
-                  "Count distribution: 3PM, AST, REB": count_candidate(COUNT_STATS),
-                  "Count distribution: every stat": count_candidate({'PTS', 'REB', 'AST', '3PM', 'ARP'})}
+                  "Normal distribution (model 2026-10-26)":
+                      lambda t_, side: chance(t_, side, t_['proj avg'], shape='normal'),
+                  "Distribution only (no hit rate)": distribution_only}
     candidates |= {f"Recency, half-life {h} games": recency_candidate(h) for h in HALF_LIVES}
     result = compare(lines, candidates)
     fit_part, test_part = result['fit'], result['test']

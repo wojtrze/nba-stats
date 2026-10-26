@@ -1,13 +1,13 @@
 {
   "coefficients": {
-    "a": 1.1199279785290381,
-    "b": 0.09983477124509413,
+    "a": 1.1159392837036002,
+    "b": 0.12100106592626705,
     "c": 0.0,
     "d": 0.0
   },
   "green_edge_pp": null,
   "superbet_through": "2026-10-25",
-  "model_version": "2026-10-26",
+  "model_version": "2026-10-26-count",
   "fitted_on": "2026-10-26",
   "source": "Unibet 2022/23 main lines (players with 5+ games, backtest variant 'none') and every settled Superbet line (last fetch before tip-off)",
   "lines": {
@@ -17,8 +17,8 @@
   "rows": 75106,
   "held_out": {
     "coefficients": {
-      "a": 1.2407531623882284,
-      "b": 0.05153695833871981,
+      "a": 1.2390827729341698,
+      "b": 0.0638939828083174,
       "c": 0.0,
       "d": 0.0
     },
@@ -32,12 +32,12 @@
             "Brier": 0.24816767659257583
           },
           "Uncalibrated model": {
-            "log loss": 0.7054866226592328,
-            "Brier": 0.25518470866244986
+            "log loss": 0.7050924998839999,
+            "Brier": 0.2549622133963469
           },
           "Calibrated model": {
-            "log loss": 0.6895619245871379,
-            "Brier": 0.24821059965456305
+            "log loss": 0.6894110362993152,
+            "Brier": 0.2481363309010096
           }
         }
       },
@@ -50,12 +50,12 @@
             "Brier": 0.247308010410069
           },
           "Uncalibrated model": {
-            "log loss": 0.6958398883021841,
-            "Brier": 0.250861623045067
+            "log loss": 0.6954438227506782,
+            "Brier": 0.2507301358140479
           },
           "Calibrated model": {
-            "log loss": 0.6877106800930446,
-            "Brier": 0.24731618961424484
+            "log loss": 0.6876072608527056,
+            "Brier": 0.24726514260049842
           }
         }
       }

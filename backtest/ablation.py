@@ -1,6 +1,6 @@
 """Which parts of the props model carry information beyond the price: a ladder of models scored on the same lines.
 
-    python -m backtest.ablation              # after python -m backtest.run --out data/backtest/2022_lines_components.csv
+    python -m backtest.ablation              # after python -m backtest.run
     python -m backtest.ablation --refresh    # price the Superbet lines again (else the saved components are reused)
 
 Each rung adds one piece to the one before, and every rung is fitted and scored the same way, on the same lines:
@@ -42,7 +42,7 @@ from safe_io import atomic_to_csv, atomic_write_text
 
 log = logging.getLogger(__name__)
 
-COMPONENTS_2022 = os.path.join(OUT_DIR, '2022_lines_components.csv')
+COMPONENTS_2022 = os.path.join(OUT_DIR, '2022_lines.csv')     # backtest.run keeps every component
 REPORT = os.path.join(OUT_DIR, 'ablation.md')
 PRIOR_GAMES = 10          # metrics.prop_probability's market prior
 BOOTSTRAP = 1000
@@ -57,10 +57,30 @@ def _normal_cdf(x):
     return 0.5 * (1 + np.vectorize(math.erf)(np.asarray(x, dtype=float) / math.sqrt(2)))
 
 
-def chance(t: pd.DataFrame, side: str, mean: Optional[pd.Series] = None, hit: bool = True) -> np.ndarray:
-    """The model's chance that `side` wins: the hit rate pulled toward the market (hit), the normal distribution
-    around `mean` pulled the same way (mean given), or their average (both). The distribution needs 3+ games;
-    with fewer, the hit rate stands in, as in metrics.prop_probability."""
+def count_over_array(mean, var, line) -> np.ndarray:
+    """metrics.count_over on arrays: P(X > line) for a count with this mean and variance (negative binomial when
+    var > mean, else Poisson)."""
+    mean = np.clip(np.asarray(mean, dtype=float), 1e-6, None)
+    var = np.nan_to_num(np.asarray(var, dtype=float))
+    k_max = np.floor(np.asarray(line, dtype=float)).astype(int)
+    nb = var > mean * 1.0001
+    r = np.where(nb, mean ** 2 / np.where(nb, var - mean, 1.0), 0.0)
+    q = np.where(nb, 1 - mean / np.where(nb, var, 1.0), 0.0)      # NB: pmf(k+1) / pmf(k) = (k + r) / (k + 1) · q
+    pmf = np.exp(np.where(nb, r * np.log(np.clip(1 - q, 1e-300, None)), -mean))
+    cdf = pmf.copy()
+    for k in range(int(k_max.max()) if len(k_max) else 0):
+        pmf = pmf * np.where(nb, (k + r) / (k + 1) * q, mean / (k + 1))
+        cdf = cdf + np.where(k + 1 <= k_max, pmf, 0.0)
+    return np.where(k_max < 0, 1.0, np.clip(1 - cdf, 0.0, 1.0))
+
+
+def chance(t: pd.DataFrame, side: str, mean: Optional[pd.Series] = None, hit: bool = True,
+           shape: str = 'count') -> np.ndarray:
+    """The model's chance that `side` wins: the hit rate pulled toward the market (hit), the distribution of the
+    result around `mean` pulled the same way (mean given), or their average (both), as metrics.prop_probability
+    computes it. shape 'count': its negative binomial / Poisson with the player's variance scaled with the mean;
+    'normal': the normal curve the model used before (MODEL_VERSION 2026-10-26). The distribution needs 3+ games;
+    with fewer, the hit rate stands in."""
     market = t['market over %'] / 100 if side == 'Over' else 1 - t['market over %'] / 100
     n = t['games'].astype(float)
     hits = (t['over %' if side == 'Over' else 'under %'] * n / 100).round()
@@ -69,7 +89,11 @@ def chance(t: pd.DataFrame, side: str, mean: Optional[pd.Series] = None, hit: bo
         return shrunk.values
     whole = (t['line'] % 1 == 0)
     cut = t['line'] + np.where(whole, 0.5 if side == 'Over' else -0.5, 0.0)
-    over = 1 - _normal_cdf((cut - mean) / t['sd'].clip(lower=0.5))
+    if shape == 'normal':
+        over = 1 - _normal_cdf((cut - mean) / t['sd'].clip(lower=0.5))
+    else:
+        scale = (mean / t['avg'].where(t['avg'] > 0)).fillna(1.0)
+        over = pd.Series(count_over_array(mean, t['sd'].fillna(0) ** 2 * scale, cut), index=t.index)
     weight = n / (n + PRIOR_GAMES)
     dist = (weight * (over if side == 'Over' else 1 - over) + (1 - weight) * market).where(n >= 3)
     if not hit:
@@ -331,7 +355,7 @@ def main():
         if 'absences' in variants:
             sources['2022 oracle'] = variants['absences']
     else:
-        log.warning("%s not found: run python -m backtest.run --out %s first", args.lines, args.lines)
+        log.warning("%s not found: run python -m backtest.run first", args.lines)
     superbet = superbet_components(args.refresh)
     sources['superbet'] = eligible(superbet[superbet['status'] == 'settled']).assign(source='superbet')
     text = report(sources)

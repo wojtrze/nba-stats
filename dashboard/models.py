@@ -20,7 +20,7 @@ from superbet_fetcher import main_lines
 CALIBRATION_FILE = os.path.join('data', 'backtest', 'calibration.json')
 # which model priced a line: bump it whenever price_props / price_games change what they return, so a calibration
 # is only fitted on (and trusted for) chances of one model (nightly.LINEAGE_COLUMNS, backtest/calibrate.py)
-MODEL_VERSION = '2026-10-26'
+MODEL_VERSION = '2026-10-26-count'   # count distribution in metrics.prop_probability (was '2026-10-26': normal)
 # calibration_status: fitted for this model; no file (the raw chances are used); fitted for another model version
 FITTED, MISSING, VERSION_MISMATCH, GIVEN = 'fitted', 'missing', 'version mismatch', 'given'
 FROM_FILE = object()   # price_props' default green_edge: the one saved in CALIBRATION_FILE

@@ -387,10 +387,12 @@ def test_ablation_ladder_finds_an_informative_average():
 
 # --- candidate model changes (backtest/ideas.py) ---
 
-def test_count_over_matches_poisson_and_negative_binomial():
-    from backtest.ideas import count_over
+def test_count_over_array_matches_poisson_negative_binomial_and_the_model():
+    from backtest.ablation import count_over_array
+    from metrics import count_over
     mean, var, line = np.array([1.8, 1.8, 6.2]), np.array([3.0, 1.2, 9.0]), np.array([1.5, 2.5, 5.5])
-    got = count_over(mean, var, line)
+    got = count_over_array(mean, var, line)
+    assert got == pytest.approx([count_over(m, v, k) for m, v, k in zip(mean, var, line)])
     # Poisson(1.8): P(X ≥ 3) = 1 − e^-1.8 (1 + 1.8 + 1.8²/2)
     assert got[1] == pytest.approx(1 - math.exp(-1.8) * (1 + 1.8 + 1.8 ** 2 / 2))
     # negative binomial with mean 1.8, variance 3: r = 2.7, q = 0.4; P(X ≥ 2) = 1 − (0.6^2.7)(1 + 2.7·0.4)

@@ -39,7 +39,7 @@ TIPS = {'pick % L10': "How often the picked side won in the player's last 10 gam
                    "overconfident, so this sits close to the market's margin-free chance.",
         'raw model %': "The model's own chance before calibration: the hit rate pulled toward the market's "
                        "margin-free chance (worth 10 games), averaged with the chance from proj avg and the player's "
-                       "usual spread of results"}
+                       "usual spread of results (a count distribution around proj avg)"}
 MAIN_COLUMNS = ['name', 'game', 'tip-off', 'bet_type', 'line', 'bet', 'signal', 'lean', 'edge pp', 'best side',
                 'pick odds', 'model %', 'proj avg', 'pick % L10', 'RotoWire', 'red flag']
 MORE_COLUMNS = ['edge low', 'break-even %', 'market %', 'line move', 'open line', 'adj avg', 'avg', 'avg L5',
