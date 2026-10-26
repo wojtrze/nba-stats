@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from metrics import game_lines, grouped_rates, prop_signal
+from metrics import game_lines, grouped_rates, prop_signal, score_check, side_profit, side_result
 from superbet_fetcher import main_lines
 
 PROP_KEY = ['event_id', 'name_ESPN', 'bet_type']
@@ -76,16 +76,11 @@ def _open_and_close(snapshots: pd.DataFrame, key):
     return pre.drop_duplicates(key, keep='first'), pre.drop_duplicates(key, keep='last')
 
 
-def _result(margin: pd.Series, settled: pd.Series) -> pd.Series:
-    """win / loss / push from how far the bet cleared its line; NaN where it isn't settled."""
-    out = pd.Series(np.select([margin > 0, margin < 0], ['win', 'loss'], 'push'), index=margin.index, dtype=object)
-    return out.where(settled & margin.notna())
-
-
-def _profit(result: pd.Series, odds: pd.Series) -> pd.Series:
-    """Per 1 unit staked; a push or void returns the stake."""
-    profit = pd.Series(np.select([result == 'win', result == 'loss'], [odds - 1, -1.0], 0.0), index=result.index)
-    return profit.where(result.notna())
+def _game_missing(game_date: pd.Series, in_games: pd.Series, games: pd.DataFrame) -> pd.Series:
+    """The game isn't stored although games of a later date are: postponed, cancelled or skipped by the scraper.
+    It stays unresolved (not void: nothing says how the bookmaker settled it) until it's stored."""
+    stored_through = games['date'].max() if len(games) else pd.NaT
+    return ~in_games & pd.notna(stored_through) & (game_date < stored_through)
 
 
 def edge_signal(edge_pp: pd.Series) -> pd.Series:
@@ -115,8 +110,11 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     pick at that moment (the pick / edge columns daily_snapshot.py saves; empty for older snapshots), the player's
     actual number and the result.
 
-    status: settled; void = the game is stored but the player didn't play (Superbet refunds those); pending = the
-    game isn't in games.csv yet (run the scraper). clv line: how much better the line was than the closing one in
+    status: settled; void = the game is stored, complete (its players' points add up to the score) and the player
+    didn't play (Superbet refunds those); pending = the game isn't in games.csv yet (run the scraper); unresolved =
+    it can't be settled from what's stored: the player isn't identified (no saved id, and the name matches no
+    player or several), the game's box score is incomplete (metrics.score_check), or the game is still missing
+    while later games are stored (postponed?). Only settled lines get a win / loss / push. clv line: how much better the line was than the closing one in
     the pick's direction (+1 = an Over at 20.5 that closed at 21.5); clv odds %: the same with the odds, when the
     line didn't change.
     logs: prepare_logs output; games: games.csv rows (date parsed). bets: rows in the snapshot format (with a
@@ -136,8 +134,10 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     bets['game_date'] = _et_date(bets['start_time'])
     bets['game'] = bets['away'].str.upper() + ' @ ' + bets['home'].str.upper()
 
-    # the player: the id saved with the snapshot, else the ESPN-style name
-    ids = logs.drop_duplicates('player_name_ESPN', keep='last').set_index('player_name_ESPN')['player_id_ESPN']
+    # the player: the id saved with the snapshot, else the ESPN-style name when it belongs to exactly one player
+    named = logs.drop_duplicates(['player_name_ESPN', 'player_id_ESPN'])
+    unique = named.groupby('player_name_ESPN')['player_id_ESPN'].transform('size') == 1
+    ids = named[unique].set_index('player_name_ESPN')['player_id_ESPN']
     pid = pd.to_numeric(bets['player_id_ESPN'], errors='coerce')
     bets['player_id'] = pid.fillna(bets['name_ESPN'].map(ids)).astype('Int64')
     lines = logs.assign(player_id=logs['player_id_ESPN'].astype('Int64'), game_date=logs['Date'].dt.normalize())
@@ -148,16 +148,23 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
 
     stored = set(zip(games['date'].dt.normalize(), games['home'], games['away']))
     in_games = pd.Series([k in stored for k in zip(bets['game_date'], bets['home'], bets['away'])], index=bets.index)
-    bets['status'] = np.select([bets['actual'].notna(), in_games], ['settled', 'void'], 'pending')
+    bad = score_check(games, logs)
+    incomplete = set(zip(pd.to_datetime(bad['date']).dt.normalize(), bad['home'], bad['away'])) if len(bad) else set()
+    partial = pd.Series([k in incomplete for k in zip(bets['game_date'], bets['home'], bets['away'])],
+                        index=bets.index)
+    bets['status'] = np.select(
+        [bets['actual'].notna(), in_games & (bets['player_id'].isna() | partial), in_games,
+         _game_missing(bets['game_date'], in_games, games)],
+        ['settled', 'unresolved', 'void', 'unresolved'], 'pending')
 
     over = bets['pick'] == 'Over'
     bets['odds'] = pd.Series(np.where(over, bets['over_odds'], bets['under_odds']), index=bets.index) \
         .where(bets['pick'].notna())
     direction = np.where(over, 1, -1)
-    bets['result'] = _result((bets['actual'] - bets['line']) * direction, bets['status'] == 'settled')
+    bets['result'] = side_result((bets['actual'] - bets['line']) * direction, bets['status'] == 'settled')
     bets.loc[bets['status'] == 'void', 'result'] = 'void'
     bets['result'] = bets['result'].where(bets['pick'].notna())
-    bets['profit'] = _profit(bets['result'], bets['odds'])
+    bets['profit'] = side_profit(bets['result'], bets['odds'])
     bets['close odds'] = np.where(over, bets['close over'], bets['close under'])
     bets['clv line'] = ((bets['close line'] - bets['line']) * direction).where(bets['pick'].notna())
     bets['clv odds %'] = (100 * (bets['odds'] / bets['close odds'] - 1)).where(bets['close line'] == bets['line'])
@@ -178,7 +185,8 @@ def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd
     """One row per snapshotted game outcome (event, market, side, line) as first offered before tip-off, with the
     model's chance and edge at that moment (saved by daily_snapshot.py), the final score and the result.
     main = it was Superbet's main line in a snapshot. clv odds %: the odds vs the closing odds of the same
-    outcome (+ = a better price than the close). bets: as in settle_props."""
+    outcome (+ = a better price than the close). status: settled, pending (not stored yet) or unresolved (still
+    missing while later games are stored). bets: as in settle_props."""
     if bets is None:
         bets = _open_and_close(snapshots, GAME_KEY)[0] if len(snapshots) else snapshots
     if bets.empty:
@@ -206,9 +214,12 @@ def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd
     margin = pd.Series(np.select([bets['market'] == 'ML', bets['market'] == 'SPREAD'],
                                  [side_margin, side_margin + bets['line'].fillna(0)], (scored - bets['line']) * over),
                        index=bets.index)
-    bets['status'] = np.where(h.notna(), 'settled', 'pending')
-    bets['result'] = _result(margin, bets['status'] == 'settled')
-    bets['profit'] = _profit(bets['result'], bets['odds'])
+    stored = set(zip(games['date'].dt.normalize(), games['home'], games['away']))
+    in_games = pd.Series([k in stored for k in zip(bets['game_date'], bets['home'], bets['away'])], index=bets.index)
+    bets['status'] = np.select([h.notna(), _game_missing(bets['game_date'], in_games, games)],
+                               ['settled', 'unresolved'], 'pending')
+    bets['result'] = side_result(margin, bets['status'] == 'settled')
+    bets['profit'] = side_profit(bets['result'], bets['odds'])
     bets['score'] = [f"{x:.0f} – {y:.0f}" if pd.notna(y) else '' for x, y in zip(a, h)]
     bets['clv odds %'] = 100 * (bets['odds'] / bets['close odds'] - 1)
     return bets[GAME_RESULT_COLUMNS + keep]

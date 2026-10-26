@@ -74,8 +74,11 @@ def kpis(settled: pd.DataFrame, stake_col=None):
     profit = (settled['profit'] * stake).sum()
     staked = stake[settled['result'].isin(['win', 'loss', 'push'])].sum()
     m = st.columns(5)
-    m[0].metric("Settled", f"{len(decided)}", f"{(settled['status'] == 'pending').sum()} pending", delta_color='off',
-                help="Won or lost; pending = the game isn't in the stored stats yet")
+    m[0].metric("Settled", f"{len(decided)}", f"{(settled['status'] == 'pending').sum()} pending, "
+                f"{(settled['status'] == 'unresolved').sum()} unresolved", delta_color='off',
+                help="Won or lost; pending = the game isn't in the stored stats yet; unresolved = can't be settled "
+                     "from the stored stats (player not identified, incomplete box score, or the game still missing "
+                     "while later ones are stored)")
     m[1].metric("Hit rate", f"{100 * (decided['result'] == 'win').mean():.0f}%" if len(decided) else "–")
     m[2].metric("Profit" if stake_col else "Profit (1 unit each)", f"{profit:+.2f}")
     m[3].metric("ROI", f"{100 * profit / staked:+.1f}%" if staked else "–", help="Profit per 100 staked")
@@ -176,7 +179,8 @@ with mine_tab:
                      column_config=column_config(cols, formats, tips={
                          'model_pct': "Model's chance when you added the bet", 'edge_pp': "Edge when you added it",
                          'P&L': "Profit or loss at your stake", 'clv odds %': RESULT_TIPS['avg CLV %'],
-                         'status': "settled, pending (game not in the stored stats yet) or void (didn't play)",
+                         'status': "settled, pending (game not in the stored stats yet), void (didn't play) or "
+                                   "unresolved (can't be settled from the stored stats)",
                          'game_date': "Game date (US Eastern)"})
                      | {'game_date': st.column_config.DateColumn("date", format='YYYY-MM-DD')})
 

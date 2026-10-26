@@ -8,9 +8,10 @@ import streamlit as st
 from loaders import (SUPERBET_COOLDOWN, clear_rotowire, games, name_resolver, note_superbet_contact, player_logs,
                      reload_superbet_snapshot, rotowire_lineups, season_label, season_status, snapshot_history,
                      superbet_wait, today_props)
-from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS
+from espn_scraper import CURRENT_SEASON
 from espn_scraper.storage import snapshot_file
 from glossary import column_config
+from metrics import score_check
 
 st.title("Data status")
 
@@ -74,16 +75,11 @@ else:
     st.success("Every RotoWire and Superbet name matches a player in the game logs.")
 
 st.subheader("Data quality")
-g = games()
-p = player_logs()
-points = p.groupby(['game_id', 'type'])['PTS'].sum().unstack().add_suffix(' pts (players)')
-# the player logs hold NBA teams only, so skip All-Star games and exhibitions against foreign clubs
-nba = g[g['home'].isin(NBA_TEAM_ABBRS) & g['away'].isin(NBA_TEAM_ABBRS)].set_index('game_id')
-check = nba[['date', 'season_id', 'season_type', 'home', 'away', 'home_score', 'away_score']].join(points)
-bad = check[(check['home pts (players)'] != check['home_score']) | (check['away pts (players)'] != check['away_score'])]
+bad = score_check(games(), player_logs())
 if bad.empty:
     st.success("In every game the players' points add up to the team score.")
 else:
     st.warning(f"{len(bad)} games where the players' points don't add up to the score. Usually ESPN listed a player "
-               f"without an id or name and the play-by-play didn't have them either, so their line was skipped.")
+               f"without an id or name and the play-by-play didn't have them either, so their line was skipped. "
+               f"Lines of these games whose player has no row stay unresolved instead of void.")
     st.dataframe(bad, width='stretch')

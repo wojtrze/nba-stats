@@ -131,3 +131,72 @@ def test_results_table_and_calibration():
     assert table.loc['🟢', 'bets'] == 2 and table.loc['🟢', 'ROI %'] == 0 and table.loc['🟢', 'avg CLV %'] == 0.5
     cal = calibration(settled).set_index('bin')
     assert cal.loc[60, 'bets'] == 2 and cal.loc[60, 'actual %'] == 50 and cal.loc[50, 'actual %'] == 100
+
+
+# --- settlement edge cases ---
+
+def test_side_result_and_profit():
+    from metrics import side_profit, side_result
+    margin = pd.Series([0.5, -0.5, 0.0, np.nan, 2.0])
+    result = side_result(margin, pd.Series([True, True, True, True, False]))
+    assert result.tolist()[:3] == ['win', 'loss', 'push'] and result.iloc[3:].isna().all()   # unknown / not decided
+    profit = side_profit(pd.Series(['win', 'loss', 'push', 'void', np.nan]), [1.9] * 5)
+    assert profit.tolist()[:4] == pytest.approx([0.9, -1.0, 0.0, 0.0]) and np.isnan(profit.iloc[4])
+
+
+def _box(pid, name, team, venue, game_id, pts, reb=0, ast=0, day='2026-10-22'):
+    return {'player_id_ESPN': pid, 'player_name_ESPN': name, 'Date': pd.Timestamp(day), 'team': team, 'type': venue,
+            'game_id': game_id, 'PTS': pts, 'REB': reb, 'AST': ast}
+
+
+def _line(name, home, away, bet_type, line, pick, pid=None, start=START, event_id=1):
+    return {'fetched_at': '2026-10-22T08:00:00Z', 'name': name, 'name_ESPN': name, 'home': home, 'away': away,
+            'event_id': event_id, 'start_time': start, 'bet_type': bet_type, 'line': line, 'over_odds': 1.9,
+            'under_odds': 1.9, 'pick': pick, 'model_pct': 55.0, 'edge_pp': 2.4, 'edge_low': -3.0, 'player_id_ESPN': pid}
+
+
+def test_settle_props_statuses():
+    from metrics import add_combined_stats
+    late = '2026-10-23T02:00:00Z'                                      # 22:00 ET on Oct 22
+    logs = add_combined_stats(pd.DataFrame([
+        _box(7, 'APlayer', 'bos', 'home', 1, 110, reb=6, ast=3),       # bos 110 – nyk 104: complete
+        _box(9, 'JWilliams', 'nyk', 'away', 1, 54), _box(10, 'JWilliams', 'nyk', 'away', 1, 50),
+        _box(11, 'CStar', 'lal', 'home', 2, 100),                       # lal scored 110: a line is missing
+        _box(12, 'DGuard', 'gs', 'away', 2, 95)]))
+    games = pd.DataFrame([
+        {'game_id': 1, 'date': pd.Timestamp('2026-10-22'), 'home': 'bos', 'away': 'nyk', 'home_score': 110,
+         'away_score': 104},
+        {'game_id': 2, 'date': pd.Timestamp('2026-10-22'), 'home': 'lal', 'away': 'gs', 'home_score': 110,
+         'away_score': 95}])
+    bets = pd.DataFrame([
+        _line('APlayer', 'bos', 'nyk', 'ARP', 118.5, 'Over', pid=7),                 # PTS + REB + AST = 119
+        _line('APlayer', 'bos', 'nyk', 'REB', 6.0, 'Under', pid=7),                  # whole-number line: push
+        _line('BBench', 'bos', 'nyk', 'PTS', 8.5, 'Over', pid=8),                    # complete game, no row
+        _line('JWilliams', 'bos', 'nyk', 'PTS', 50.5, 'Over'),                       # two players by that name
+        _line('Nobody', 'bos', 'nyk', 'PTS', 10.5, 'Over'),                          # a name no player has
+        _line('EBench', 'lal', 'gs', 'PTS', 8.5, 'Over', pid=13, start=late, event_id=2),   # incomplete game
+        _line('FPlayer', 'chi', 'mia', 'PTS', 20.5, 'Over', pid=14, start='2026-10-21T23:30:00Z', event_id=3),
+        _line('GPlayer', 'den', 'okc', 'PTS', 20.5, 'Over', pid=15, start='2026-10-23T23:30:00Z', event_id=4)])
+    out = settle_props(bets, logs, games, bets=bets)
+    rows = dict(zip(out['bet_type'] + ' ' + bets['name'].values, out.to_dict('records')))
+    assert rows['ARP APlayer']['actual'] == 119 and rows['ARP APlayer']['result'] == 'win'
+    assert rows['REB APlayer']['result'] == 'push' and rows['REB APlayer']['profit'] == 0
+    assert rows['PTS BBench']['status'] == 'void' and rows['PTS BBench']['result'] == 'void'
+    for name, why in (('JWilliams', 'ambiguous name'), ('Nobody', 'unknown name'),
+                      ('EBench', 'incomplete box score'), ('FPlayer', 'postponed: later games are stored')):
+        row = rows[f'PTS {name}']
+        assert row['status'] == 'unresolved', why
+        assert pd.isna(row['result']) and pd.isna(row['profit']), why
+    assert rows['PTS GPlayer']['status'] == 'pending'                   # not played yet
+
+
+def test_settle_games_postponed_is_unresolved():
+    odds = _game_odds()
+    postponed = odds.assign(event_id=9, home='chi', away='mia', start_time='2026-10-23T01:00:00Z')  # Oct 22 ET
+    next_day = pd.DataFrame([{'date': pd.Timestamp('2026-10-23'), 'home': 'den', 'away': 'okc', 'home_score': 100,
+                              'away_score': 99}])
+    settled = settle_games(pd.concat([odds, postponed], ignore_index=True), pd.concat([_games(), next_day]))
+    assert set(settle_games(postponed, _games())['status']) == {'pending'}     # nothing later stored yet
+    assert set(settled.loc[settled['game'] == 'MIA @ CHI', 'status']) == {'unresolved'}
+    assert settled.loc[settled['game'] == 'MIA @ CHI', 'result'].isna().all()
+    assert set(settled.loc[settled['game'] == 'NYK @ BOS', 'status']) == {'settled'}

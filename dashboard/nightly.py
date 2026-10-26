@@ -305,7 +305,7 @@ def night_summary(props: pd.DataFrame, games: Dict[str, pd.DataFrame]) -> Dict:
         picks = props[props['pick'].notna()]
         out.update({
             'lines': len(props), 'settled': len(settled), 'pending': int((props['status'] == 'pending').sum()),
-            'void': int((props['status'] == 'void').sum()),
+            'void': int((props['status'] == 'void').sum()), 'unresolved': int((props['status'] == 'unresolved').sum()),
             'picks': _rate(picks), 'edge picks': _rate(picks[picks['signal'].isin(['🟢', '🟡'])]),
             'red picks': _rate(picks[picks['signal'] == '🔴']), 'plain picks': _rate(picks[picks['signal'] == '']),
             'median proj miss': settled['proj error'].abs().median() if len(settled) else np.nan,

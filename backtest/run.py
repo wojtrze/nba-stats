@@ -22,7 +22,7 @@ import pandas as pd
 
 import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.data_2022 import load_lines_2022, load_logs_2022
-from metrics import absence_adjustments, grouped_rates, wilson_interval
+from metrics import absence_adjustments, grouped_rates, side_profit, side_result as metrics_side_result, wilson_interval
 from models import prepare_logs, price_props
 from nightly import MODEL_VERSION
 from tracking import calibration, edge_bucket
@@ -92,10 +92,8 @@ def settle(table: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
 def side_result(table: pd.DataFrame, side: pd.Series, odds: pd.Series, prefix: str) -> Dict[str, pd.Series]:
     """'<prefix> result' (win / loss / push, NaN without a side) and '<prefix> profit' for betting `side`."""
     margin = (table['actual'] - table['line']) * np.where(side == 'Over', 1, -1)
-    result = pd.Series(np.select([margin > 0, margin < 0], ['win', 'loss'], 'push'), index=table.index, dtype=object)
-    result = result.where(side.isin(['Over', 'Under']))
-    profit = pd.Series(np.select([result == 'win', result == 'loss'], [odds - 1, -1.0], 0.0), index=table.index)
-    return {f'{prefix} result': result, f'{prefix} profit': profit.where(result.notna())}
+    result = metrics_side_result(margin, side.isin(['Over', 'Under']))
+    return {f'{prefix} result': result, f'{prefix} profit': side_profit(result, odds)}
 
 
 # --- summary ---

@@ -312,6 +312,45 @@ def wilson_interval(hits: int, n: int, z: float = 1.96):
     return centre - half, centre + half
 
 
+# --- settling: the one place that turns a result into win / loss / push and a profit ---
+
+def side_result(margin: pd.Series, decided: Optional[pd.Series] = None) -> pd.Series:
+    """'win' / 'loss' / 'push' from how far a bet cleared its line in its own direction (actual − line for an Over,
+    line − actual for an Under, the handicapped margin for a spread...); NaN where the margin is unknown or
+    `decided` is False. A push needs an exact tie, which only whole-number lines allow."""
+    out = pd.Series(np.select([margin > 0, margin < 0], ['win', 'loss'], 'push'), index=margin.index, dtype=object)
+    keep = margin.notna() if decided is None else margin.notna() & decided
+    return out.where(keep)
+
+
+def side_profit(result: pd.Series, odds) -> pd.Series:
+    """Profit per unit staked: odds − 1 for a win, −1 for a loss, 0 for a push or void (the stake comes back);
+    NaN where there's no result."""
+    profit = pd.Series(np.select([result == 'win', result == 'loss'], [np.asarray(odds) - 1, -1.0], 0.0),
+                       index=result.index)
+    return profit.where(result.notna())
+
+
+def score_check(games: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
+    """NBA games whose players' points don't add up to the team's score (a player's line is missing: ESPN listed
+    them without id or name and the play-by-play didn't have them either). Columns: the game's (date, teams,
+    scores...) plus 'home pts (players)' and 'away pts (players)'; indexed by game_id. Empty when the logs lack
+    game_id / type."""
+    if len(logs) == 0 or not {'game_id', 'type', 'PTS'} <= set(logs.columns) or 'game_id' not in games:
+        return pd.DataFrame()
+    points = logs.groupby(['game_id', 'type'])['PTS'].sum().unstack().add_suffix(' pts (players)')
+    for side in ('home', 'away'):
+        if f'{side} pts (players)' not in points:
+            points[f'{side} pts (players)'] = np.nan
+    # the player logs hold NBA teams only, so All-Star games and exhibitions against foreign clubs are skipped
+    from espn_scraper import NBA_TEAM_ABBRS
+    nba = games[games['home'].isin(NBA_TEAM_ABBRS) & games['away'].isin(NBA_TEAM_ABBRS)].set_index('game_id')
+    columns = [c for c in ['date', 'season_id', 'season_type', 'home', 'away', 'home_score', 'away_score'] if c in nba]
+    check = nba[columns].join(points)
+    return check[(check['home pts (players)'] != check['home_score'])
+                 | (check['away pts (players)'] != check['away_score'])]
+
+
 def roi(is_hit: pd.Series, odds: pd.Series) -> float:
     """Return per unit staked, betting 1 unit on every bet: +0.05 means +5%."""
     if len(is_hit) == 0:
