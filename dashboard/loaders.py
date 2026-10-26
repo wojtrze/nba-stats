@@ -293,7 +293,8 @@ def sidebar_filters():
     chosen = st.sidebar.multiselect("Seasons", list(labels), key="seasons", on_change=_remember, args=("seasons",))
     types = st.sidebar.multiselect("Game types", ['pre', 'regular', 'playin', 'post'], key="season_types",
                                    on_change=_remember, args=("season_types",),
-                                   help="Preseason is included by default early in the season, when it's all there is.")
+                                   help="Preseason is left out by default (starters play short minutes). On Today's "
+                                        "props, players with fewer than 10 games are topped up with last season's.")
     return [labels[c] for c in chosen], types
 
 

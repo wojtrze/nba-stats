@@ -114,14 +114,16 @@ def _player_context(lines: pd.DataFrame, logs: pd.DataFrame, night) -> Dict[str,
 def recompute_props(rows: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame, lineups: pd.DataFrame,
                     game_odds: pd.DataFrame, night) -> pd.DataFrame:
     """The model's numbers for saved lines (with player_id_ESPN) as the dashboard would have shown them before
-    that night: models.price_props on that season's games before the night (the default game types), the
-    lineups and game odds saved before tip-off, then reasons.flag_props. MODEL_COLUMNS on rows' index."""
-    from models import DEFAULT_SEASON_TYPES, price_props
+    that night: models.price_props on that season's games before the night (the default game types, topped up
+    with the season before's), the lineups and game odds saved before tip-off, then reasons.flag_props.
+    MODEL_COLUMNS on rows' index."""
+    from models import DEFAULT_SEASON_TYPES, price_props, top_up_logs
     from reasons import flag_props
     night = pd.Timestamp(night)
     before = logs[logs['Date'] < night]
     season = before['season_id'].max()
-    scope = before[(before['season_id'] == season) & before['season_type'].isin(DEFAULT_SEASON_TYPES)]
+    scope = top_up_logs(before[(before['season_id'] == season) & before['season_type'].isin(DEFAULT_SEASON_TYPES)],
+                        before, season, rows['player_id_ESPN'].dropna().unique())
     played = games[(pd.to_datetime(games['date']) < night) & (games['season_id'] == season)
                    & games['season_type'].isin(DEFAULT_SEASON_TYPES)]
     lines = rows[['name', 'name_ESPN', 'home', 'away', 'bet_type', 'line', 'event_id', 'start_time', 'over_odds',

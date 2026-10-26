@@ -42,5 +42,6 @@ def scope_picker():
                    help="Games from these seasons feed the averages, hit rates and the model")
     st.pills("Game types", list(SEASON_TYPE_LABELS), key='scope_types', selection_mode='multi',
              format_func=SEASON_TYPE_LABELS.get, on_change=remember, args=('scope_types',),
-             help="Preseason is included by default early in the season, when it's all there is")
+             help="Preseason is left out by default (starters play short minutes). Props of players with fewer "
+                  "than 10 games are topped up with last season's")
     st.caption("Applies to every page.")

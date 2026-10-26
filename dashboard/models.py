@@ -2,7 +2,7 @@
 pages, daily_snapshot.py (which saves the edges it would have shown) and the results tracker."""
 import json
 import os
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -17,11 +17,14 @@ from superbet_fetcher import main_lines
 # fitted by backtest/calibrate.py on Unibet's 2022/23 lines; without it the model's chances are used as they are
 CALIBRATION_FILE = os.path.join('data', 'backtest', 'calibration.json')
 
-# the sidebar's defaults: the current season, every game type but All-Star games
-DEFAULT_SEASON_TYPES = ['pre', 'regular', 'playin', 'post']
+# the sidebar's defaults: the current season, regular season, play-in and playoffs. Preseason is opt-in:
+# starters play short minutes in it (2026: 21 min and 12.5 pts, against 33 and 18.4 in the regular season)
+DEFAULT_SEASON_TYPES = ['regular', 'playin', 'post']
 # the game model uses the current and last season's real games
 GAME_TYPES = ['regular', 'playin', 'post']
 GAME_DEFAULTS = {'prior_games': 10, 'regress': 0.3, 'home_court': 1.5, 'shrink': 5, 'out_max': 25}
+# props: a player with fewer games than this in the season is topped up with his latest games of the season before
+TOP_UP_GAMES = 10
 
 
 def prepare_logs(logs: pd.DataFrame) -> pd.DataFrame:
@@ -38,6 +41,27 @@ def prepare_logs(logs: pd.DataFrame) -> pd.DataFrame:
 
 def nba_games(games: pd.DataFrame) -> pd.DataFrame:
     return games[games['home'].isin(NBA_TEAM_ABBRS) & games['away'].isin(NBA_TEAM_ABBRS)]
+
+
+def top_up_logs(scoped: pd.DataFrame, logs: pd.DataFrame, season: int, players: Iterable,
+                min_games: int = TOP_UP_GAMES) -> pd.DataFrame:
+    """scoped (prepare_logs rows in the chosen seasons and game types) plus, for each of `players` with fewer than
+    min_games games of `season` in it (none counts too: opening night), his latest real games (GAME_TYPES) of
+    the season before from `logs`, up to min_games. The added rows have top_up True, the rest False. Nothing is
+    added when the season before is already in scoped."""
+    scoped = scoped.assign(top_up=False)
+    if (scoped['season_id'] == season - 1).any():
+        return scoped
+    have = scoped[scoped['season_id'] == season].groupby('player_id_ESPN').size()
+    need = {p: min_games - have.get(p, 0) for p in set(players) if pd.notna(p) and have.get(p, 0) < min_games}
+    prior = logs[(logs['season_id'] == season - 1) & logs['season_type'].isin(GAME_TYPES)
+                 & logs['player_id_ESPN'].isin(need)]
+    from_last = prior.groupby('player_id_ESPN').cumcount(ascending=False)
+    added = prior[from_last < prior['player_id_ESPN'].map(need)]
+    if added.empty:
+        return scoped
+    return (pd.concat([scoped, added.assign(top_up=True)])
+            .sort_values(['Date', 'game_id'], kind='stable').reset_index(drop=True))
 
 
 # --- props ---
@@ -68,8 +92,9 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
                 calibration: Optional[Dict] = None) -> pd.DataFrame:
     """Every Superbet line (props with player_id_ESPN) compared with the player's game logs and priced.
 
-    logs: prepare_logs output in the seasons and game types to use; games: games.csv rows of the same.
-    adjust(logs, players, out, stats): absence_adjustments, or a cached version of it.
+    logs: prepare_logs output in the seasons and game types to use, optionally top_up_logs output (the topped-up
+    rows feed the player's own numbers, not the matchup or the absence adjustments); games: games.csv rows of
+    the same. adjust(logs, players, out, stats): absence_adjustments, or a cached version of it.
     Adds, per line: the player's numbers (avg, hit rates, percentile...), RotoWire status, lineup adj and adj avg,
     the game context (opponent, spread, implied total, matchup) and proj avg, and the pick: best side, model %,
     market % (margin-free), break-even %, edge pp, edge low, pick odds and signal.
@@ -78,6 +103,8 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     the model's own chances before that, which backtest/calibrate.py fits on.
     """
     adjust = adjust or absence_adjustments
+    # last season's games of a few players would distort opponents' defense and teammates' absence effects
+    own = logs[~logs['top_up']] if 'top_up' in logs else logs
     by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
     current_team = logs.groupby('player_id_ESPN')['team'].last()
     position = logs.groupby('player_id_ESPN')['position_group'].last()
@@ -107,7 +134,7 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
         players = tuple(sorted(p for p in rows['player_id'].dropna().unique() if p not in out))
         if not out or not players:
             continue
-        part = logs[logs['player_id_ESPN'].isin(set(players) | set(out))]
+        part = own[own['player_id_ESPN'].isin(set(players) | set(out))]
         adj = adjust(part, players, tuple(sorted(out)), STATS)
         for i, row in rows.iterrows():
             if row['player_id'] in adj.index and row['bet_type'] in adj.columns:
@@ -131,9 +158,9 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
             spread = g['home_spread'] if is_home else -g['home_spread']
             implied = g['home_implied'] if is_home else g['away_implied']
         m = {}
-        if opp and row['bet_type'] in logs:
+        if opp and row['bet_type'] in own and len(own):
             if row['bet_type'] not in allowed:
-                a = allowed_by_position(logs, row['bet_type'])
+                a = allowed_by_position(own, row['bet_type'])
                 allowed[row['bet_type']] = a[a.index.isin(NBA_TEAM_ABBRS)]   # preseason guests skew the average
             m = matchup(allowed[row['bet_type']], opp, position.get(row['player_id']))
         team_pts = usual.get(team, np.nan)

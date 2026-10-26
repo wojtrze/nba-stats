@@ -5,11 +5,12 @@ import pandas as pd
 import streamlit as st
 
 from components import no_offers, reasons_panel, slip_button
+from espn_scraper import CURRENT_SEASON
 from glossary import column_config, source_legend, tinted
 from loaders import (filtered_logs, games as all_games, player_logs, rotowire_lineups, sidebar_filters, snapshot_history,
                      superbet_fetch_controls, superbet_offers, today_game_odds, today_props)
 from metrics import STATS, absence_adjustments, hit_rates, percentile_band, rotowire_team
-from models import price_props
+from models import price_props, top_up_logs
 from reasons import flag_props, prop_reasons
 from schedule import tip_label
 from tracking import prop_movement
@@ -35,7 +36,10 @@ def cached_adjustments(part, players, out, stats):
 def priced(seasons, season_types, props, lineups, odds) -> pd.DataFrame:
     g = all_games()
     g = g[g['season_id'].isin(seasons) & g['season_type'].isin(season_types)]
-    logs_ = filtered_logs(list(seasons), list(season_types))
+    # players with few games in the newest chosen season get their latest of the season before
+    logs_ = top_up_logs(filtered_logs(list(seasons), list(season_types)), player_logs(),
+                        max(seasons, default=CURRENT_SEASON),
+                        props['player_id_ESPN'].dropna().unique())
     table = price_props(props, logs_, lineups, odds, g, adjust=cached_adjustments)
     # 🔴 + 'red flag' for lines with a reason to pass whatever the numbers say
     return flag_props(prop_movement(snapshot_history('superbet_props'), table), logs_, lineups)
