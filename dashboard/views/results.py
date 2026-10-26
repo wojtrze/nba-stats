@@ -7,16 +7,21 @@ from bets import (as_snapshot_rows, bets_file, describe, kelly_stake, load_bets,
 from glossary import column_config, tinted
 from loaders import games, player_logs, snapshot_history
 import night_view
-from tracking import calibration, edge_bucket, results_table, settle_games, settle_props
+from models import load_green_edge
+from tracking import calibration, edge_bucket, results_table, settle_games, settle_props, threshold_table
 
 st.title("Bet slip & results")
 st.caption("Collect bets from Today's props and Games, size them, and see how both your bets and the dashboard's "
            "own picks turned out. Results need the game in the stored stats: run the scraper (Data status page) "
            "the morning after.")
 
-RESULT_FORMATS = {'bets': '%d', 'hit %': '%.0f', 'ci low %': '%.0f', 'ci high %': '%.0f', 'ROI %': '%+.1f',
-                  'avg odds': '%.2f', 'avg CLV %': '%+.1f'}
+RESULT_FORMATS = {'bets': '%d', 'expected %': '%.0f', 'hit %': '%.0f', 'ci low %': '%.0f', 'ci high %': '%.0f',
+                  'ROI %': '%+.1f', 'avg odds': '%.2f', 'avg CLV %': '%+.1f', 'edge ≥ pp': '%d'}
 RESULT_TIPS = {'bets': "Won and lost bets (pushes and voids left out)",
+               'expected %': "How often the model expected these picks to win (its average chance). An accurate "
+                             "signal's hit % lands close to it",
+               'edge ≥ pp': "Every pick whose saved edge reached this many points (0 = any positive edge), so the rows "
+                            "overlap",
                'avg CLV %': "Average closing line value: your odds vs the last snapshot before tip-off for the same "
                             "line, in %. Beating the close consistently is the best early sign of real edge."}
 
@@ -117,7 +122,7 @@ with slip_tab:
                            'suggested': st.column_config.NumberColumn(
                                "suggested stake", format='%.2f',
                                help="Kelly stake at the chosen fraction. Props are sized on the low end of the "
-                                    "model's range, so 0 = the edge isn't sure enough (not 🟢); games on the model's "
+                                    "model's range, so 0 = the edge isn't sure enough; games on the model's "
                                     "chance"),
                            'stake': st.column_config.NumberColumn("stake", min_value=0.0, step=1.0, format='%.2f',
                                                                   help="What you actually bet; edit it"),
@@ -187,7 +192,19 @@ with model_tab:
         kpis(picks)
         picks = picks.assign(**{'edge bucket': edge_bucket(picks['edge_pp']),
                                 'signal': picks['signal'].replace('', 'none')})
-        results_tables(picks, {"By signal (🟢 = edge holds at the low end)": 'signal',
+        st.markdown("**Signal efficiency**")
+        efficiency = threshold_table(picks)
+        if efficiency.empty:
+            st.caption("No settled pick has had a positive edge yet.")
+        else:
+            st.dataframe(tinted(efficiency, RESULT_FORMATS), hide_index=True, width='stretch',
+                         column_config=column_config(efficiency.columns, RESULT_FORMATS, tips=RESULT_TIPS))
+        green = load_green_edge()
+        st.caption((f"🟢 = an edge of +{green:g} pp or more" if green is not None else "No 🟢 at the moment")
+                   + ": the threshold is the smallest whose picks paid on unseen Superbet lines (refitted as nights "
+                     "settle; see the calibration report). 🟡 = any other positive edge. Lines without one are a "
+                     "pass; their pick below is only the less bad side.")
+        results_tables(picks, {"By signal (🟢 = the validated edge threshold)": 'signal',
                                "By edge (pp)": 'edge bucket', "By bet type": 'bet_type', "By side": 'pick'})
         calibration_chart(picks, "Props: model chance vs actual")
     st.subheader("Games")

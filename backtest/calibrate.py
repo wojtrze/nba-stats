@@ -1,28 +1,42 @@
-"""Fit the props model's calibration (metrics.calibrate) on the 2022/23 backtest and check it on unseen games.
+"""Fit the props model's calibration (metrics.calibrate) and its 🟢 threshold, and check both on unseen lines.
 
-    python -m backtest.calibrate        # after python -m backtest.run
+    python -m backtest.calibrate                 # after python -m backtest.run
+    python -m backtest.calibrate --no-superbet   # the 2022/23 lines only (as before Superbet lines were saved)
 
-Fits a, b, c, d of sigmoid(a·logit(market) + b·(logit(model) − logit(market)) + c·[Over] + d) on Nov–Jan,
-reports how the fit does on Feb–May (games it never saw), then refits on the whole season and writes the
-coefficients the dashboards use to data/backtest/calibration.json, and the report to
-data/backtest/2022_calibration.md.
+Fits a, b, c, d of sigmoid(a·logit(market) + b·(logit(model) − logit(market)) + c·[Over] + d) on two sources:
+Unibet's 2022/23 lines (the backtest) and every settled Superbet line saved by daily_snapshot.py (its last fetch
+before tip-off, with the raw chances saved alongside). The held-out check fits on the earlier part of each source
+(2022: Nov–Jan; Superbet: all but the latest HOLD_OUT share of nights) and scores the rest. The 🟢 threshold is the
+smallest edge whose held-out Superbet picks paid (GREEN_CANDIDATES, at least MIN_GREEN_BETS bets); none = no 🟢.
+Then everything is refitted for the dashboards: data/backtest/calibration.json (coefficients, green_edge_pp and
+superbet_through, the last settled night used) and the report data/backtest/calibration.md.
+
+refresh() refits when a newer Superbet night has settled; daily_snapshot.py calls it before pricing a fetch.
 """
 import argparse
 import json
+import logging
 import os
+import sys
 from datetime import date
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
 import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.run import MIN_GAMES, OUT_DIR, markdown, rate_row
-from metrics import IDENTITY_CALIBRATION
+from metrics import IDENTITY_CALIBRATION, prop_signal
 from models import CALIBRATION_FILE
 
+log = logging.getLogger(__name__)
+
 LINES_FILE = os.path.join(OUT_DIR, '2022_lines.csv')
-SPLIT = pd.Timestamp('2023-02-01')       # fit before, check from this date on
+REPORT_FILE = os.path.join(OUT_DIR, 'calibration.md')
+SPLIT = pd.Timestamp('2023-02-01')       # 2022: fit before, check from this date on
+HOLD_OUT = 0.3                           # Superbet: the latest share of nights kept for the check
+GREEN_CANDIDATES = (1, 2, 3, 4, 5)       # edge thresholds (pp) tried for 🟢, smallest first
+MIN_GREEN_BETS = 50
 COEFS = ['a', 'b', 'c', 'd']
 
 
@@ -59,6 +73,53 @@ def fit(X: np.ndarray, y: np.ndarray, iterations: int = 50) -> np.ndarray:
     return beta
 
 
+# --- the lines: 2022/23 backtest and settled Superbet snapshots, in one shape ---
+
+def lines_2022(path: str = LINES_FILE) -> pd.DataFrame:
+    """The backtest's main lines of players with MIN_GAMES+ games (variant 'none'), source '2022'."""
+    t = pd.read_csv(path, parse_dates=['game_date'])
+    t = t[(t['variant'] == 'none') & t['main'] & (t['games'] >= MIN_GAMES)]
+    return t.assign(source='2022').reset_index(drop=True)
+
+
+def superbet_lines(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
+    """Every saved Superbet line judged by its last fetch before tip-off, settled against the stats, in the
+    backtest's columns (game_date, line, actual, over/under odds, market over %, raw over/under %) with the saved
+    edge and signal; source 'superbet'. Only lines saved with the raw chances; voids and pending games left out.
+    logs: prepare_logs output; games: games.csv rows (date parsed)."""
+    from nightly import et_night
+    from tracking import PROP_KEY, settle_props
+    columns = ['raw_over_pct', 'raw_under_pct', 'market_over_pct']
+    if snapshots.empty or not set(columns) <= set(snapshots.columns):
+        return pd.DataFrame()
+    fetched = pd.to_datetime(snapshots['fetched_at'], utc=True)
+    rows = snapshots[(fetched < pd.to_datetime(snapshots['start_time'], utc=True))
+                     & snapshots[columns].notna().all(axis=1)].sort_values('fetched_at', kind='stable')
+    last = rows.drop_duplicates(PROP_KEY, keep='last').reset_index(drop=True)
+    if last.empty:
+        return pd.DataFrame()
+    settled = settle_props(snapshots, logs, games, bets=last)       # keeps the order of the bets it's given
+    t = last.assign(game_date=et_night(last['start_time']), actual=settled['actual'].values,
+                    status=settled['status'].values)
+    t = t[t['status'] == 'settled']
+    return pd.DataFrame({'game_date': t['game_date'], 'bet_type': t['bet_type'], 'line': t['line'],
+                         'actual': t['actual'], 'over_odds': t['over_odds'], 'under_odds': t['under_odds'],
+                         'market over %': t['market_over_pct'], 'raw over %': t['raw_over_pct'],
+                         'raw under %': t['raw_under_pct'], 'saved edge pp': t['edge_pp'],
+                         'saved signal': t['signal'], 'source': 'superbet'}).reset_index(drop=True)
+
+
+def split(t: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """(fit part, held-out part) of one source's lines: 2022 at SPLIT, Superbet at its latest HOLD_OUT of nights."""
+    if t.empty:
+        return t, t
+    if t['source'].iloc[0] == '2022':
+        return t[t['game_date'] < SPLIT], t[t['game_date'] >= SPLIT]
+    nights = sorted(t['game_date'].unique())
+    held = set(nights[len(nights) - max(1, round(HOLD_OUT * len(nights))):]) if len(nights) > 1 else set()
+    return t[~t['game_date'].isin(held)], t[t['game_date'].isin(held)]
+
+
 def sides(t: pd.DataFrame) -> pd.DataFrame:
     """One row per line and side, decided lines only (pushes out): market, model (raw), over, won, odds."""
     rows = []
@@ -66,7 +127,6 @@ def sides(t: pd.DataFrame) -> pd.DataFrame:
         market = t['market over %'] / 100 if side == 'Over' else 1 - t['market over %'] / 100
         rows.append(pd.DataFrame({'game_date': t['game_date'], 'line_id': t.index, 'side': side,
                                   'market': market, 'model': t[f'raw {side.lower()} %'] / 100,
-                                  'low': t[f'raw {side.lower()} low %'] / 100,
                                   'over': side == 'Over', 'won': won.astype(float),
                                   'odds': t['over_odds'] if side == 'Over' else t['under_odds']}))
     s = pd.concat(rows, ignore_index=True)
@@ -86,30 +146,51 @@ def scores(s: pd.DataFrame, p: np.ndarray) -> Dict:
             'Brier': float(((p - y) ** 2).mean())}
 
 
-def picks(t: pd.DataFrame, coef: Dict) -> pd.DataFrame:
-    """Each line's pick under the calibration: the side with the bigger calibrated edge, its odds and signal."""
+def picks(t: pd.DataFrame, coef: Dict, green_edge: Optional[float] = None) -> pd.DataFrame:
+    """Each line's pick under the calibration: the side with the bigger calibrated edge (pp), its chance (p),
+    odds and signal (metrics.prop_signal with green_edge)."""
     out = {}
     for side in ('Over', 'Under'):
         market = t['market over %'] / 100 if side == 'Over' else 1 - t['market over %'] / 100
         odds = t['over_odds'] if side == 'Over' else t['under_odds']
         p = apply(coef, market.values, t[f'raw {side.lower()} %'].values / 100, np.full(len(t), side == 'Over'))
-        low = apply(coef, market.values, t[f'raw {side.lower()} low %'].values / 100, np.full(len(t), side == 'Over'))
-        out[side] = pd.DataFrame({'p': p, 'edge': p - 1 / odds.values, 'edge low': low - 1 / odds.values,
-                                  'odds': odds.values}, index=t.index)
+        out[side] = pd.DataFrame({'p': p, 'edge': 100 * (p - 1 / odds.values), 'odds': odds.values}, index=t.index)
     over_better = out['Over']['edge'] >= out['Under']['edge']
     best = out['Over'].where(over_better, out['Under'])
-    signal = np.select([best['edge low'] > 0, best['edge'] > 0], ['🟢', '🟡'], '')
-    return best.assign(side=np.where(over_better, 'Over', 'Under'), signal=signal)
+    return best.assign(side=np.where(over_better, 'Over', 'Under'), signal=prop_signal(best['edge'], green_edge))
+
+
+def _scan_row(t: pd.DataFrame, chosen: pd.DataFrame, keep: pd.Series) -> Dict:
+    row = rate_row(t, chosen['side'].where(keep), chosen['odds'])
+    return {'expected %': 100 * chosen.loc[keep, 'p'].mean() if keep.any() else np.nan, **row}
+
+
+def threshold_scan(t: pd.DataFrame, coef: Dict, thresholds=(0,) + GREEN_CANDIDATES) -> pd.DataFrame:
+    """Betting every line whose calibrated edge is above each threshold: bets, expected % (the calibrated chance),
+    hit %, its 95% range, ROI. Cumulative: a line at +3 pp counts for 0, 1, 2 and 3."""
+    chosen = picks(t, coef)
+    rows = [{'edge ≥ pp': thr, **_scan_row(t, chosen, chosen['edge'] > thr if thr == 0 else chosen['edge'] >= thr)}
+            for thr in thresholds]
+    return pd.DataFrame(rows)
+
+
+def choose_green_edge(t: pd.DataFrame, coef: Dict, candidates=GREEN_CANDIDATES,
+                      min_bets: int = MIN_GREEN_BETS) -> Optional[float]:
+    """The smallest candidate edge whose picks on t (held-out lines) number at least min_bets and paid (ROI > 0);
+    None when none did."""
+    if t.empty:
+        return None
+    scan = threshold_scan(t, coef, tuple(candidates))
+    ok = scan[(scan['bets'] >= min_bets) & (scan['ROI %'] > 0)]
+    return float(ok['edge ≥ pp'].iloc[0]) if len(ok) else None
 
 
 def strategy_rows(t: pd.DataFrame, coef: Dict) -> pd.DataFrame:
     calibrated = picks(t, coef)
-    under = pd.Series('Under', index=t.index)
-    rows = {"Always Under": (under, t['under_odds']),
-            "Uncalibrated model pick, edge > 0": (t['best side'].where(t['edge pp'] > 0), t['pick odds']),
-            "Uncalibrated model pick, 🟢": (t['best side'].where(t['signal'] == '🟢'), t['pick odds']),
-            "Calibrated pick, edge > 0": (calibrated['side'].where(calibrated['edge'] > 0), calibrated['odds']),
-            "Calibrated pick, 🟢": (calibrated['side'].where(calibrated['signal'] == '🟢'), calibrated['odds'])}
+    rows = {"Always Under": (pd.Series('Under', index=t.index), t['under_odds']),
+            "Always Over": (pd.Series('Over', index=t.index), t['over_odds']),
+            "Calibrated pick, every line": (calibrated['side'], calibrated['odds']),
+            "Calibrated pick, edge > 0": (calibrated['side'].where(calibrated['edge'] > 0), calibrated['odds'])}
     return pd.DataFrame([{'strategy': name, **rate_row(t, side, odds)} for name, (side, odds) in rows.items()])
 
 
@@ -122,60 +203,136 @@ def calibration_table(s: pd.DataFrame, p: np.ndarray, width: float = 0.05) -> pd
                          'won %': 100 * g['won'].mean()}).reset_index().drop(columns='low')
 
 
-def evaluate(t: pd.DataFrame) -> Tuple[Dict, str]:
-    """Fit on the lines before SPLIT, score the lines from SPLIT on; returns (held-out metrics, report)."""
-    train, test = t[t['game_date'] < SPLIT], t[t['game_date'] >= SPLIT]
-    s_train, s_test = sides(train), sides(test)
-    coef = fit_coefficients(s_train)
-    args = s_test['market'].values, s_test['model'].values, s_test['over'].values
-    candidates = {'Market (margin-free price)': s_test['market'].values,
-                  'Uncalibrated model': s_test['model'].values,
-                  'Calibrated model': apply(coef, *args)}
-    score_rows = pd.DataFrame([{'chances': name, **scores(s_test, p)} for name, p in candidates.items()])
-    report = [f"## Held-out check: fitted on {train['game_date'].min():%b %d} – {SPLIT - pd.Timedelta(days=1):%b %d} "
-              f"({len(train)} lines), scored on {SPLIT:%b %d} – {test['game_date'].max():%b %d} ({len(test)} lines)",
-              "", "Coefficients fitted on the first part: " + ", ".join(f"{k} = {v:.3f}" for k, v in coef.items()),
-              "", "### How well the chances predict the results (lower is better)", "",
-              markdown(score_rows, '{:.4f}'),
-              "", "### Betting the unseen lines (1 unit each, at the line's odds)", "",
-              markdown(strategy_rows(test, coef)),
-              "", "### Calibration of the calibrated model on the unseen lines (both sides of every line)", "",
-              markdown(calibration_table(s_test, candidates['Calibrated model']))]
-    held_out = {'fit on': f"{train['game_date'].min():%Y-%m-%d} – {SPLIT - pd.Timedelta(days=1):%Y-%m-%d}",
-                'scored on': f"{SPLIT:%Y-%m-%d} – {test['game_date'].max():%Y-%m-%d}",
-                'coefficients': coef, 'scores': score_rows.set_index('chances').to_dict('index')}
-    return held_out, "\n".join(report)
+def _period(t: pd.DataFrame) -> str:
+    return f"{t['game_date'].min():%b %d %Y} – {t['game_date'].max():%b %d %Y}" if len(t) else "–"
+
+
+SOURCE_NAMES = {'2022': "Unibet 2022/23", 'superbet': "Superbet 2026/27"}
+
+
+def evaluate(sources: Dict[str, pd.DataFrame]) -> Tuple[Dict, Optional[float], str]:
+    """Fit on the earlier part of every source, score each source's held-out part; the 🟢 threshold from the
+    Superbet held-out lines. Returns (held-out metrics, green_edge_pp, report)."""
+    parts = {name: split(t) for name, t in sources.items() if len(t)}
+    train = pd.concat([sides(fit_part) for fit_part, _ in parts.values()], ignore_index=True)
+    coef = fit_coefficients(train)
+    report = ["## Held-out check", "",
+              "Coefficients fitted on the earlier lines of every source: "
+              + ", ".join(f"{k} = {v:.3f}" for k, v in coef.items()), ""]
+    held_out = {'coefficients': coef, 'sources': {}}
+    for name, (fit_part, test) in parts.items():
+        label = SOURCE_NAMES[name]
+        report += [f"### {label}: fitted on {_period(fit_part)} ({len(fit_part)} lines), "
+                   f"scored on {_period(test)} ({len(test)} lines)", ""]
+        if test.empty:
+            report += ["Not enough nights to hold any out yet.", ""]
+            continue
+        s_test = sides(test)
+        args = s_test['market'].values, s_test['model'].values, s_test['over'].values
+        candidates = {'Market (margin-free price)': s_test['market'].values,
+                      'Uncalibrated model': s_test['model'].values, 'Calibrated model': apply(coef, *args)}
+        score_rows = pd.DataFrame([{'chances': n, **scores(s_test, p)} for n, p in candidates.items()])
+        report += ["How well the chances predict the results (lower is better):", "", markdown(score_rows, '{:.4f}'),
+                   "", "Betting the unseen lines (1 unit each, at the line's odds):", "",
+                   markdown(strategy_rows(test, coef)), "",
+                   "Signal efficiency: every line whose calibrated edge reaches the threshold (cumulative):", "",
+                   markdown(threshold_scan(test, coef)), "",
+                   "Calibration on the unseen lines (both sides of every line):", "",
+                   markdown(calibration_table(s_test, candidates['Calibrated model'])), ""]
+        held_out['sources'][name] = {'fit on': _period(fit_part), 'scored on': _period(test),
+                                     'scores': score_rows.set_index('chances').to_dict('index')}
+    superbet_test = parts.get('superbet', (pd.DataFrame(), pd.DataFrame()))[1]
+    green = choose_green_edge(superbet_test, coef)
+    report += ["### 🟢 threshold", "",
+               (f"🟢 from an edge of +{green:g} pp: the smallest of {', '.join(f'+{c:g}' for c in GREEN_CANDIDATES)} "
+                f"pp whose picks on the unseen Superbet lines numbered {MIN_GREEN_BETS}+ and paid." if green is not None
+                else f"No 🟢: none of the thresholds {', '.join(f'+{c:g}' for c in GREEN_CANDIDATES)} pp had "
+                     f"{MIN_GREEN_BETS}+ picks that paid on the unseen Superbet lines. Lines with a positive edge "
+                     f"get 🟡."), ""]
+    return held_out, green, "\n".join(report)
+
+
+def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE) -> Dict:
+    """evaluate, then refit on everything and write `out` (calibration.json) and the report next to it."""
+    held_out, green, report = evaluate(sources)
+    everything = pd.concat([sides(t) for t in sources.values() if len(t)], ignore_index=True)
+    coef = fit_coefficients(everything)
+    superbet = sources.get('superbet', pd.DataFrame())
+    through = f"{superbet['game_date'].max():%Y-%m-%d}" if len(superbet) else None
+    counts = {SOURCE_NAMES[n]: int(len(t)) for n, t in sources.items() if len(t)}
+    result = {'coefficients': coef, 'green_edge_pp': green, 'superbet_through': through,
+              'fitted_on': date.today().isoformat(),
+              'source': "Unibet 2022/23 main lines (players with 5+ games, backtest variant 'none') and every "
+                        "settled Superbet line (last fetch before tip-off)",
+              'lines': counts, 'rows': int(len(everything)), 'held_out': held_out, 'identity': IDENTITY_CALIBRATION}
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, 'w', encoding='utf-8') as f:
+        json.dump(result, f, indent=2)
+    text = "\n".join(["# Calibration of the props model", "",
+                      "The model's chance for a side is mapped to sigmoid(a·logit(market) + b·(logit(model) − "
+                      "logit(market)) + c·[Over] + d): a = weight of the bookmaker's margin-free chance, b = weight "
+                      "of the model's opinion beyond it, c = Over/Under bias, d = offset. Identity: a = b = 1, "
+                      "c = d = 0. Lines: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + ".", "", report,
+                      "## Used by the dashboards (fitted on every line)", "",
+                      ", ".join(f"{k} = {v:.3f}" for k, v in coef.items()) + f" ({len(everything)} line sides); "
+                      + (f"🟢 from +{green:g} pp" if green is not None else "no 🟢")
+                      + (f"; Superbet lines through {through}" if through else ""), ""])
+    with open(os.path.join(os.path.dirname(out), os.path.basename(REPORT_FILE)), 'w', encoding='utf-8') as f:
+        f.write(text)
+    return {**result, 'report': text}
+
+
+def _superbet_sources(logs: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
+    from espn_scraper import CURRENT_SEASON
+    from espn_scraper.storage import snapshot_file
+    path = snapshot_file(CURRENT_SEASON, 'superbet_props')
+    return superbet_lines(pd.read_csv(path), logs, games) if os.path.exists(path) else pd.DataFrame()
+
+
+def refresh(logs: pd.DataFrame, games: pd.DataFrame, out: str = CALIBRATION_FILE,
+            lines_file: str = LINES_FILE) -> bool:
+    """Refit (calibrate) when a Superbet night newer than the file's superbet_through has settled. logs:
+    prepare_logs output; games: games.csv rows (date parsed). True when refitted; errors are logged, not raised
+    (the old file stays)."""
+    try:
+        saved = {}
+        if os.path.exists(out):
+            with open(out, encoding='utf-8') as f:
+                saved = json.load(f)
+        superbet = _superbet_sources(logs, games)
+        if superbet.empty:
+            return False
+        newest = f"{superbet['game_date'].max():%Y-%m-%d}"
+        if saved.get('superbet_through') and newest <= saved['superbet_through']:
+            return False
+        sources = {'2022': lines_2022(lines_file) if os.path.exists(lines_file) else pd.DataFrame(),
+                   'superbet': superbet}
+        result = calibrate(sources, out)
+        log.info("Calibration refitted through %s: %s, 🟢 from %s", newest, result['coefficients'],
+                 result['green_edge_pp'])
+        return True
+    except Exception as e:
+        log.error("Calibration refresh failed, keeping the old one: %s", e)
+        return False
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--lines', default=LINES_FILE)
     parser.add_argument('--out', default=CALIBRATION_FILE)
+    parser.add_argument('--no-superbet', action='store_true', help="fit on the 2022/23 lines only")
     args = parser.parse_args()
 
-    t = pd.read_csv(args.lines, parse_dates=['game_date'])
-    t = t[(t['variant'] == 'none') & t['main'] & (t['games'] >= MIN_GAMES)].reset_index(drop=True)
-    held_out, report = evaluate(t)
-    everything = sides(t)
-    coef = fit_coefficients(everything)
-    result = {'coefficients': coef, 'fitted_on': date.today().isoformat(),
-              'source': "Unibet 2022/23 main lines, players with 5+ games, backtest variant 'none'",
-              'rows': int(len(everything)), 'lines': int(everything['line_id'].nunique()), 'held_out': held_out,
-              'identity': IDENTITY_CALIBRATION}
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
-    with open(args.out, 'w', encoding='utf-8') as f:
-        json.dump(result, f, indent=2)
-    text = "\n".join(["# Calibration of the props model on 2022/23", "",
-                      "The model's chance for a side is mapped to sigmoid(a·logit(market) + b·(logit(model) − "
-                      "logit(market)) + c·[Over] + d): a = weight of the bookmaker's margin-free chance, b = weight "
-                      "of the model's opinion beyond it, c = Over/Under bias, d = offset. Identity: a = b = 1, "
-                      "c = d = 0.", "", report, "",
-                      "## Coefficients used by the dashboards (fitted on the whole season)", "",
-                      ", ".join(f"{k} = {v:.3f}" for k, v in coef.items()) +
-                      f" ({result['lines']} lines, {result['rows']} line sides)", ""])
-    with open(os.path.join(os.path.dirname(args.out), '2022_calibration.md'), 'w', encoding='utf-8') as f:
-        f.write(text)
-    print(text)
+    sources = {'2022': lines_2022(args.lines)}
+    if not args.no_superbet:
+        from espn_scraper import SEASONS
+        from espn_scraper.storage import load_games, load_player_gamelogs
+        from models import prepare_logs
+        sources['superbet'] = _superbet_sources(prepare_logs(load_player_gamelogs(sorted(SEASONS))),
+                                                load_games(sorted(SEASONS)))
+    report = calibrate(sources, args.out)['report']
+    sys.stdout.reconfigure(errors='replace')   # a Windows console's code page lacks − and 🟢
+    print(report)
 
 
 if __name__ == '__main__':

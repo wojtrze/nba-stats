@@ -9,15 +9,20 @@ from core.ui import PAGES, go_to_data, kpis, page_header, stop, table
 from glossary import column_config, tinted
 from loaders import filtered_logs, games, player_logs, snapshot_history
 import night_view
-from tracking import calibration, edge_bucket, results_table, settle_games
+from models import load_green_edge
+from tracking import calibration, edge_bucket, results_table, settle_games, threshold_table
 
 seasons, season_types = page_header(
     "Results", "Every line the snapshots saved, settled against the stored stats: were Superbet's lines off from "
                "the players' averages, and did the dashboard's picks win?", with_scope=True)
 
-RATE_FORMATS = {'lines': '%d', 'bets': '%d', 'hit %': '%.0f', 'ROI %': '%+.1f', 'ci low %': '%.0f',
-                'ci high %': '%.0f', 'avg odds': '%.2f', 'avg CLV %': '%+.1f'}
+RATE_FORMATS = {'lines': '%d', 'bets': '%d', 'expected %': '%.0f', 'hit %': '%.0f', 'ROI %': '%+.1f',
+                'ci low %': '%.0f', 'ci high %': '%.0f', 'avg odds': '%.2f', 'avg CLV %': '%+.1f', 'edge ≥ pp': '%d'}
 RATE_TIPS = {'lines': "Won or lost (pushes and voids left out)", 'hit %': "How often that side won",
+             'expected %': "How often the model expected these picks to win (its average chance). An accurate "
+                           "signal's hit % lands close to it",
+             'edge ≥ pp': "Every pick whose saved edge reached this many points (0 = any positive edge), so the rows "
+                          "overlap",
              'ROI %': "Profit per 100 staked, betting 1 unit on every line at the opening odds"}
 
 
@@ -161,6 +166,18 @@ with saved_tab:
                            "of a real edge"}])
             picks = picks.assign(**{'edge bucket': edge_bucket(picks['edge_pp']),
                                     'signal': picks['signal'].replace('', 'none')})
+            st.markdown("**Signal efficiency**")
+            efficiency = threshold_table(picks)
+            if efficiency.empty:
+                st.caption("No settled pick has had a positive edge yet.")
+            else:
+                st.dataframe(tinted(efficiency, RATE_FORMATS), hide_index=True, width='stretch',
+                             column_config=column_config(efficiency.columns, RATE_FORMATS, tips=RATE_TIPS))
+            green = load_green_edge()
+            st.caption((f"🟢 = an edge of +{green:g} pp or more" if green is not None else "No 🟢 at the moment")
+                       + ": the threshold is the smallest whose picks paid on unseen Superbet lines (refitted as "
+                         "nights settle; see the calibration report). 🟡 = any other positive edge. Lines without "
+                         "one are a pass; their pick is only the less bad side.")
             left, right = st.columns(2)
             with left:
                 curve = picks.sort_values('game_date').assign(cum=lambda d: d['profit'].fillna(0).cumsum())

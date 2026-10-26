@@ -41,7 +41,12 @@ HELP = STAT_HELP | {
                   "80 = the player beat it only 20% of the time)",
     'in band': "Line is between the player's 30th and 70th percentile. Outside the band = the line looks unusually "
                "low or high for this player.",
-    'best side': "The side (Over/Under) with the bigger edge: the one to consider betting",
+    'best side': "The side (Over/Under) with the bigger edge, even when both edges are negative: the less bad "
+                 "side, not a recommendation (see pick)",
+    'bet': "The pick: Over or Under when the model sees a positive edge (🟢/🟡), otherwise pass. The model's "
+           "opinion beyond Superbet's price has proven worth little, so most lines are a pass",
+    'lean': "Which way the projection points when it's at least 10% away from the line (proj avg vs line). For "
+            "information only: on its own it hasn't beaten Superbet's prices",
     'pick odds': "Superbet's odds for the picked side",
     'source': "Where the name comes from", 
     'edge pp': "model % minus break-even %, in percentage points: how much more often the pick should win than "
@@ -50,9 +55,9 @@ HELP = STAT_HELP | {
                 "results so far were on the lucky side; few games make the range wide.",
     'break-even %': "Chance the pick must win to break even at Superbet's odds: 100 / odds (margin included)",
     'market %': "Superbet's chance for the pick with the bookmaker's margin removed, so Over + Under = 100%",
-    'signal': "🟢 the edge stays positive even at the low end of the range; 🟡 positive edge, but the range "
-              "reaches below break-even (too little data to be sure); 🔴 a reason to pass whatever the numbers say "
-              "(see red flag)",
+    'signal': "🟢 an edge at least as big as the threshold whose picks paid on unseen Superbet lines (none = no "
+              "🟢; see Results → Signal efficiency); 🟡 any other positive edge; 🔴 a reason to pass whatever the "
+              "numbers say (see red flag)",
     'red flag': "Why not to trust this line, whatever its numbers: too few games, preseason only, may not play, "
                 "minutes swinging, the line moving against the pick (props); early season, no RotoWire lineup, an "
                 "edge too big to be true (games)",
@@ -146,7 +151,7 @@ HELP = STAT_HELP | {
 }
 
 LABELS = {
-    'bet_type': "bet", 'best side': "pick", 'over_odds': "over odds", 'under_odds': "under odds", 'season_type': "game type",
+    'bet_type': "bet", 'bet': "pick", 'best side': "best side", 'over_odds': "over odds", 'under_odds': "under odds", 'season_type': "game type",
     'PLUS_MINUS': "+/-", 'rest_days': "rest days", 'type': "home/away", 'off_rtg': "ORtg", 'def_rtg': "DRtg",
     'net_rtg': "net rtg", 'opp_pts': "opp pts", 'G': "guards", 'F': "forwards", 'C': "centers",
     'G vs avg': "guards vs NBA avg", 'F vs avg': "forwards vs NBA avg", 'C vs avg': "centers vs NBA avg",
@@ -171,13 +176,24 @@ COLUMN_SOURCE = {
     'line move': 'superbet', 'spread': 'superbet', 'game total': 'superbet', 'odds move': 'superbet',
     'line moves': 'superbet', 'proj avg': 'stats', 'matchup': 'stats',
     'RotoWire': 'rotowire', 'out': 'rotowire',
-    'best side': 'stats', 'signal': 'stats', 'edge pp': 'stats', 'games': 'stats', 'avg': 'stats',
+    'best side': 'stats', 'bet': 'stats', 'lean': 'stats', 'signal': 'stats', 'edge pp': 'stats', 'games': 'stats', 'avg': 'stats',
     'adj avg': 'stats', 'avg L5': 'stats', 'over %': 'stats', 'under %': 'stats', 'over % L10': 'stats',
     'under % L10': 'stats', 'percentile': 'stats', 'in band': 'stats', 'min L5': 'stats',
     'proj score': 'stats', 'proj winner': 'stats', 'proj total': 'stats', 'best bet': 'stats',
     'best edge pp': 'stats', 'model %': 'stats', 'red flag': 'stats', 'raw model %': 'stats', 'fair odds': 'stats', 'games missed': 'stats',
     'team pts change': 'stats', 'opp pts change': 'stats',
 }
+
+
+def signal_legend() -> str:
+    """What 🟢 / 🟡 / 🔴 mean on the props pages, with the current 🟢 threshold."""
+    from models import load_green_edge
+    green = load_green_edge()
+    return ((f"🟢 = an edge of +{green:g} pp or more (the smallest threshold whose picks paid on unseen Superbet "
+             f"lines); " if green is not None else
+             "No 🟢 for now: no edge threshold has paid on unseen Superbet lines yet; ")
+            + "🟡 = a positive edge, not proven; 🔴 = a reason to pass whatever the numbers say (red flag), listed "
+              "last.")
 
 
 def source_legend(keys=tuple(SOURCES)) -> str:

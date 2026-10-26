@@ -28,7 +28,7 @@ main = pd.DataFrame(main_lines(odds.to_dict('records')))
 kpis([{'label': "Games", 'value': odds['event_id'].nunique()},
       {'label': "Player lines", 'value': len(props), 'help': "Superbet's over/under props on these games"},
       {'label': "🟢 Strong props", 'value': int((props['signal'] == '🟢').sum()) if len(props) else 0,
-       'help': "Props whose edge stays positive even at the low end of the model's range"},
+       'help': "Props whose edge reaches the threshold whose picks paid on unseen Superbet lines"},
       {'label': "Lineups listed", 'value': f"{lineups['team'].nunique() if len(lineups) else 0} teams",
        'help': "Teams whose expected or confirmed lineup RotoWire lists"},
       {'label': "Out or doubtful", 'value': int((lineups['role'] == 'may_not_play').sum()) if len(lineups)
@@ -91,9 +91,10 @@ with left:
         top = props[props['signal'].isin(['🟢', '🟡'])].sort_values(['signal', 'edge pp'], ascending=[True, False],
                                                        key=lambda c: c.map({'🟢': 0, '🟡': 1}) if c.name == 'signal'
                                                        else c).head(10).reset_index(drop=True)
-        picked = table(top, ['name', 'bet_type', 'line', 'best side', 'signal', 'edge pp', 'pick odds', 'RotoWire'],
+        picked = table(top, ['name', 'bet_type', 'line', 'bet', 'signal', 'edge pp', 'pick odds', 'RotoWire'],
                        {'line': '%g', 'edge pp': '%+.1f', 'pick odds': '%.2f'}, key='top_props', select=True)
-        st.caption("🟢 first, then by edge. Pick one to open it on the Props page.")
+        st.caption("Only lines with a positive edge (every other line is a pass): 🟢 first, then by edge. "
+                   "Pick one to open it on the Props page.")
         if picked is not None:
             r = top.iloc[picked]
             st.session_state['props_focus'] = (r['event_id'], r['name_ESPN'], r['bet_type'])

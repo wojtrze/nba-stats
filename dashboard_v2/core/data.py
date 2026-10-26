@@ -15,7 +15,7 @@ from espn_scraper import CURRENT_SEASON
 from loaders import (clear_rotowire, fetch_rotowire, filtered_logs, games, name_resolver, player_logs,
                      reload_superbet_snapshot, snapshot_history, superbet_offers)
 from metrics import absence_adjustments, absence_impact
-from models import GAME_DEFAULTS, GAME_TYPES, game_ratings, price_games, price_props
+from models import GAME_DEFAULTS, GAME_TYPES, game_ratings, price_games, price_props, top_up_logs
 from reasons import flag_props
 from tracking import game_odds_movement, prop_movement
 
@@ -79,7 +79,9 @@ def _adjustments(part, players, out, stats):
 def _priced_props(seasons, season_types, props_, lineups_, odds) -> pd.DataFrame:
     g = games()
     g = g[g['season_id'].isin(seasons) & g['season_type'].isin(season_types)]
-    logs = filtered_logs(list(seasons), list(season_types))
+    # players with few games in the newest chosen season get their latest of the season before
+    logs = top_up_logs(filtered_logs(list(seasons), list(season_types)), player_logs(), max(seasons),
+                       props_['player_id_ESPN'].dropna().unique())
     table = price_props(props_, logs, lineups_, odds, g, adjust=_adjustments)
     # 🔴 + 'red flag' for lines with a reason to pass whatever the numbers say
     table = flag_props(prop_movement(snapshot_history('superbet_props'), table), logs, lineups_)

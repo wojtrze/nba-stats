@@ -17,7 +17,7 @@ from tracking import calibration
 
 BACKTEST_FILE = os.path.join('data', 'backtest', '2022_lines.csv')
 VIEWS = {'summary': "Summary", 'tester': "Strategy tester", 'player': "Player", 'calibration': "Calibration"}
-CALIBRATION_REPORT = os.path.join('data', 'backtest', '2022_calibration.md')
+CALIBRATION_REPORT = os.path.join('data', 'backtest', 'calibration.md')
 BET_LABELS = {'model': "Model pick", 'average': "Toward the season average", 'under': "Always Under",
               'over': "Always Over"}
 RATE_FORMATS = {'bets': '%d', 'hit %': '%.1f', 'ci low %': '%.1f', 'ci high %': '%.1f', 'ROI %': '%+.1f',
@@ -258,7 +258,8 @@ def render():
 
 
 def calibration_view():
-    """The report of python -m backtest.calibrate: fitted on Nov–Jan, scored on Feb–May."""
+    """The report of python -m backtest.calibrate: fitted on the earlier 2022/23 and Superbet lines, scored on the
+    later ones, with the 🟢 threshold."""
     if not os.path.exists(CALIBRATION_REPORT):
         st.info("No calibration yet. Run `python -m backtest.calibrate` after the backtest.")
         return

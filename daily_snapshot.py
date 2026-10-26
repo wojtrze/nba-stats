@@ -2,6 +2,7 @@
 
     python daily_snapshot.py              # today's games
     python daily_snapshot.py --tomorrow   # RotoWire's lineups for tomorrow (Superbet always covers the next 36h)
+    python daily_snapshot.py --reprice    # price every saved line again after a model change
 
 Each run appends rows with a fetched_at timestamp (UTC), so running it several times a day keeps line movement
 and lineup changes. Each line also gets the dashboard's pick and edge at that moment (the default settings of
@@ -43,7 +44,8 @@ def _append(name: str, df: pd.DataFrame, fetched_at: str) -> int:
         # keep the file's column order; new columns go at the end
         existing = list(pd.read_csv(path, nrows=0).columns)
         if set(df.columns) - set(existing):
-            old = pd.read_csv(path)
+            # as text, so the saved rows are written back unchanged (ids with gaps would otherwise become floats)
+            old = pd.read_csv(path, dtype=str, keep_default_na=False)
             pd.concat([old, df], ignore_index=True).to_csv(path, index=False)
             return len(df)
         df = df.reindex(columns=existing)
@@ -118,29 +120,32 @@ def save_lineups_if_changed(lineups: pd.DataFrame, fetched_at: str) -> str:
 
 
 def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.DataFrame):
-    """props with player_id_ESPN, pick, model_pct, edge_pp, edge_low, proj_avg, signal (🟢/🟡/🔴) and red_flag;
-    game_odds with model_pct, edge_pp and the game's projected score (proj_home_pts, proj_away_pts). Same models
-    and defaults as the dashboard pages (current season, every game type but All-Star)."""
+    """props with player_id_ESPN and nightly.MODEL_COLUMNS (pick, model_pct, edge_pp, edge_low, proj_avg, signal
+    🟢/🟡/🔴, red_flag and the raw chances the calibration is refit from); game_odds with model_pct, edge_pp and
+    the game's projected score (proj_home_pts, proj_away_pts). Same models and defaults as the dashboard pages
+    (current season without preseason, players with few games topped up with last season's)."""
     from models import (DEFAULT_SEASON_TYPES, GAME_DEFAULTS, GAME_TYPES, game_ratings, prepare_logs, price_games,
-                        price_props)
+                        price_props, top_up_logs)
     from name_resolver import NameResolver
+    from nightly import model_columns
     from reasons import flag_props
 
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
     games = load_games(sorted(SEASONS))
+    # once a newer night has settled, the calibration and 🟢 threshold are refitted with its lines first
+    from backtest.calibrate import refresh
+    refresh(logs, games)
     resolver = NameResolver(logs)
     if not lineups.empty:
         lineups = resolver.add_ids(lineups)
     if not props.empty:
         props = resolver.add_ids(props, team_cols=('home', 'away'))
-        current = logs[(logs['season_id'] == CURRENT_SEASON) & logs['season_type'].isin(DEFAULT_SEASON_TYPES)]
+        current = top_up_logs(logs[(logs['season_id'] == CURRENT_SEASON) & logs['season_type'].isin(DEFAULT_SEASON_TYPES)],
+                              logs, CURRENT_SEASON, props['player_id_ESPN'].dropna().unique())
         played = games[(games['season_id'] == CURRENT_SEASON) & games['season_type'].isin(DEFAULT_SEASON_TYPES)]
         # the red flags known at fetch time (the line hasn't moved yet)
         table = flag_props(price_props(props, current, lineups, game_odds, played), current, lineups)
-        props = props.assign(pick=table['best side'], model_pct=table['model %'].round(1),
-                             edge_pp=table['edge pp'].round(1), edge_low=table['edge low'].round(1),
-                             proj_avg=table['proj avg'].round(2), signal=table['signal'],
-                             red_flag=table['red flag'])
+        props = props.assign(**model_columns(table))
     if not game_odds.empty:
         model = game_ratings(games, CURRENT_SEASON, GAME_DEFAULTS['prior_games'], GAME_DEFAULTS['regress'])
         recent = logs[logs['season_id'].isin([CURRENT_SEASON - 1, CURRENT_SEASON]) & logs['season_type'].isin(GAME_TYPES)]
@@ -193,10 +198,53 @@ def save_superbet(offers: dict, lineups: pd.DataFrame, fetched_at: str) -> dict:
             'superbet_game_odds': _append('superbet_game_odds', game_odds, fetched_at)}
 
 
+def reprice_snapshots() -> int:
+    """Price every saved Superbet line again with the current model and defaults, as of its fetch: the games
+    finished before that day, the RotoWire version saved by then and the game odds of the same fetch
+    (nightly.recompute_props). Rewrites the model columns of superbet_props.csv, nothing else. Returns the rows."""
+    from models import prepare_logs
+    from name_resolver import NameResolver
+    from nightly import MODEL_COLUMNS, et_night, lineups_before_tip, recompute_props
+
+    path = snapshot_file(CURRENT_SEASON, 'superbet_props')
+    saved = pd.read_csv(path, dtype=str, keep_default_na=False)   # written back as read, but the model columns
+    props = pd.read_csv(path).drop(columns=['player_id_ESPN', *MODEL_COLUMNS], errors='ignore')
+    odds = pd.read_csv(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))
+    rotowire = pd.read_csv(snapshot_file(CURRENT_SEASON, 'rotowire_lineups'))
+    logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
+    games = load_games(sorted(SEASONS))
+    resolver = NameResolver(logs)
+    props = resolver.add_ids(props, team_cols=('home', 'away'))
+    rotowire = resolver.add_ids(rotowire)
+
+    model = pd.DataFrame(index=props.index, columns=MODEL_COLUMNS, dtype=object)
+    for (fetched_at, night), rows in props.groupby(['fetched_at', et_night(props['start_time'])]):
+        lineups = lineups_before_tip(rotowire, night, pd.Timestamp(fetched_at) + pd.Timedelta(seconds=1))
+        priced = recompute_props(rows, logs, games, lineups, odds[odds['fetched_at'] == fetched_at],
+                                 et_night(pd.Series([fetched_at])).iloc[0])
+        model.loc[rows.index] = priced[MODEL_COLUMNS].values
+        log.info("%s, games of %s: %d lines priced", fetched_at, night.date(), len(rows))
+
+    out = saved.copy()
+    for col in ['player_id_ESPN', *MODEL_COLUMNS]:
+        if col not in out:
+            out[col] = ''
+    out['player_id_ESPN'] = pd.array(props['player_id_ESPN'], dtype='Int64')
+    for col in MODEL_COLUMNS:
+        out[col] = model[col].values
+    out.to_csv(path, index=False)
+    return len(out)
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--tomorrow', action='store_true', help="RotoWire's lineups for tomorrow")
+    parser.add_argument('--reprice', action='store_true',
+                        help="price every saved Superbet line again with the current model (rewrites its model columns)")
     args = parser.parse_args()
+    if args.reprice:
+        print(f"superbet_props: {reprice_snapshots()} rows repriced")
+        sys.exit()
     for name, n in take_snapshot('tomorrow' if args.tomorrow else 'today').items():
         print(f"{name}: {'failed' if n is None else f'{n} rows'}")

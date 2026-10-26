@@ -1,35 +1,62 @@
 {
   "coefficients": {
-    "a": 1.005431693556479,
-    "b": 0.07876599750203901,
-    "c": -0.1195324704413869,
-    "d": 0.05976623522069346
+    "a": 1.0925314528562144,
+    "b": 0.07886699607417395,
+    "c": -0.10325774748579761,
+    "d": 0.051628873742898776
   },
-  "fitted_on": "2026-10-21",
-  "source": "Unibet 2022/23 main lines, players with 5+ games, backtest variant 'none'",
-  "rows": 58662,
-  "lines": 29331,
+  "green_edge_pp": null,
+  "superbet_through": "2026-10-25",
+  "fitted_on": "2026-10-26",
+  "source": "Unibet 2022/23 main lines (players with 5+ games, backtest variant 'none') and every settled Superbet line (last fetch before tip-off)",
+  "lines": {
+    "Unibet 2022/23": 29331,
+    "Superbet 2026/27": 8222
+  },
+  "rows": 75106,
   "held_out": {
-    "fit on": "2022-11-09 \u2013 2023-01-31",
-    "scored on": "2023-02-01 \u2013 2023-05-08",
     "coefficients": {
-      "a": 1.1202303170342593,
-      "b": 0.07589433278571282,
-      "c": -0.03186877676866318,
-      "d": 0.01593438838433159
+      "a": 1.2249146498967118,
+      "b": 0.039699979676034676,
+      "c": -0.067389416104325,
+      "d": 0.03369470805216253
     },
-    "scores": {
-      "Market (margin-free price)": {
-        "log loss": 0.6894651946838615,
-        "Brier": 0.24816767659257583
+    "sources": {
+      "2022": {
+        "fit on": "Nov 09 2022 \u2013 Jan 31 2023",
+        "scored on": "Feb 01 2023 \u2013 May 08 2023",
+        "scores": {
+          "Market (margin-free price)": {
+            "log loss": 0.6894651946838615,
+            "Brier": 0.24816767659257583
+          },
+          "Uncalibrated model": {
+            "log loss": 0.7054866226592328,
+            "Brier": 0.25518470866244986
+          },
+          "Calibrated model": {
+            "log loss": 0.6888265282479932,
+            "Brier": 0.24784677436305386
+          }
+        }
       },
-      "Uncalibrated model": {
-        "log loss": 0.7054866226592328,
-        "Brier": 0.25518470866244986
-      },
-      "Calibrated model": {
-        "log loss": 0.6888882252159361,
-        "Brier": 0.24788137710771865
+      "superbet": {
+        "fit on": "Oct 20 2026 \u2013 Oct 23 2026",
+        "scored on": "Oct 24 2026 \u2013 Oct 25 2026",
+        "scores": {
+          "Market (margin-free price)": {
+            "log loss": 0.6876970000178323,
+            "Brier": 0.247308010410069
+          },
+          "Uncalibrated model": {
+            "log loss": 0.6958398883021841,
+            "Brier": 0.250861623045067
+          },
+          "Calibrated model": {
+            "log loss": 0.6887262760200248,
+            "Brier": 0.24781821980878344
+          }
+        }
       }
     }
   },

@@ -8,7 +8,7 @@ from core.analysis import teammate_impact
 from core.data import lineups as rotowire_lineups, priced_props, superbet
 from core.state import persist, remember
 from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, stop, table
-from glossary import column_config
+from glossary import column_config, signal_legend
 from loaders import filtered_logs, player_logs, snapshot_history
 from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits
 from reasons import prop_reasons
@@ -22,7 +22,7 @@ lineups = rotowire_lineups()
 table_all = priced_props(seasons, season_types)
 
 DEFAULT_TYPES = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP']
-SIGNALS = {'all': "All", 'positive': "🟢🟡 Edge", 'sure': "🟢 Holds"}
+SIGNALS = {'all': "All", 'positive': "🟢🟡 Positive edge", 'sure': "🟢 Strong"}
 FORMATS = {'raw model %': '%.0f',
            'line': '%g', 'edge pp': '%+.1f', 'edge low': '%+.1f', 'pick odds': '%.2f', 'model %': '%.0f',
            'proj avg': '%.1f', 'pick % L10': '%.0f', 'pick %': '%.0f', 'break-even %': '%.0f', 'market %': '%.0f',
@@ -31,14 +31,14 @@ FORMATS = {'raw model %': '%.0f',
            'spread': '%+g', 'game total': '%g'}
 TIPS = {'pick % L10': "How often the picked side won in the player's last 10 games",
         'pick %': "How often the picked side won in all the games shown",
-        'model %': "Chance the pick wins, calibrated on 2022/23: the model's own chance (raw model %) mapped to how "
-                   "often such picks actually won against Unibet's lines. The model alone was "
+        'model %': "Chance the best side wins, calibrated on 2022/23 and the settled Superbet lines: the model's "
+                   "own chance (raw model %) mapped to how often such picks actually won. The model alone was "
                    "overconfident, so this sits close to the market's margin-free chance.",
         'raw model %': "The model's own chance before calibration: the hit rate pulled toward the market's "
                        "margin-free chance (worth 10 games), averaged with the chance from proj avg and the player's "
                        "usual spread of results"}
-MAIN_COLUMNS = ['name', 'game', 'tip-off', 'bet_type', 'line', 'best side', 'signal', 'edge pp', 'pick odds',
-                'model %', 'proj avg', 'pick % L10', 'RotoWire', 'red flag']
+MAIN_COLUMNS = ['name', 'game', 'tip-off', 'bet_type', 'line', 'bet', 'signal', 'lean', 'edge pp', 'best side',
+                'pick odds', 'model %', 'proj avg', 'pick % L10', 'RotoWire', 'red flag']
 MORE_COLUMNS = ['edge low', 'break-even %', 'market %', 'line move', 'open line', 'adj avg', 'avg', 'avg L5',
                 'matchup', 'spread', 'game total', 'percentile', 'pick %', 'games', 'min L5', 'raw model %',
                 'over_odds', 'under_odds']
@@ -67,7 +67,10 @@ def detail(row: pd.Series):
     pid = row['player_id']
     games = logs[logs['player_id_ESPN'] == pid].sort_values('Date')
     stat, line = row['bet_type'], row['line']
-    st.markdown(f"### {row['name']} · {row['best side']} {line:g} {stat} @ {row['pick odds']:.2f}")
+    side = f"{row['best side']} {line:g} {stat} @ {row['pick odds']:.2f}"
+    # no positive edge: the side shown is only the less bad one
+    st.markdown(f"### {row['name']} · pass (best side {side}, edge {row['edge pp']:+.1f} pp)" if row['bet'] in ('', 'pass')
+                else f"### {row['name']} · {side}")
     st.caption(f"{row['game']} · {pl_time(row['start_time'])} · {row['RotoWire'] or 'not on RotoWire yet'}")
     verdict_tab, mates_tab, history_tab, move_tab = st.tabs(
         ["Verdict", "Teammates (with / without)", "History", "Line movement"])
@@ -246,9 +249,7 @@ type_filter = f[1].pills("Bet types", available, key='props_types', selection_mo
                          help="PA = points+assists, PR = points+rebounds, RA = rebounds+assists, PRA = all three")
 signal = f[2].segmented_control("Signal", list(SIGNALS), format_func=SIGNALS.get, key='props_signal',
                                 on_change=remember, args=('props_signal',),
-                                help="🟢 = even the low end of the model's range beats the price; 🟡 = positive "
-                                     "edge but too little data to be sure. 🔴 lines (a reason to pass) are only in "
-                                     "All.")
+                                help=signal_legend() + " 🔴 lines are only in All.")
 with f[3].popover("More", width='stretch'):
     hide_out = st.toggle("Hide players RotoWire lists as out", key='props_hide_out', on_change=remember,
                          args=('props_hide_out',))
@@ -278,8 +279,8 @@ shown = shown.reset_index(drop=True)
 
 kpis([{'label': "Lines shown", 'value': f"{len(shown)} / {len(table_all)}",
        'help': "Lines that pass the filters, of every line Superbet offers"},
-      {'label': "🟢 Edge holds", 'value': int((shown['signal'] == '🟢').sum()),
-       'help': "The edge stays positive even at the low end of the model's range"},
+      {'label': "🟢 Strong", 'value': int((shown['signal'] == '🟢').sum()),
+       'help': "An edge at least as big as the threshold whose picks paid on unseen Superbet lines"},
       {'label': "🟡 Positive edge", 'value': int((shown['signal'] == '🟡').sum())},
       {'label': "Games", 'value': shown['event_id'].nunique()},
       {'label': "🔴 Red flags", 'value': int((shown['signal'] == '🔴').sum()),
@@ -287,13 +288,15 @@ kpis([{'label': "Lines shown", 'value': f"{len(shown)} / {len(table_all)}",
                "minutes swinging, the line moving against the pick"}])
 
 columns = MAIN_COLUMNS + (MORE_COLUMNS if more else [])
-picked = table(shown, columns, FORMATS, TIPS, key='props_table', select=True, height=420,
+picked = table(shown.assign(bet=shown['bet'].replace('', 'pass')), columns, FORMATS, TIPS, key='props_table', select=True, height=420,
                legend=['superbet', 'rotowire', 'stats'])
 st.caption(("Earliest tip-off first; within a game greens first, then by edge" if sort == 'tip-off' else
             "Greens first, then by edge") + ", 🔴 last (red flag: a reason to pass, said in the last column). "
            "⏰ = tip-off within the hour; lines leave the list at tip-off. Hover "
-           "a header for what it means; pick a row for the details. model % is calibrated on 2022/23, where the "
-           "model's own opinion proved worth little beyond the price, so few lines show an edge.")
+           "a header for what it means; pick a row for the details. pick = Over/Under only with a positive edge, "
+           "otherwise pass; lean = where the projection points when it's well off the line (information only). "
+           "model % is calibrated on 2022/23 and the settled Superbet lines, where the model's own opinion proved "
+           "worth little beyond the price, so most lines are a pass.")
 
 # a line sent from the Overview opens here until a row is picked
 focus = st.session_state.get('props_focus')

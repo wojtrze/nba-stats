@@ -84,7 +84,8 @@ def log_run(started: datetime, job: str, command: str, code: int, seconds: float
 # the shortest gap between two requests to Superbet (fetches and snapshot runs)
 SUPERBET_COOLDOWN = timedelta(minutes=5)
 # the snapshot's model columns; the pages price the lines themselves
-_MODEL_COLUMNS = ['player_id_ESPN', 'pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag']
+_MODEL_COLUMNS = ['player_id_ESPN', 'pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag',
+                  'raw_over_pct', 'raw_under_pct', 'market_over_pct']
 
 
 @st.cache_resource(show_spinner=False)
@@ -293,7 +294,8 @@ def sidebar_filters():
     chosen = st.sidebar.multiselect("Seasons", list(labels), key="seasons", on_change=_remember, args=("seasons",))
     types = st.sidebar.multiselect("Game types", ['pre', 'regular', 'playin', 'post'], key="season_types",
                                    on_change=_remember, args=("season_types",),
-                                   help="Preseason is included by default early in the season, when it's all there is.")
+                                   help="Preseason is left out by default (starters play short minutes). On Today's "
+                                        "props, players with fewer than 10 games are topped up with last season's.")
     return [labels[c] for c in chosen], types
 
 

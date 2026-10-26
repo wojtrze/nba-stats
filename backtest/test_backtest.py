@@ -164,3 +164,80 @@ def test_vectorised_apply_matches_metrics_calibrate():
     market, model, over = np.array([0.4, 0.55, np.nan]), np.array([0.6, 0.3, 0.7]), np.array([True, False, True])
     expected = [calibrate(p, m, 'Over' if o else 'Under', coef) for p, m, o in zip(model, market, over)]
     assert apply(coef, market, model, over) == pytest.approx(expected)
+
+
+# --- Superbet lines, the 🟢 threshold and the refresh ---
+
+def _snap(fetched, line, actual_night='2026-10-21', **kw):
+    row = {'fetched_at': fetched, 'name': 'A', 'name_ESPN': 'APlayer', 'home': 'bos', 'away': 'ny', 'bet_type': 'PTS',
+           'line': line, 'event_id': 1, 'start_time': f'{actual_night}T23:30:00Z', 'over_odds': 1.9,
+           'under_odds': 1.9, 'player_id_ESPN': 7, 'pick': 'Under', 'edge_pp': -2.0, 'signal': '',
+           'raw_over_pct': 55.0, 'raw_under_pct': 45.0, 'market_over_pct': 50.0}
+    return row | kw
+
+
+def _stats():
+    logs = pd.DataFrame({'player_id_ESPN': [7], 'player_name_ESPN': ['APlayer'], 'Date': pd.to_datetime(['2026-10-21']),
+                         'PTS': [25.0]})
+    games = pd.DataFrame({'date': pd.to_datetime(['2026-10-21']), 'home': ['bos'], 'away': ['ny']})
+    return logs, games
+
+
+def test_superbet_lines_judges_the_last_fetch_before_tip_off():
+    from backtest.calibrate import sides, superbet_lines
+    logs, games = _stats()
+    snaps = pd.DataFrame([_snap('2026-10-21T10:00:00Z', 19.5),
+                          _snap('2026-10-21T20:00:00Z', 20.5, raw_over_pct=60.0),
+                          _snap('2026-10-21T23:45:00Z', 30.5),                                  # after tip-off
+                          _snap('2026-10-21T20:00:00Z', 4.5, bet_type='AST'),                   # no AST stat: dropped
+                          _snap('2026-10-21T20:00:00Z', 25.0, bet_type='PTS', event_id=2),      # a push
+                          _snap('2026-10-22T20:00:00Z', 20.5, actual_night='2026-10-22', event_id=4),   # not played yet
+                          _snap('2026-10-21T20:00:00Z', 9.5, bet_type='PTS', event_id=3, raw_over_pct=np.nan)])
+    t = superbet_lines(snaps, logs, games)
+    assert sorted(t['line']) == [20.5, 25.0] and (t['source'] == 'superbet').all()
+    assert t.loc[t['line'] == 20.5, 'raw over %'].iloc[0] == 60.0 and t['actual'].tolist() == [25.0, 25.0]
+    s = sides(t)
+    assert len(s) == 2 and set(s['side']) == {'Over', 'Under'}                                 # the push is out
+    assert s.loc[s['side'] == 'Over', 'won'].iloc[0] == 1.0
+
+
+def _lines(n, over_won, market=50.0, raw_over=50.0, night='2026-10-21'):
+    return pd.DataFrame({'game_date': pd.Timestamp(night), 'line': 10.5, 'actual': np.where(over_won, 12, 9),
+                         'over_odds': 1.9, 'under_odds': 1.9, 'market over %': market, 'raw over %': raw_over,
+                         'raw under %': 100 - raw_over, 'source': 'superbet'}, index=range(n))
+
+
+def test_choose_green_edge_needs_enough_picks_that_paid():
+    from backtest.calibrate import choose_green_edge, threshold_scan
+    coef = {'a': 1.0, 'b': 1.0, 'c': 0.0, 'd': 0.0}                     # identity: the raw chance is the chance
+    # 60 lines where the model says 60% Over (edge 60 − 52.6 = +7.4 pp) and the Over won 40 times
+    good = _lines(60, np.arange(60) < 40, raw_over=60.0)
+    assert choose_green_edge(good, coef) == 1.0
+    scan = threshold_scan(good, coef).set_index('edge ≥ pp')
+    assert scan.loc[0, 'bets'] == scan.loc[5, 'bets'] == 60 and scan.loc[5, 'expected %'] == pytest.approx(60)
+    assert choose_green_edge(good.iloc[:30], coef) is None             # too few bets
+    bad = _lines(60, np.arange(60) < 20, raw_over=60.0)                 # the same edges lost
+    assert choose_green_edge(bad, coef) is None
+    assert choose_green_edge(good.iloc[0:0], coef) is None
+
+
+def test_refresh_refits_only_after_a_new_night(tmp_path, monkeypatch):
+    import json
+    from backtest import calibrate
+    rng = np.random.default_rng(1)
+    nights = pd.concat([_lines(200, rng.uniform(size=200) < 0.5, night=f'2026-10-{d}') for d in (21, 22, 23)],
+                       ignore_index=True)
+    nights['market over %'] = rng.uniform(40, 60, len(nights))
+    nights['raw over %'] = rng.uniform(30, 70, len(nights))
+    nights['raw under %'] = 100 - nights['raw over %']
+    monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: nights)
+    out = tmp_path / 'calibration.json'
+    missing_2022 = str(tmp_path / 'none.csv')
+    assert calibrate.refresh(None, None, str(out), missing_2022)
+    saved = json.loads(out.read_text())
+    assert saved['superbet_through'] == '2026-10-23' and 'green_edge_pp' in saved
+    assert (tmp_path / 'calibration.md').exists()
+    assert not calibrate.refresh(None, None, str(out), missing_2022)                    # nothing new
+    monkeypatch.setattr(calibrate, '_superbet_sources', lambda logs, games: (_ for _ in ()).throw(OSError("x")))
+    assert not calibrate.refresh(None, None, str(out), missing_2022)                    # error: old file kept
+    assert json.loads(out.read_text()) == saved
