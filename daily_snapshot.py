@@ -120,17 +120,21 @@ def save_lineups_if_changed(lineups: pd.DataFrame, fetched_at: str) -> str:
 
 
 def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.DataFrame):
-    """props with player_id_ESPN, pick, model_pct, edge_pp, edge_low, proj_avg, signal (🟢/🟡/🔴) and red_flag;
-    game_odds with model_pct, edge_pp and the game's projected score (proj_home_pts, proj_away_pts). Same models
-    and defaults as the dashboard pages (current season without preseason, players with few games topped up with
-    last season's)."""
+    """props with player_id_ESPN and nightly.MODEL_COLUMNS (pick, model_pct, edge_pp, edge_low, proj_avg, signal
+    🟢/🟡/🔴, red_flag and the raw chances the calibration is refit from); game_odds with model_pct, edge_pp and
+    the game's projected score (proj_home_pts, proj_away_pts). Same models and defaults as the dashboard pages
+    (current season without preseason, players with few games topped up with last season's)."""
     from models import (DEFAULT_SEASON_TYPES, GAME_DEFAULTS, GAME_TYPES, game_ratings, prepare_logs, price_games,
                         price_props, top_up_logs)
     from name_resolver import NameResolver
+    from nightly import model_columns
     from reasons import flag_props
 
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
     games = load_games(sorted(SEASONS))
+    # once a newer night has settled, the calibration and 🟢 threshold are refitted with its lines first
+    from backtest.calibrate import refresh
+    refresh(logs, games)
     resolver = NameResolver(logs)
     if not lineups.empty:
         lineups = resolver.add_ids(lineups)
@@ -141,10 +145,7 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
         played = games[(games['season_id'] == CURRENT_SEASON) & games['season_type'].isin(DEFAULT_SEASON_TYPES)]
         # the red flags known at fetch time (the line hasn't moved yet)
         table = flag_props(price_props(props, current, lineups, game_odds, played), current, lineups)
-        props = props.assign(pick=table['best side'], model_pct=table['model %'].round(1),
-                             edge_pp=table['edge pp'].round(1), edge_low=table['edge low'].round(1),
-                             proj_avg=table['proj avg'].round(2), signal=table['signal'],
-                             red_flag=table['red flag'])
+        props = props.assign(**model_columns(table))
     if not game_odds.empty:
         model = game_ratings(games, CURRENT_SEASON, GAME_DEFAULTS['prior_games'], GAME_DEFAULTS['regress'])
         recent = logs[logs['season_id'].isin([CURRENT_SEASON - 1, CURRENT_SEASON]) & logs['season_type'].isin(GAME_TYPES)]

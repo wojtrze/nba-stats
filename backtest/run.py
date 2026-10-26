@@ -147,7 +147,7 @@ def summary(results: Dict[str, pd.DataFrame], reports: List[Dict]) -> str:
              f"games. Pushes are left out; ROI is per unit at the line's odds; ci = 95% Wilson interval.",
              "", "model %, edges and signals are calibrated (data/backtest/calibration.json) when the calibration "
                  "exists; it's fitted on this same season, so these numbers are then in-sample. The honest check on "
-                 "games the fit never saw is data/backtest/2022_calibration.md.", ""]
+                 "games the fit never saw is data/backtest/calibration.md.", ""]
     for report in reports:
         parts += ["- " + ", ".join(f"{k}: {v}" for k, v in report.items())]
     for variant, table in results.items():

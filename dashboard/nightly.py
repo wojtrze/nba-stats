@@ -9,7 +9,7 @@ from typing import Callable, Dict, Optional
 import numpy as np
 import pandas as pd
 
-from tracking import GAME_KEY, PROP_KEY, settle_games, settle_props
+from tracking import GAME_KEY, PROP_KEY, edge_signal, settle_games, settle_props
 
 ET = 'US/Eastern'
 
@@ -44,12 +44,10 @@ def nights(prop_snapshots: pd.DataFrame, games: pd.DataFrame, now) -> pd.DataFra
     return out.sort_values('night', ascending=False).reset_index(drop=True)
 
 
-def edge_signal(edge_pp: pd.Series, edge_low: pd.Series) -> pd.Series:
-    """🟢 / 🟡 from the edges, for fetches saved before the signal was."""
-    return pd.Series(np.select([edge_low > 0, edge_pp > 0], ['🟢', '🟡'], ''), index=edge_pp.index)
-
-
-MODEL_COLUMNS = ['pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag']
+# the model's numbers saved with each line (daily_snapshot.py); the raw chances let backtest/calibrate.py refit
+# the calibration from the settled lines without pricing them again
+MODEL_COLUMNS = ['pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag',
+                 'raw_over_pct', 'raw_under_pct', 'market_over_pct']
 
 
 def night_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame, night,
@@ -74,7 +72,8 @@ def night_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame
     if recompute is not None and missing.any():
         filled = recompute(last[missing])
         for col in MODEL_COLUMNS:
-            last.loc[missing, col] = filled[col]
+            if col in filled:
+                last.loc[missing, col] = filled[col]
     for col in ['model_pct', 'edge_pp', 'edge_low', 'proj_avg']:
         last[col] = pd.to_numeric(last[col], errors='coerce')
     out = settle_props(snapshots, logs, games, bets=last)
@@ -84,7 +83,7 @@ def night_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame
         out[col] = last[col].values if col in last else np.nan
     out['recomputed'] = (missing & last['pick'].notna()).values
     saved = out['signal'].astype(object).where(out['signal'].notna(), None)
-    out['signal'] = saved.where(saved.notna(), edge_signal(out['edge_pp'], out['edge_low'])).fillna('')
+    out['signal'] = saved.where(saved.notna(), edge_signal(out['edge_pp'])).fillna('')
     out['red_flag'] = out['red_flag'].fillna('')
     keys = list(zip(*(last[k] for k in PROP_KEY)))
     out['open line'] = [first.loc[k, 'line'] for k in keys]
@@ -129,10 +128,18 @@ def recompute_props(rows: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
     lines = rows[['name', 'name_ESPN', 'home', 'away', 'bet_type', 'line', 'event_id', 'start_time', 'over_odds',
                   'under_odds', 'player_id_ESPN']]
     table = flag_props(price_props(lines, scope, lineups, game_odds, played), scope, lineups)
-    return pd.DataFrame({'pick': table['best side'].values, 'model_pct': table['model %'].round(1).values,
-                         'edge_pp': table['edge pp'].round(1).values, 'edge_low': table['edge low'].round(1).values,
-                         'proj_avg': table['proj avg'].round(2).values, 'signal': table['signal'].values,
-                         'red_flag': table['red flag'].values}, index=rows.index)
+    return model_columns(table).set_axis(rows.index)
+
+
+def model_columns(table: pd.DataFrame) -> pd.DataFrame:
+    """MODEL_COLUMNS from price_props + flag_props output, rounded as saved. pick is the best side even without an
+    edge (so every line can be judged); the dashboards' bet is pick where the signal is 🟢 / 🟡."""
+    return pd.DataFrame({'pick': table['best side'], 'model_pct': table['model %'].round(1),
+                         'edge_pp': table['edge pp'].round(1), 'edge_low': table['edge low'].round(1),
+                         'proj_avg': table['proj avg'].round(2), 'signal': table['signal'],
+                         'red_flag': table['red flag'], 'raw_over_pct': table['raw over %'].round(2),
+                         'raw_under_pct': table['raw under %'].round(2),
+                         'market_over_pct': table['market over %'].round(2)}, index=table.index)[MODEL_COLUMNS]
 
 
 # what the group analysis can split the lines by

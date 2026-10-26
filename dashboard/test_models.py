@@ -1,4 +1,5 @@
 """Run with: python -m pytest dashboard"""
+import numpy as np
 import pandas as pd
 
 import models
@@ -80,3 +81,62 @@ def test_price_props_keeps_topped_up_games_out_of_matchups_and_absences(monkeypa
                         adjust=adjust, calibration=models.IDENTITY_CALIBRATION)
     assert table.loc[0, 'games'] == 10                      # the player's own numbers use the topped-up games
     assert not seen['allowed']['top_up'].any() and not seen['adjust']['top_up'].any()
+
+
+# --- signals, pick and lean ---
+
+def test_prop_signal():
+    from metrics import prop_signal
+    edges = pd.Series([-1.0, 0.0, 0.5, 2.9, 3.0, 8.0, np.nan])
+    assert prop_signal(edges, 3.0).tolist() == ['', '', '🟡', '🟡', '🟢', '🟢', '']
+    assert prop_signal(edges, None).tolist() == ['', '', '🟡', '🟡', '🟡', '🟡', '']     # no threshold, no 🟢
+    assert prop_signal(4.0, 3.0) == '🟢' and prop_signal(-2.0, 3.0) == ''
+
+
+def test_load_green_edge(tmp_path):
+    import json
+    from models import load_green_edge
+    assert load_green_edge(str(tmp_path / 'missing.json')) is None
+    path = tmp_path / 'calibration.json'
+    path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION}))
+    assert load_green_edge(str(path)) is None                       # an older file without a threshold
+    path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': 2.0}))
+    assert load_green_edge(str(path)) == 2.0
+
+
+def test_bet_only_with_a_positive_edge_and_lean_from_the_projection():
+    from models import bet_side, lean
+    best = pd.Series(['Under', 'Over', 'Under', None])
+    assert bet_side(best, pd.Series(['', '🟡', '🟢', ''])).tolist() == ['', 'Over', 'Under', '']
+    assert bet_side(best, pd.Series(['🔴', '', '', ''])).tolist() == ['', '', '', '']
+    proj, line = pd.Series([25.0, 21.0, 18.0, np.nan, 0.0]), pd.Series([20.5, 20.5, 20.5, 20.5, 0.5])
+    assert lean(proj, line).tolist() == ['Over', '', 'Under', '', 'Under']   # 21 vs 20.5 is too close to call
+
+
+def test_flag_props_takes_the_bet_away_from_a_red_line():
+    from reasons import flag_props
+    table = pd.DataFrame({'player_id': [1, 2], 'best side': ['Over', 'Under'], 'signal': ['🟡', '🟡'],
+                          'bet': ['Over', 'Under'], 'RotoWire': ['', '']})
+    logs = pd.DataFrame([_log(1, f'2026-10-{d:02d}', 2026) for d in range(1, 13)] + [_log(2, '2026-10-01', 2026)])
+    out = flag_props(table, logs, pd.DataFrame(columns=['player_id_ESPN', 'play_pct']))
+    assert out['signal'].tolist() == ['🟡', '🔴'] and out['bet'].tolist() == ['Over', '']   # player 2: 1 game
+
+
+# --- signal efficiency ---
+
+def test_rate_rows_show_what_the_model_expected():
+    from metrics import grouped_rates
+    bets = pd.DataFrame({'g': ['a', 'a', 'b'], 'is_hit': [True, False, True], 'odds': [1.9, 1.9, 2.0],
+                         'model_pct': [60.0, 50.0, 55.0]})
+    t = grouped_rates(bets, 'g').set_index('g')
+    assert t.loc['a', 'expected %'] == 55.0 and t.loc['a', 'hit %'] == 50.0
+    assert 'expected %' not in grouped_rates(bets.drop(columns='model_pct'), 'g')
+
+
+def test_threshold_table_is_cumulative():
+    from tracking import threshold_table
+    settled = pd.DataFrame({'edge_pp': [-1.0, 0.5, 1.5, 3.0, 6.0, 2.0], 'result': ['win', 'loss', 'win', 'win', 'loss', 'push'],
+                            'odds': 1.9, 'model_pct': [50.0, 53.0, 54.0, 56.0, 59.0, 55.0]})
+    t = threshold_table(settled).set_index('edge ≥ pp')
+    assert t['bets'].to_dict() == {0: 4, 1: 3, 2: 2, 3: 2, 5: 1}         # the push and the negative edge left out
+    assert t.loc[3, 'hit %'] == 50.0 and t.loc[5, 'expected %'] == 59.0

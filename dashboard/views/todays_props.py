@@ -6,7 +6,7 @@ import streamlit as st
 
 from components import no_offers, reasons_panel, slip_button
 from espn_scraper import CURRENT_SEASON
-from glossary import column_config, source_legend, tinted
+from glossary import column_config, signal_legend, source_legend, tinted
 from loaders import (filtered_logs, games as all_games, player_logs, rotowire_lineups, sidebar_filters, snapshot_history,
                      superbet_fetch_controls, superbet_offers, today_game_odds, today_props)
 from metrics import STATS, absence_adjustments, hit_rates, percentile_band, rotowire_team
@@ -81,7 +81,11 @@ def prop_panel(row):
     if bet['side'] is None:
         st.info("Superbet has no odds for this line.")
         return
-    reasons_panel(f"{row['name']} {bet['side']} {row['line']:g} {row['bet_type']} @ {row['pick odds']:.2f}",
+    side = f"{bet['side']} {row['line']:g} {row['bet_type']} @ {row['pick odds']:.2f}"
+    # no positive edge: the side shown is only the less bad one
+    title = f"{row['name']} · pass (best side {side}, edge {row['edge pp']:+.1f} pp)" if row['bet'] == 'pass' else \
+        f"{row['name']} {side}"
+    reasons_panel(title,
                   prop_reasons(bet, games, history), row['edge pp'], row['edge low'], games, row['bet_type'],
                   row['line'])
     b = st.columns([1, 1, 4])
@@ -135,7 +139,7 @@ else:
     if hide_out:
         shown = shown[~shown['RotoWire'].str.startswith(('Out', 'OFS'))]
     # 🔴 lines (a reason to pass) after the others, within each game when sorted by tip-off
-    shown = shown.assign(red=shown['signal'] == '🔴')
+    shown = shown.assign(red=shown['signal'] == '🔴', bet=shown['bet'].replace('', 'pass'))
     order = (['tip_at', 'game'] if sort.startswith("Tip-off") else []) + ['red', 'edge pp']
     shown = shown.sort_values(order, ascending=[True] * (len(order) - 1) + [False]).reset_index(drop=True)
 
@@ -143,18 +147,19 @@ else:
         "best edge first"
     st.caption(f"{len(shown)} of {len(table)} lines, {sorted_by}. ⏰ = tip-off within the hour; lines leave the "
                f"list at tip-off. Hover a column header for what it means. "
-               f"🟢 = even the low end of the model's range beats the price; 🟡 = positive edge, but too little data "
-               f"to be sure; 🔴 = a reason to pass whatever the numbers say (red flag column), listed last. "
-               f"Click a row for the reasons to bet or pass. model % is calibrated on 2022/23, where the "
-               f"model's own opinion proved worth little beyond the price, so few lines show an edge.")
+               f"pick = Over/Under only where the model sees a positive edge, otherwise pass; lean = where the "
+               f"projection points when it's well off the line (information only). {signal_legend()} "
+               f"Click a row for the reasons to bet or pass. model % is calibrated on 2022/23 and the settled "
+               f"Superbet lines, where the model's own opinion proved worth little beyond the price, so most lines "
+               f"are a pass.")
     st.caption(source_legend())
     # who/what -> the decision -> tonight's lineup -> the player's numbers -> both sides' odds
     columns = ['name', 'game', 'tip-off', 'bet_type', 'line',
-               'best side', 'signal', 'edge pp', 'edge low', 'pick odds', 'model %', 'break-even %', 'market %',
+               'bet', 'signal', 'lean', 'edge pp', 'best side', 'pick odds', 'model %', 'break-even %', 'market %',
                'RotoWire', 'red flag', 'line move', 'open line',
                'proj avg', 'adj avg', 'avg', 'avg L5', 'matchup', 'spread', 'game total', 'percentile', 'in band',
                'over %', 'under %', 'over % L10', 'under % L10', 'games', 'min L5',
-               'raw model %', 'over_odds', 'under_odds']
+               'edge low', 'raw model %', 'over_odds', 'under_odds']
     formats = {'raw model %': '%.0f',
                'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'over %': '%.0f',
                'under %': '%.0f', 'over % L10': '%.0f', 'under % L10': '%.0f', 'percentile': '%.0f',

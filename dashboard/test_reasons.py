@@ -14,6 +14,19 @@ def _games(pts, minutes=None, season_type='regular'):
                          'game_label': [f"g{i}" for i in range(n)]})
 
 
+@pytest.fixture
+def green_at(tmp_path, monkeypatch):
+    """green_at(x): a calibration file whose 🟢 threshold is x pp (None = no 🟢)."""
+    import json
+    import models
+
+    def set_green(edge):
+        path = tmp_path / 'calibration.json'
+        path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': edge}))
+        monkeypatch.setattr(models, 'CALIBRATION_FILE', str(path))
+    return set_green
+
+
 def _bet(**kw):
     bet = {'name': 'A Player', 'stat': 'PTS', 'side': 'Over', 'line': 20.5, 'odds': 1.9, 'model %': 60.0,
            'break-even %': 52.6, 'edge pp': 7.4, 'edge low': 1.0, 'avg': 24.0, 'proj avg': 24.0, 'opp': 'bos',
@@ -31,7 +44,8 @@ def test_supports_are_plain_bools():
     assert all(r['supports'] in (True, False, None) and not isinstance(r['supports'], np.bool_) for r in reasons)
 
 
-def test_strong_over_is_a_bet():
+def test_strong_over_is_a_bet(green_at):
+    green_at(3.0)
     reasons = prop_reasons(_bet(), _games([22.0, 25, 27, 24, 21, 26, 23, 28, 25, 24, 22, 26]), _games([]))
     assert any('in 12 of all 12 games' in t for t in texts(reasons, True))
     assert not texts(reasons, flag=True)
@@ -71,14 +85,18 @@ def test_context_reasons():
     assert any('Against BOS' in t for t in texts(reasons, True))
 
 
-def test_verdict_levels():
+def test_verdict_levels(green_at):
+    green_at(3.0)
     pro = {'supports': True, 'text': '', 'flag': False}
     con = {'supports': False, 'text': '', 'flag': False}
     assert verdict([pro, pro, con], 5, 1)[0] == 'Bet'
-    assert verdict([pro, pro, con], 5, -3)[0] == 'Lean'
+    assert verdict([pro, pro, con], 5, -3)[0] == 'Bet'           # the 🟢 threshold decides, not edge low
+    assert verdict([pro, pro, con], 2, 1)[0] == 'Lean'            # positive but below the threshold: 🟡
     assert verdict([pro, con, con], 5, 1)[0] == 'Pass'
     assert verdict([pro, pro], -1, -5)[0] == 'Pass'
-    assert verdict([pro, pro], 6)[0] == 'Bet'          # no range: needs 5+ pp
+    assert verdict([pro, pro], 6)[0] == 'Bet'          # no range (a game outcome): needs 5+ pp
+    green_at(None)
+    assert verdict([pro, pro, con], 9, 4)[0] == 'Lean'            # no 🟢 threshold: never a Bet for a prop
 
 
 def test_game_reasons_for_a_total():

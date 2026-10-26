@@ -125,6 +125,16 @@ def calibrate(p: float, market: float, side: str, coef: Optional[Dict] = None) -
     return 1 / (1 + math.exp(-z))
 
 
+def prop_signal(edge_pp, green_edge: Optional[float] = None):
+    """🟢 for an edge (calibrated, pp) of at least green_edge, the threshold that held up on unseen lines
+    (backtest/calibrate.py; None = none did, so no 🟢); 🟡 for any other positive edge; '' otherwise.
+    edge_pp: a number or a Series (returns the same)."""
+    edge = pd.Series(edge_pp, dtype=float) if not isinstance(edge_pp, pd.Series) else edge_pp.astype(float)
+    green = edge >= green_edge if green_edge is not None else pd.Series(False, index=edge.index)
+    out = pd.Series(np.select([green, edge > 0], ['🟢', '🟡'], ''), index=edge.index)
+    return out if isinstance(edge_pp, pd.Series) else out.iloc[0]
+
+
 def splits(games: pd.DataFrame, stat: str, line: Optional[float] = None) -> pd.DataFrame:
     """Average (and hit rate over the line) by home/away, starter/bench, rest and minutes."""
     g = games.assign(
@@ -312,8 +322,10 @@ def roi(is_hit: pd.Series, odds: pd.Series) -> float:
 def _rate_row(part: pd.DataFrame) -> Dict:
     hits, n = int(part['is_hit'].sum()), len(part)
     low, high = wilson_interval(hits, n)
-    return {'bets': n, 'hit %': 100 * hits / n if n else np.nan, 'ci low %': 100 * low, 'ci high %': 100 * high,
-            'ROI %': 100 * roi(part['is_hit'], part['odds']), 'avg odds': part['odds'].mean()}
+    # the model's own expectation next to the hit rate: an accurate signal wins about as often as it said
+    expected = {'expected %': part['model_pct'].mean()} if 'model_pct' in part else {}
+    return {'bets': n, **expected, 'hit %': 100 * hits / n if n else np.nan, 'ci low %': 100 * low,
+            'ci high %': 100 * high, 'ROI %': 100 * roi(part['is_hit'], part['odds']), 'avg odds': part['odds'].mean()}
 
 
 def rule_stats(bets: pd.DataFrame) -> pd.DataFrame:

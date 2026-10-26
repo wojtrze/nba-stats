@@ -58,7 +58,8 @@ def test_reprice_rewrites_only_the_model_columns(data_dir, monkeypatch):
     def recompute(rows, logs, games, lineups, odds_, night):
         calls.append((rows['fetched_at'].iloc[0], len(odds_), len(lineups), str(night.date())))
         return pd.DataFrame({'pick': 'Over', 'model_pct': 60.0, 'edge_pp': 7.0, 'edge_low': 1.0, 'proj_avg': 24.0,
-                             'signal': '🟢', 'red_flag': ''}, index=rows.index)
+                             'signal': '🟢', 'red_flag': '', 'raw_over_pct': 63.5, 'raw_under_pct': 36.5,
+                             'market_over_pct': 49.2}, index=rows.index)
 
     monkeypatch.setattr(daily_snapshot, 'load_player_gamelogs', lambda seasons: pd.DataFrame())
     monkeypatch.setattr(daily_snapshot, 'load_games', lambda seasons: pd.DataFrame())
@@ -71,5 +72,6 @@ def test_reprice_rewrites_only_the_model_columns(data_dir, monkeypatch):
     out = pd.read_csv(PATH, dtype=str, keep_default_na=False)
     assert out['player_id_ESPN'].tolist() == ['4397475', '', '4397475']
     assert out['pick'].tolist() == ['Over'] * 3 and out['signal'].tolist() == ['🟢'] * 3
+    assert out['raw_over_pct'].tolist() == ['63.5'] * 3 and out['market_over_pct'].tolist() == ['49.2'] * 3
     assert out['fetched_at'].tolist() == saved['fetched_at'].tolist() and out['name'].tolist() == ['A', 'Nobody', 'A']
     assert out['line'].tolist() == ['20.5'] * 3 and out['under_odds'].tolist() == ['1.85'] * 3

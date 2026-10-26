@@ -44,11 +44,22 @@ def _games():
                           'away_score': 104}])
 
 
-def test_settle_props():
+@pytest.fixture
+def green_at_5(tmp_path, monkeypatch):
+    """A calibration file whose 🟢 threshold is +5 pp."""
+    import json
+    import models
+    path = tmp_path / 'calibration.json'
+    path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': 5.0}))
+    monkeypatch.setattr(models, 'CALIBRATION_FILE', str(path))
+
+
+def test_settle_props(green_at_5):
     settled = settle_props(_props(), _logs(), _games()).set_index('bet_type', drop=False)
     pts = settled[(settled['bet_type'] == 'PTS') & (settled['game'] == 'NYK @ BOS')].iloc[0]
     # the first snapshot before tip-off is the bet; the last one before tip-off is the close
-    assert pts['line'] == 20.5 and pts['close line'] == 21.5 and pts['signal'] == '🟢'
+    assert pts['line'] == 20.5 and pts['close line'] == 21.5 and pts['signal'] == '🟢'      # edge 7.4 ≥ 5
+    assert settled.loc['REB', 'signal'] == '🟡'                                              # edge 2.4
     assert pts['actual'] == 25 and pts['result'] == 'win' and pts['profit'] == pytest.approx(0.9)
     assert pts['clv line'] == 1.0 and np.isnan(pts['clv odds %'])
     reb = settled.loc['REB']
@@ -57,6 +68,15 @@ def test_settle_props():
     assert ast['status'] == 'void' and pd.isna(ast['result'])      # no pick saved
     later = settled[settled['game'] == 'GS @ LAL'].iloc[0]
     assert later['status'] == 'pending' and pd.isna(later['result'])
+
+
+def test_settle_props_keeps_the_saved_signal(green_at_5):
+    props = _props()
+    props['signal'] = ['🔴', '', '', '', np.nan, '']
+    settled = settle_props(props, _logs(), _games()).set_index('bet_type', drop=False)
+    assert settled.loc['REB', 'signal'] == '🟡'          # nothing saved: from the edge
+    pts = settled[(settled['bet_type'] == 'PTS') & (settled['game'] == 'NYK @ BOS')].iloc[0]
+    assert pts['signal'] == '🔴'                          # saved red flag kept
 
 
 def _game_odds():

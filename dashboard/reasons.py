@@ -156,8 +156,8 @@ def prop_flags(n: int, preseason_only: bool, play_pct, status, minutes: pd.Serie
 
 def flag_props(table: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame) -> pd.DataFrame:
     """models.price_props output (with prop_movement's 'line move' when there is one) with 'red flag' (the
-    prop_flags of each line, joined; '' when none) and 🔴 as the signal of every flagged line. logs: the games
-    the lines were priced from; lineups: RotoWire's (with ESPN ids)."""
+    prop_flags of each line, joined; '' when none), 🔴 as the signal of every flagged line and no bet on it (pass).
+    logs: the games the lines were priced from; lineups: RotoWire's (with ESPN ids)."""
     by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
     listed = lineups.dropna(subset=['player_id_ESPN']).drop_duplicates('player_id_ESPN') if len(lineups) else lineups
     play_pct = listed.set_index('player_id_ESPN')['play_pct'] if len(listed) else pd.Series(dtype=float)
@@ -170,7 +170,10 @@ def flag_props(table: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame) -
                                           play_pct.get(row['player_id']), row.get('RotoWire'),
                                           games['MIN'] if n else empty, row.get('line move'), row['best side'])))
     flags = pd.Series(flags, index=table.index)
-    return table.assign(**{'red flag': flags, 'signal': table['signal'].where(flags == '', '🔴')})
+    out = table.assign(**{'red flag': flags, 'signal': table['signal'].where(flags == '', '🔴')})
+    if 'bet' in out:
+        out['bet'] = out['bet'].where(flags == '', '')
+    return out
 
 
 def game_reasons(outcome: Dict, ctx: Dict) -> List[Dict]:
@@ -260,9 +263,10 @@ def flag_game_outcomes(edges: pd.DataFrame, games_played: int, rotowire: bool) -
 
 
 def verdict(reasons: List[Dict], edge_pp: float, edge_low: float = np.nan):
-    """('Bet' / 'Lean' / 'Pass', colour, why). Any flag means Pass. Bet needs the low end of the edge above 0
-    (or, without a range, an edge of 5+ pp) and more reasons for than against; Lean a positive edge and at least
-    as many reasons for as against."""
+    """('Bet' / 'Lean' / 'Pass', colour, why). Any flag means Pass. Bet needs a strong edge and more reasons for
+    than against; Lean a positive edge and at least as many reasons for as against. Strong: for a prop (it has an
+    edge low) the 🟢 threshold (models.load_green_edge; none = never), for a game outcome an edge of 5+ pp."""
+    from models import load_green_edge
     flags = [r for r in reasons if r['flag']]
     pros = sum(r['supports'] is True for r in reasons)
     cons = sum(r['supports'] is False and not r['flag'] for r in reasons)
@@ -270,10 +274,14 @@ def verdict(reasons: List[Dict], edge_pp: float, edge_low: float = np.nan):
         return 'Pass', 'red', flags[0]['text']
     if pd.isna(edge_pp) or edge_pp <= 0:
         return 'Pass', 'gray', "The price doesn't pay enough for the chance"
-    holds = edge_low > 0 if pd.notna(edge_low) else edge_pp >= 5
-    if holds and pros > cons:
-        return 'Bet', 'green', f"The edge holds even at the low end, and {pros} reasons for vs {cons} against"
+    if pd.notna(edge_low):
+        green = load_green_edge()
+        strong = green is not None and edge_pp >= green
+    else:
+        strong = edge_pp >= 5
+    if strong and pros > cons:
+        return 'Bet', 'green', f"A strong edge (🟢), and {pros} reasons for vs {cons} against"
     if pros >= cons:
-        return 'Lean', 'orange', (f"Positive edge, {pros} reasons for vs {cons} against, but the range still reaches "
-                                  f"below break-even" if not holds else f"{pros} reasons for vs {cons} against")
+        return 'Lean', 'orange', (f"Positive edge, {pros} reasons for vs {cons} against, but not a proven one (🟡)"
+                                  if not strong else f"{pros} reasons for vs {cons} against")
     return 'Pass', 'gray', f"Positive edge, but more reasons against ({cons}) than for ({pros})"

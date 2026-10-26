@@ -11,11 +11,13 @@ from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS
 from metrics import (IDENTITY_CALIBRATION, POSITION_GROUPS, STATS, absence_adjustments, absence_impact,
                      add_combined_stats, allowed_by_position, blended_ratings, calibrate, context_factor, game_lines,
                      game_projection, hit_rates, line_percentile, market_edges, matchup, no_vig, percentile_band,
-                     prop_probability, rotowire_team, team_ratings)
+                     prop_probability, prop_signal, rotowire_team, team_ratings)
 from superbet_fetcher import main_lines
 
-# fitted by backtest/calibrate.py on Unibet's 2022/23 lines; without it the model's chances are used as they are
+# fitted by backtest/calibrate.py on Unibet's 2022/23 lines and the settled Superbet ones, with the 🟢 threshold;
+# without it the model's chances are used as they are
 CALIBRATION_FILE = os.path.join('data', 'backtest', 'calibration.json')
+FROM_FILE = object()   # price_props' default green_edge: the one saved in CALIBRATION_FILE
 
 # the sidebar's defaults: the current season, regular season, play-in and playoffs. Preseason is opt-in:
 # starters play short minutes in it (2026: 21 min and 12.5 pts, against 33 and 18.4 in the regular season)
@@ -79,25 +81,56 @@ def rotowire_status(lineups: pd.DataFrame, player_id, team) -> str:
     return f"{p['injury'] or 'may not play'} {p['play_pct']:.0f}%"
 
 
-def load_calibration(path: str = CALIBRATION_FILE) -> Dict:
-    """The coefficients backtest/calibrate.py fitted (metrics.calibrate), or the identity when there are none."""
+def _calibration_file(path: Optional[str]) -> Optional[Dict]:
+    path = path or CALIBRATION_FILE
     if not os.path.exists(path):
-        return IDENTITY_CALIBRATION
+        return None
     with open(path, encoding='utf-8') as f:
-        return json.load(f)['coefficients']
+        return json.load(f)
+
+
+def load_calibration(path: Optional[str] = None) -> Dict:
+    """The coefficients backtest/calibrate.py fitted (metrics.calibrate), or the identity when there are none."""
+    saved = _calibration_file(path)
+    return saved['coefficients'] if saved else IDENTITY_CALIBRATION
+
+
+def load_green_edge(path: Optional[str] = None) -> Optional[float]:
+    """The edge (pp) from which a prop gets 🟢: the smallest threshold whose picks paid on unseen Superbet lines
+    (backtest/calibrate.py). None = no threshold did, so no 🟢."""
+    saved = _calibration_file(path)
+    return saved.get('green_edge_pp') if saved else None
+
+
+# a projection at least this far from the line (log ratio, ~10%) gives the line a lean
+LEAN_GAP = 0.10
+
+
+def lean(proj_avg: pd.Series, line: pd.Series) -> pd.Series:
+    """'Over' / 'Under' where the projection is at least LEAN_GAP away from the line, else ''. Information only:
+    on its own it hasn't beaten Superbet's prices."""
+    gap = np.log((proj_avg.clip(lower=0) + 0.5) / (line + 0.5))
+    return pd.Series(np.select([gap >= LEAN_GAP, gap <= -LEAN_GAP], ['Over', 'Under'], ''), index=line.index)
+
+
+def bet_side(best_side: pd.Series, signal: pd.Series) -> pd.Series:
+    """The side to bet: best side where the signal is 🟢 / 🟡, '' (pass) everywhere else."""
+    return best_side.where(signal.isin(['🟢', '🟡']), '').fillna('')
 
 
 def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, game_odds: pd.DataFrame,
                 games: pd.DataFrame, adjust: Optional[Callable] = None,
-                calibration: Optional[Dict] = None) -> pd.DataFrame:
+                calibration: Optional[Dict] = None, green_edge=FROM_FILE) -> pd.DataFrame:
     """Every Superbet line (props with player_id_ESPN) compared with the player's game logs and priced.
 
     logs: prepare_logs output in the seasons and game types to use, optionally top_up_logs output (the topped-up
     rows feed the player's own numbers, not the matchup or the absence adjustments); games: games.csv rows of
     the same. adjust(logs, players, out, stats): absence_adjustments, or a cached version of it.
     Adds, per line: the player's numbers (avg, hit rates, percentile...), RotoWire status, lineup adj and adj avg,
-    the game context (opponent, spread, implied total, matchup) and proj avg, and the pick: best side, model %,
-    market % (margin-free), break-even %, edge pp, edge low, pick odds and signal.
+    the game context (opponent, spread, implied total, matchup) and proj avg, and the pick: best side (the side
+    with the bigger edge, even a negative one), model %, market % (margin-free), break-even %, edge pp, edge low,
+    pick odds, signal (metrics.prop_signal with green_edge, default: the one in CALIBRATION_FILE), bet (best side
+    when there's a positive edge, else '' = pass) and lean (the projection's side when it's well off the line).
     model %, edge pp and edge low are calibrated (metrics.calibrate with `calibration`, default: the fitted
     coefficients in CALIBRATION_FILE); raw model %, raw over/under % (and their low ends) and market over % are
     the model's own chances before that, which backtest/calibrate.py fits on.
@@ -196,7 +229,9 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
 
     table = pd.concat([table, table.apply(price, axis=1)], axis=1)
     table['in band'] = (table['p30'] <= table['line']) & (table['line'] <= table['p70'])
-    table['signal'] = np.select([table['edge low'] > 0, table['edge pp'] > 0], ['🟢', '🟡'], '')
+    table['signal'] = prop_signal(table['edge pp'], load_green_edge() if green_edge is FROM_FILE else green_edge)
+    table['bet'] = bet_side(table['best side'], table['signal'])
+    table['lean'] = lean(table['proj avg'], table['line'])
     return table
 
 

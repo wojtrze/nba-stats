@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from metrics import game_lines, grouped_rates
+from metrics import game_lines, grouped_rates, prop_signal
 from superbet_fetcher import main_lines
 
 PROP_KEY = ['event_id', 'name_ESPN', 'bet_type']
@@ -88,8 +88,19 @@ def _profit(result: pd.Series, odds: pd.Series) -> pd.Series:
     return profit.where(result.notna())
 
 
-def _signal(edge_pp: pd.Series, edge_low: pd.Series) -> pd.Series:
-    return pd.Series(np.select([edge_low > 0, edge_pp > 0], ['🟢', '🟡'], ''), index=edge_pp.index)
+def edge_signal(edge_pp: pd.Series) -> pd.Series:
+    """🟢 / 🟡 from the saved edge with the current 🟢 threshold, for fetches saved without a signal."""
+    from models import load_green_edge
+    return prop_signal(pd.to_numeric(edge_pp, errors='coerce'), load_green_edge())
+
+
+def _signal(bets: pd.DataFrame) -> pd.Series:
+    """The signal saved with the fetch (🔴 included), else the one its edge gives."""
+    computed = edge_signal(bets['edge_pp'])
+    if 'signal' not in bets:
+        return computed
+    saved = bets['signal'].astype(object)
+    return saved.where(saved.notna() & (saved != '') | bets['edge_pp'].isna(), computed).fillna('')
 
 
 def _closing(snapshots: pd.DataFrame, key, cols) -> pd.DataFrame:
@@ -150,7 +161,7 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     bets['close odds'] = np.where(over, bets['close over'], bets['close under'])
     bets['clv line'] = ((bets['close line'] - bets['line']) * direction).where(bets['pick'].notna())
     bets['clv odds %'] = (100 * (bets['odds'] / bets['close odds'] - 1)).where(bets['close line'] == bets['line'])
-    bets['signal'] = _signal(bets['edge_pp'], bets['edge_low']).where(bets['pick'].notna(), '')
+    bets['signal'] = _signal(bets).where(bets['pick'].notna(), '')
     return bets[PROP_RESULT_COLUMNS + ['player_id', 'start_time'] + keep]
 
 
@@ -205,6 +216,23 @@ def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd
 
 def edge_bucket(edge_pp: pd.Series) -> pd.Series:
     return pd.cut(edge_pp, [-np.inf, 0, 5, 10, np.inf], labels=['≤ 0', '0–5', '5–10', '10+'])
+
+
+EDGE_THRESHOLDS = (0, 1, 2, 3, 5)
+
+
+def threshold_table(settled: pd.DataFrame, thresholds=EDGE_THRESHOLDS) -> pd.DataFrame:
+    """Signal efficiency: for each threshold, every decided pick whose saved edge reached it (cumulative, 'edge ≥
+    pp'; 0 means any positive edge) with expected % (the model's chance), hit %, its 95% range and ROI.
+    🔴 lines count too: the threshold alone is judged."""
+    decided = settled[settled['result'].isin(['win', 'loss']) & settled['edge_pp'].notna()] \
+        .assign(is_hit=lambda d: d['result'] == 'win')
+    rows = []
+    for thr in thresholds:
+        part = decided[decided['edge_pp'] > 0] if thr == 0 else decided[decided['edge_pp'] >= thr]
+        if len(part):
+            rows.append({'edge ≥ pp': thr, **grouped_rates(part.assign(all=''), 'all').drop(columns='all').iloc[0]})
+    return pd.DataFrame(rows)
 
 
 def results_table(settled: pd.DataFrame, by) -> pd.DataFrame:

@@ -27,8 +27,8 @@ def kelly_stake(chance: float, odds: float, bankroll: float, fraction: float = 0
 
 def staking_chance(bet: Dict) -> float:
     """The chance to size a bet on: for a prop the low end of the model's range (model % minus the gap between
-    edge pp and edge low), so only picks whose edge holds there (🟢) get a stake; a game outcome has no range, so
-    its model %."""
+    edge pp and edge low), so a pick whose edge is thin or rests on few games gets less; a game outcome has no
+    range, so its model %."""
     low = bet.get('edge_low')
     if low is not None and not pd.isna(low):
         return (bet['model_pct'] - (bet['edge_pp'] - low)) / 100
