@@ -79,6 +79,15 @@ Implication: no component earns more complexity yet. The next model changes shou
 
 **First change judged on it (Oct 26): the calibration no longer fits the Over/Under bias or the offset** (`backtest/calibrate.py` `FITTED = ['a', 'b']`). Fitted on both sources' earlier lines and scored on each one's later lines: shared bias 2022 −0.0007 / Superbet +0.0008 vs the price; no bias +0.0001 / −0.0002; bias per bookmaker −0.0003 / +0.0027. The bias belongs to Unibet 2022/23 and doesn't carry to Superbet, and Superbet's own is too noisy to fit yet. Refit: a = 1.120, b = 0.100; held-out Superbet log loss 0.6877 (= the price; was 0.6887). Raw chances are unchanged, so `MODEL_VERSION` stays; the new calibration has a new `calibration_id`.
 
+**Candidate model changes on 2022/23** (`backtest/ideas.py`, report `data/backtest/ideas_2022.md`; exploratory: 8 candidates on the same 77 nights, calibrated a, b as the dashboards are; difference from the current model per line side, night-resampled range):
+
+- Count distribution (negative binomial / Poisson with the player's own spread) for every stat: −0.0002 (−0.0002…−0.0001), on 3PM −0.0004 (−0.0006…−0.0002). Small but consistently better; the only candidate whose range is clearly below 0. For 3PM only or 3PM/AST/REB: −0.0001.
+- Recency weighting (half-life 5 / 10 / 20 games): worse, +0.0002 to +0.0003. The season's equal weights are better.
+- Distribution only (no hit rate): +0.0001, worse on 3PM (+0.0005).
+- No candidate's positive-edge picks beat break-even in a way the interval supports.
+
+Next: take the count distribution to Superbet (a new `MODEL_VERSION`, reprice, compare in the ablation as Superbet nights settle); drop recency weighting.
+
 ## Fix order
 
 1. Lineage (F1)
