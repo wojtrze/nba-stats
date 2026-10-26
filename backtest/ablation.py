@@ -172,6 +172,48 @@ def ladder(lines: pd.DataFrame, rungs: List[Dict]) -> Dict[str, pd.DataFrame]:
             'fit': fit_part, 'test': test_part}
 
 
+# --- the calibration's form: how the Over/Under bias (c) and offset (d) are fitted ---
+
+# columns of the design: logit(market), the model's opinion, [Over], 1, and the same two for Superbet lines only
+FORMS = {"Current: shared side bias and offset": ['m', 'model', 'over', 'one'],
+         "No side bias (offset kept)": ['m', 'model', 'one'],
+         "No side bias, no offset": ['m', 'model'],
+         "Side bias and offset per bookmaker": ['m', 'model', 'over', 'one', 'over_sb', 'one_sb']}
+
+
+def _design(s: pd.DataFrame, columns: List[str]) -> np.ndarray:
+    m = _logit(s['market'].values)
+    sb = (s['source'] == 'superbet').values.astype(float)
+    over = s['over'].values.astype(float)
+    cols = {'m': m, 'model': _logit(s['model'].values) - m, 'over': over, 'one': np.ones(len(s)),
+            'over_sb': over * sb, 'one_sb': sb}
+    return np.column_stack([cols[c] for c in columns])
+
+
+def calibration_forms(sources: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """The full model's chance calibrated in each FORMS way, fitted on the earlier lines of every source pooled
+    (as backtest/calibrate.py fits for the dashboards) and scored on each source's later lines: log loss and its
+    difference from the price with the night-bootstrap range."""
+    full = _rungs()[-1]['chance']
+    parts = {name: split(t) for name, t in sources.items()}
+    train = pd.concat([sides(f, full).assign(source=t['source'].iloc[0]) for (f, _), t
+                       in zip(parts.values(), sources.values())], ignore_index=True)
+    train = train[train['model'].notna()]
+    rows = []
+    for form, columns in FORMS.items():
+        beta = fit(_design(train, columns), train['won'].values)
+        for name, (_, test_part) in parts.items():
+            test = sides(test_part, full).assign(source=test_part['source'].iloc[0])
+            test = test[test['model'].notna()]
+            p = _sigmoid(_design(test, columns) @ beta)
+            diff = _loss(test['won'].values, p) - _loss(test['won'].values, test['market'].values)
+            low, high = night_bootstrap(test['game_date'].values, diff)
+            rows.append({'scored on': name, 'form': form, **scores(test, p), 'vs market': float(np.mean(diff)),
+                         'range low': low, 'range high': high,
+                         'coefficients': ', '.join(f"{c} {b:+.3f}" for c, b in zip(columns, beta))})
+    return pd.DataFrame(rows)
+
+
 # --- the lines ---
 
 def eligible(t: pd.DataFrame) -> pd.DataFrame:
@@ -263,6 +305,15 @@ def report(sources: Dict[str, pd.DataFrame]) -> str:
     if 'superbet' in sources and len(sources['superbet']):
         parts += section("Superbet 2026/27", sources['superbet'], rungs,
                          "Each line at its last fetch before tip-off, priced again with the current model.")
+    realistic = {name: t for name, t in sources.items() if name != '2022 oracle'}
+    if len(realistic) > 1:
+        parts += ["## Calibration form: how to fit the Over/Under bias", "",
+                  "The full model's chance calibrated four ways, each fitted on the earlier lines of both sources "
+                  "pooled (as the dashboards' calibration is) and scored on each source's later lines. The "
+                  "dashboards use the form in backtest/calibrate.py's FITTED (a and b: no side bias, no offset). "
+                  "A source with few scored nights gets a range from resampling only those nights, which understates "
+                  "how unsure it is.", "",
+                  markdown(calibration_forms(realistic), '{:.4f}'), ""]
     return "\n".join(parts)
 
 

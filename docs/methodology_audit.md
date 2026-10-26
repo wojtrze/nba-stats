@@ -77,6 +77,8 @@ On identical lines, fitted on the earlier part and scored on the later part of e
 
 Implication: no component earns more complexity yet. The next model changes should be judged on this ladder, and the side bias is the first suspect (it doesn't carry across periods or bookmakers).
 
+**First change judged on it (Oct 26): the calibration no longer fits the Over/Under bias or the offset** (`backtest/calibrate.py` `FITTED = ['a', 'b']`). Fitted on both sources' earlier lines and scored on each one's later lines: shared bias 2022 −0.0007 / Superbet +0.0008 vs the price; no bias +0.0001 / −0.0002; bias per bookmaker −0.0003 / +0.0027. The bias belongs to Unibet 2022/23 and doesn't carry to Superbet, and Superbet's own is too noisy to fit yet. Refit: a = 1.120, b = 0.100; held-out Superbet log loss 0.6877 (= the price; was 0.6887). Raw chances are unchanged, so `MODEL_VERSION` stays; the new calibration has a new `calibration_id`.
+
 ## Fix order
 
 1. Lineage (F1)

@@ -159,6 +159,22 @@ def test_fit_recovers_known_coefficients():
     assert dict(zip(COEFS, beta)) == {k: pytest.approx(v, abs=0.05) for k, v in truth.items()}
 
 
+def test_fit_coefficients_keeps_the_side_bias_and_offset_at_zero():
+    from backtest.calibrate import FITTED, apply, fit_coefficients
+    assert FITTED == ['a', 'b']
+    rng = np.random.default_rng(5)
+    n = 40000
+    market, model = rng.uniform(0.35, 0.65, n), rng.uniform(0.2, 0.8, n)
+    over = rng.integers(0, 2, n).astype(bool)
+    truth = {'a': 1.0, 'b': 0.25, 'c': 0.0, 'd': 0.0}
+    s = pd.DataFrame({'market': market, 'model': model, 'over': over,
+                      'won': (rng.uniform(size=n) < apply(truth, market, model, over)).astype(float)})
+    coef = fit_coefficients(s)
+    assert coef['c'] == 0.0 and coef['d'] == 0.0
+    assert (coef['a'], coef['b']) == (pytest.approx(1.0, abs=0.05), pytest.approx(0.25, abs=0.05))
+    assert set(fit_coefficients(s, ['a', 'b', 'c', 'd'])) == {'a', 'b', 'c', 'd'}
+
+
 def test_vectorised_apply_matches_metrics_calibrate():
     from backtest.calibrate import apply
     from metrics import calibrate

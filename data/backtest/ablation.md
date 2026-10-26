@@ -83,3 +83,18 @@ Betting its positive-edge picks on those lines (1 unit each at the line's odds; 
 | 6. + absences | 257 | 58.0 | 51.9 | 63.9 | -10.0 | 1.6 | 64.3 |
 | 7. + implied team total | 261 | 58.6 | 52.6 | 64.4 | -8.8 | 1.6 | 64.3 |
 | 8. + matchup = the full model | 250 | 59.2 | 53.0 | 65.1 | -8.3 | 1.6 | 64.5 |
+
+## Calibration form: how to fit the Over/Under bias
+
+The full model's chance calibrated four ways, each fitted on the earlier lines of both sources pooled (as the dashboards' calibration is) and scored on each source's later lines. The dashboards use the form in backtest/calibrate.py's FITTED (a and b: no side bias, no offset). A source with few scored nights gets a range from resampling only those nights, which understates how unsure it is.
+
+| scored on | form | log loss | Brier | vs market | range low | range high | coefficients |
+|---|---|---|---|---|---|---|---|
+| 2022 | Current: shared side bias and offset | 0.6888 | 0.2478 | -0.0007 | -0.0013 | -0.0000 | m +1.221, model +0.044, over -0.069, one +0.035 |
+| superbet | Current: shared side bias and offset | 0.6879 | 0.2474 | 0.0008 | -0.0005 | 0.0019 | m +1.221, model +0.044, over -0.069, one +0.035 |
+| 2022 | No side bias (offset kept) | 0.6895 | 0.2482 | 0.0001 | -0.0004 | 0.0006 | m +1.237, model +0.056, one +0.000 |
+| superbet | No side bias (offset kept) | 0.6870 | 0.2470 | -0.0002 | -0.0002 | -0.0002 | m +1.237, model +0.056, one +0.000 |
+| 2022 | No side bias, no offset | 0.6895 | 0.2482 | 0.0001 | -0.0004 | 0.0006 | m +1.237, model +0.056 |
+| superbet | No side bias, no offset | 0.6870 | 0.2470 | -0.0002 | -0.0002 | -0.0002 | m +1.237, model +0.056 |
+| 2022 | Side bias and offset per bookmaker | 0.6891 | 0.2480 | -0.0003 | -0.0009 | 0.0002 | m +1.222, model +0.054, over -0.031, one +0.015, over_sb -0.148, one_sb +0.074 |
+| superbet | Side bias and offset per bookmaker | 0.6898 | 0.2484 | 0.0027 | -0.0006 | 0.0058 | m +1.222, model +0.054, over -0.031, one +0.015, over_sb -0.148, one_sb +0.074 |

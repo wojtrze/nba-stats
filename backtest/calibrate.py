@@ -3,7 +3,8 @@
     python -m backtest.calibrate                 # after python -m backtest.run
     python -m backtest.calibrate --no-superbet   # the 2022/23 lines only (as before Superbet lines were saved)
 
-Fits a, b, c, d of sigmoid(a·logit(market) + b·(logit(model) − logit(market)) + c·[Over] + d) on two sources:
+Fits a and b of sigmoid(a·logit(market) + b·(logit(model) − logit(market)) + c·[Over] + d) on two sources (c and d,
+the Over/Under bias and offset, are kept at 0: see FITTED):
 Unibet's 2022/23 lines (the backtest) and every settled Superbet line saved by daily_snapshot.py (its last fetch
 before tip-off, with the raw chances saved alongside). Only chances of the current model (nightly.MODEL_VERSION)
 are used: a Superbet line's own if that version priced it, else its replay (daily_snapshot.py --reprice); the
@@ -46,6 +47,10 @@ GREEN_CANDIDATES = (1, 2, 3, 4, 5)       # edge thresholds (pp) tried for 🟢, 
 MIN_GREEN_BETS = 50
 MIN_GREEN_NIGHTS = 10                    # one or two nights are one or two slates of correlated lines, not evidence
 COEFS = ['a', 'b', 'c', 'd']
+# the coefficients fitted; the rest stay 0. The Over/Under bias (c) and offset (d) are left out: on Unibet 2022/23
+# they helped (Overs were overpriced there), on the unseen Superbet nights they made the chances worse than the price,
+# and fitted per bookmaker they were worse still (backtest/ablation.py, "calibration form")
+FITTED = ['a', 'b']
 # 2022_lines.csv written before backtest.run saved model_version: its raw chances are those of this version
 # (price_props' chances haven't changed since it was generated, at 954ac54)
 LEGACY_2022_VERSION = '2026-10-26'
@@ -214,9 +219,11 @@ def sides(t: pd.DataFrame) -> pd.DataFrame:
     return s[s['line_id'].isin(decided) & s['model'].notna() & s['odds'].notna()]
 
 
-def fit_coefficients(s: pd.DataFrame) -> Dict:
-    beta = fit(features(s['market'].values, s['model'].values, s['over'].values), s['won'].values)
-    return dict(zip(COEFS, map(float, beta)))
+def fit_coefficients(s: pd.DataFrame, fitted=FITTED) -> Dict:
+    """a, b, c, d of the calibration fitted on line sides s; coefficients not in `fitted` are 0."""
+    keep = [COEFS.index(k) for k in fitted]
+    beta = fit(features(s['market'].values, s['model'].values, s['over'].values)[:, keep], s['won'].values)
+    return {k: float(beta[fitted.index(k)]) if k in fitted else 0.0 for k in COEFS}
 
 
 def scores(s: pd.DataFrame, p: np.ndarray) -> Dict:
