@@ -29,3 +29,5 @@ started_at,job,command,exit_code,seconds,summary
 2026-10-25T20:54:59Z,lineups,RotoWire lineups (dashboard),0,1.1,saved 108 players for Oct 25: 2 changes – LAL lineup confirmed; UTAH lineup confirmed
 2026-10-26T11:06:12Z,lineups,RotoWire lineups (dashboard),0,0.9,saved 138 players for Oct 26 (first fetch of the day)
 2026-10-26T11:06:33Z,stats,python -m espn_scraper,0,16.7,"2026/27: added 7 games, 157 player lines. 9 games not final yet."
+2026-10-26T16:18:41Z,lineups,RotoWire lineups (dashboard),0,1.3,saved 138 players for Oct 26: 16 changes – Naz Reid (CHA): starter → starter; T.J. McConnell (IND): Out 0% → Doubt 25%; Jared McCain (OKC): starter → starter; …and 13 more
+2026-10-26T16:40:58Z,lineups,RotoWire lineups (dashboard),0,1.2,saved 138 players for Oct 26: 1 change – Marcus Smart (HOU): Ques 50% → Out 0%
