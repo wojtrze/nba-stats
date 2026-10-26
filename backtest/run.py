@@ -41,7 +41,7 @@ KEEP = ['game_date', 'name', 'name_ESPN', 'player_id_ESPN', 'team', 'home', 'awa
         'over_odds', 'under_odds', 'games', 'avg', 'avg L5', 'lineup adj', 'adj avg', 'matchup', 'proj avg',
         'over % L10', 'under % L10', 'best side', 'model %', 'market %', 'break-even %', 'edge pp', 'edge low',
         'pick odds', 'signal', 'raw model %', 'raw over %', 'raw under %', 'raw over low %', 'raw under low %',
-        'market over %']
+        'market over %', 'sd', 'over %', 'under %', 'pace factor', 'matchup factor']
 
 
 def known_absences(logs: pd.DataFrame, day: pd.Timestamp, teams) -> pd.DataFrame:
@@ -189,7 +189,9 @@ def main():
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     pd.concat(results.values(), ignore_index=True).to_csv(args.out, index=False)
     text = summary(results, [logs_report, lines_report])
-    with open(os.path.join(os.path.dirname(args.out), '2022_summary.md'), 'w', encoding='utf-8') as f:
+    # 2022_lines.csv → 2022_summary.md; another --out gets its own summary, so a side run can't replace it
+    summary_file = os.path.splitext(args.out)[0].replace('_lines', '_summary') + '.md'
+    with open(summary_file, 'w', encoding='utf-8') as f:
         f.write(text)
     print(text)
 

@@ -68,6 +68,15 @@ fetch time. Before the step 1 fix, neither of them records the model version or 
 | Settlement (F7, F8) | `test_settle_props`, `test_side_result_push_and_profit`, `test_save_and_settle_my_bets`, `dashboard/test_tracking.py::test_side_result_and_profit`, `test_settle_props_statuses`, `test_settle_games_postponed_is_unresolved` | – |
 | Persistence (F9) | none | two writers, interrupted write |
 
+## Model contribution (step 7, `backtest/ablation.py`)
+
+On identical lines, fitted on the earlier part and scored on the later part of each source, with night-resampled ranges (report: `data/backtest/ablation.md`):
+
+- Unibet 2022/23 (77 unseen nights): the Over/Under bias beats the price by 0.0004 log loss (range −0.0007…−0.0001); the player's numbers add ~0.0002, inside the noise; absences (also the oracle) and the matchup add nothing measurable.
+- Superbet 2026/27 (2 unseen nights): every fitted rung is worse than the price (+0.0034 ± 0.003), already at the side-bias rung.
+
+Implication: no component earns more complexity yet. The next model changes should be judged on this ladder, and the side bias is the first suspect (it doesn't carry across periods or bookmakers).
+
 ## Fix order
 
 1. Lineage (F1)

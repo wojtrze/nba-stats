@@ -1,4 +1,6 @@
 """Run with: python -m pytest backtest"""
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -319,3 +321,49 @@ def test_game_lines_margin_free_chance_and_report():
     report = game_report(t.reset_index())
     assert 'Game model' in report and 'the old 🟢' in report and '6 settled main-line outcomes on 1 nights' in report
     assert 'No settled' in game_report(pd.DataFrame())
+
+
+# --- the ablation ladder ---
+
+def test_ablation_chance_is_the_models_own():
+    from backtest.ablation import chance
+    from metrics import hit_rates, prop_probability
+    rng = np.random.default_rng(3)
+    rows, expected = [], []
+    for n, line, mean in ((12, 20.5, 23.0), (4, 7.5, 6.1), (2, 3.5, 4.0), (9, 15.0, 15.4)):
+        values = pd.Series(rng.normal(18, 5, n).round())
+        rates = hit_rates(values, line)
+        rows.append({'line': line, 'games': n, 'over %': 100 * rates['over'], 'under %': 100 * rates['under'],
+                     'sd': values.std(), 'avg': values.mean(), 'proj avg': mean, 'market over %': 47.0})
+        expected.append({side: prop_probability(values, line, side, 0.47 if side == 'Over' else 0.53, mean=mean)['p']
+                         for side in ('Over', 'Under')})
+    t = pd.DataFrame(rows)
+    for side in ('Over', 'Under'):
+        assert chance(t, side, t['proj avg']) == pytest.approx([e[side] for e in expected])
+
+
+def test_night_bootstrap():
+    from backtest.ablation import night_bootstrap
+    nights = np.repeat(['a', 'b', 'c'], 4)
+    assert night_bootstrap(nights, np.full(12, -0.01)) == pytest.approx((-0.01, -0.01))
+    assert np.isnan(night_bootstrap(np.repeat(['a'], 4), np.zeros(4))[0])          # one night: no range
+
+
+def test_ablation_ladder_finds_an_informative_average():
+    from backtest.ablation import _rungs, ladder
+    rng = np.random.default_rng(4)
+    n = 4000
+    avg = rng.uniform(10, 30, n)
+    line = np.round(avg + rng.normal(0, 3, n)) + 0.5                  # lines off the average: the average knows
+    actual = rng.normal(avg, 4).round()
+    t = pd.DataFrame({'game_date': pd.Timestamp('2026-10-01') + pd.to_timedelta(np.arange(n) % 40, unit='D'),
+                      'line': line, 'actual': actual, 'over_odds': 1.9, 'under_odds': 1.9, 'market over %': 50.0,
+                      'games': 20, 'sd': 4.0, 'avg': avg, 'adj avg': avg, 'pace factor': 1.0, 'matchup factor': 1.0,
+                      'proj avg': avg, 'source': 'superbet'})
+    t['over %'] = 100 * (1 - 0.5 * (1 + np.vectorize(math.erf)((line - avg) / (4 * math.sqrt(2)))))
+    t['under %'] = 100 - t['over %']
+    t['market over %'] = rng.uniform(45, 55, n)                        # a market that doesn't know the average
+    result = ladder(t, _rungs()).get('scores').set_index('model')
+    assert result.loc["1. Market (margin-free price)", 'vs market'] == 0
+    full = result.loc["8. + matchup = the full model"]
+    assert full['vs market'] < 0 and full['range high'] < 0            # clearly beats the price, nights resampled

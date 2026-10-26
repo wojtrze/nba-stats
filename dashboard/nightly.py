@@ -136,11 +136,11 @@ def _player_context(lines: pd.DataFrame, logs: pd.DataFrame, night) -> Dict[str,
 
 
 def recompute_props(rows: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame, lineups: pd.DataFrame,
-                    game_odds: pd.DataFrame, night) -> pd.DataFrame:
+                    game_odds: pd.DataFrame, night, full: bool = False) -> pd.DataFrame:
     """The model's numbers for saved lines (with player_id_ESPN) as the dashboard would have shown them before
     that night: models.price_props on that season's games before the night (the default game types, topped up
     with the season before's), the lineups and game odds saved before tip-off, then reasons.flag_props.
-    MODEL_COLUMNS on rows' index."""
+    MODEL_COLUMNS on rows' index; full: the whole priced table (every component, backtest/ablation.py)."""
     from models import DEFAULT_SEASON_TYPES, price_props, top_up_logs
     from reasons import flag_props
     night = pd.Timestamp(night)
@@ -153,7 +153,7 @@ def recompute_props(rows: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
     lines = rows[['name', 'name_ESPN', 'home', 'away', 'bet_type', 'line', 'event_id', 'start_time', 'over_odds',
                   'under_odds', 'player_id_ESPN']]
     table = flag_props(price_props(lines, scope, lineups, game_odds, played), scope, lineups)
-    return model_columns(table).set_axis(rows.index)
+    return (table if full else model_columns(table)).set_axis(rows.index)
 
 
 def model_columns(table: pd.DataFrame) -> pd.DataFrame:

@@ -166,7 +166,7 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     logs: prepare_logs output in the seasons and game types to use, optionally top_up_logs output (the topped-up
     rows feed the player's own numbers, not the matchup or the absence adjustments); games: games.csv rows of
     the same. adjust(logs, players, out, stats): absence_adjustments, or a cached version of it.
-    Adds, per line: the player's numbers (avg, hit rates, percentile...), RotoWire status, lineup adj and adj avg,
+    Adds, per line: the player's numbers (avg, sd, hit rates, percentile...), RotoWire status, lineup adj and adj avg,
     the game context (opponent, spread, implied total, matchup) and proj avg, and the pick: best side (the side
     with the bigger edge, even a negative one), model %, market % (margin-free), break-even %, edge pp, edge low,
     pick odds, signal (metrics.prop_signal with green_edge, default: the one in CALIBRATION_FILE), bet (best side
@@ -191,7 +191,7 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
         p30, p70 = percentile_band(values) if len(values) else (np.nan, np.nan)
         return pd.Series({
             'player_id': row['player_id_ESPN'], 'team': current_team.get(row['player_id_ESPN']),
-            'games': len(values), 'avg': values.mean(), 'avg L5': values.tail(5).mean(),
+            'games': len(values), 'avg': values.mean(), 'sd': values.std(), 'avg L5': values.tail(5).mean(),
             'over %': 100 * season['over'], 'under %': 100 * season['under'],
             'over % L10': 100 * last10['over'], 'under % L10': 100 * last10['under'],
             'percentile': line_percentile(values, row['line']), 'p30': p30, 'p70': p70,
