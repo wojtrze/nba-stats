@@ -172,7 +172,8 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     the same. adjust(logs, players, out, stats): absence_adjustments, or a cached version of it.
     Adds, per line: the player's numbers (avg, sd, hit rates, percentile...), RotoWire status, lineup adj and adj avg,
     the game context (opponent, spread, implied total, matchup) and proj avg, and the pick: best side (the side
-    with the bigger edge, even a negative one), model %, market % (margin-free), break-even %, edge pp, edge low,
+    with the bigger edge, even a negative one), model %, market % (margin-free), break-even %, edge pp, ev 100 (the
+    expected return of 100 staked on it: model % × pick odds − 100), edge low,
     pick odds, signal (metrics.prop_signal with green_edge, default: the one in CALIBRATION_FILE), bet (best side
     when there's a positive edge, else '' = pass) and lean (the projection's side when it's well off the line).
     model %, edge pp and edge low are calibrated (metrics.calibrate with `calibration`, default: the fitted
@@ -274,6 +275,9 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
         return pd.Series(best | raw)
 
     table = pd.concat([table, table.apply(price, axis=1)], axis=1)
+    # what 100 staked on the better side returns on average by our chance: 0 = break-even, + = a value bet. Unlike
+    # model %, which is mostly the odds (a 1.30 favourite always looks likely), it ranks bets by their price
+    table['ev 100'] = table['model %'] * table['pick odds'] - 100
     table['in band'] = (table['p30'] <= table['line']) & (table['line'] <= table['p70'])
     table['calibration'] = status
     table['signal'] = prop_signal(table['edge pp'], load_green_edge() if green_edge is FROM_FILE else green_edge)

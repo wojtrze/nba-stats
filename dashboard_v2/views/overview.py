@@ -96,20 +96,22 @@ for start in range(0, len(events), 3):
 # --- the best bets ---
 left, right = st.columns([3, 2])
 with left:
-    st.subheader(t('overview.best_props', lang))
-    top = props[props['signal'].isin(['🟢', '🟡'])] if len(props) else props
+    edge = props[props['signal'].isin(['🟢', '🟡'])] if len(props) else props
+    # with no edge anywhere, the lines that lose least by our numbers (best expected return; warnings left out)
+    least_loss = edge.empty and len(props) > 0
+    st.subheader(t('overview.least_loss' if least_loss else 'overview.best_props', lang))
     if props.empty:
         st.caption(t('overview.no_props', lang))
-    elif top.empty:
-        st.info(t('overview.no_edge', lang), icon="⚖️")
     else:
-        top = top.sort_values(['signal', 'edge pp'], ascending=[True, False],
-                              key=lambda c: c.map({'🟢': 0, '🟡': 1}) if c.name == 'signal' else c) \
+        top = props[props['signal'] != '🔴'] if least_loss else edge
+        top = top.sort_values(['signal', 'ev 100'], ascending=[True, False],
+                              key=lambda c: c.map({'🟢': 0, '🟡': 1, '': 2}) if c.name == 'signal' else c) \
             .head(10).reset_index(drop=True)
         shown = top.assign(**{col: top[col].map(lambda v: value(v, lang)) for col in ('bet', 'RotoWire')})
-        picked = table(shown, OVERVIEW_PROPS, {'line': '%g', 'edge pp': '%+.1f', 'pick odds': '%.2f'},
+        picked = table(shown, OVERVIEW_PROPS, {'line': '%g', 'ev 100': '%+.1f', 'model %': '%.0f',
+                                               'edge pp': '%+.1f', 'pick odds': '%.2f'},
                        key='top_props', select=True)
-        st.caption(t('overview.best_props_caption', lang))
+        st.caption(t('overview.least_loss_caption' if least_loss else 'overview.best_props_caption', lang))
         if picked is not None:
             r = top.iloc[picked]
             st.session_state['props_focus'] = (r['event_id'], r['name_ESPN'], r['bet_type'])

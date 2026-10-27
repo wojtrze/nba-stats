@@ -87,6 +87,21 @@ TERMS: Dict[str, Term] = {
                        "jedna dziś wejdzie."),
                     _w("Odds 1.90 need a 52.6% chance. Our chance 55% → edge 55 − 52.6 = +2.4 pp.",
                        "Kurs 1.90 wymaga 52.6% szans. Nasza szansa 55% → przewaga 55 − 52.6 = +2.4 pp.")),
+    'ev 100': Term(_w("expected return per 100", "oczekiwany zwrot na 100 zł"),
+                   _w("What 100 staked on this bet brings back on average, minus the 100, if our chance is right: "
+                      "our chance × odds − 100. It weighs the chance and the price together, so it's the way to rank "
+                      "bets: the higher, the better the price.",
+                      "Ile średnio zostaje ze 100 zł postawionych na ten zakład, jeśli nasza szansa jest trafna: "
+                      "nasza szansa × kurs − 100. Łączy szansę i kurs, więc według niego najlepiej układać zakłady: "
+                      "im wyżej, tym lepsza cena."),
+                   _w("A better price: above 0 = a profit on average, just below 0 = loses little.",
+                      "Lepsza cena: więcej niż 0 = średnio zysk, tuż poniżej 0 = traci niewiele."),
+                   _w("Loses more over time. Betting at random loses about −5 (the bookmaker's margin).",
+                      "Z czasem traci więcej. Losowe granie traci ok. −5 (marża bukmachera)."),
+                   _w("55% at 1.90 → 0.55 × 1.90 × 100 − 100 = +4.5. 72.7% at 1.32 → −4.0: a likely win that still "
+                      "loses money over time.",
+                      "55% po 1.90 → 0.55 × 1.90 × 100 − 100 = +4.5. 72.7% po 1.32 → −4.0: częsta wygrana, która i "
+                      "tak z czasem traci.")),
     'best side': Term(_w("better side", "lepsza strona"),
                       _w("Over or Under, whichever has the bigger edge, even when both edges are negative. Only a "
                          "pick when the edge is positive (see 'our pick').",
@@ -112,8 +127,12 @@ TERMS: Dict[str, Term] = {
                        "składów i meczu, poprawione o to, jak takie szanse sprawdzały się na dawnych liniach. "
                        "Poprawka ściąga ją blisko szansy bukmachera, bo nasza własna opinia okazała się warta "
                        "niewiele ponad kurs."),
-                    _w("More likely to win. Compare it with 'needed to win %': only above it is the bet worth it.",
-                       "Większa szansa wygranej. Porównaj z 'potrzebna skuteczność %': opłaca się tylko powyżej niej."),
+                    _w("More likely to win. Compare it with 'needed to win %': only above it is the bet worth it. A "
+                       "high chance usually comes with low odds, so on its own it doesn't make a bet better: rank by "
+                       "'expected return per 100'.",
+                       "Większa szansa wygranej. Porównaj z 'potrzebna skuteczność %': opłaca się tylko powyżej niej. "
+                       "Wysoka szansa zwykle idzie z niskim kursem, więc sama nie czyni zakładu lepszym: układaj wg "
+                       "'oczekiwany zwrot na 100 zł'."),
                     _w("Less likely to win.", "Mniejsza szansa wygranej."),
                     _w("Our chance 55%, odds 1.90 need 52.6% → worth it (edge +2.4 pp).",
                        "Nasza szansa 55%, kurs 1.90 wymaga 52.6% → opłaca się (przewaga +2.4 pp).")),
@@ -775,7 +794,7 @@ for _code, _name in STAT_NAMES.items():
                                  _name))
 
 # the numbers a pick is decided on: their tooltips must say what more and what less means
-DECISION_TERMS = ['edge pp', 'model %', 'pick odds', 'break-even %', 'market %', 'proj avg', 'pick % L10', 'line',
+DECISION_TERMS = ['edge pp', 'ev 100', 'model %', 'pick odds', 'break-even %', 'market %', 'proj avg', 'pick % L10', 'line',
                   'edge low', 'avg', 'games', 'percentile', 'line move', 'min L5', 'spread', 'game total']
 
 _HEADINGS = {'higher': _w("↑ Higher", "↑ Gdy więcej"), 'lower': _w("↓ Lower", "↓ Gdy mniej"),
@@ -891,8 +910,14 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'props.min_games_help': _w("Hide players with fewer games behind their numbers",
                                "Ukryj zawodników z mniejszą liczbą meczów"),
     'props.every_column': _w("Show every column", "Pokaż wszystkie kolumny"),
-    'props.sort': _w("Sort by", "Sortuj"), 'props.sort.tip': _w("Tip-off, then edge", "Start, potem przewaga"),
-    'props.sort.edge': _w("Edge only", "Tylko przewaga"),
+    'props.sort': _w("Sort by", "Sortuj"),
+    'props.sort.return': _w("Expected return", "Oczekiwany zwrot"),
+    'props.sort.chance': _w("Chance to win", "Szansa na wygraną"),
+    'props.sort.tip': _w("Tip-off", "Start meczu"),
+    'props.sort_help': _w("Expected return ranks bets by their price (chance and odds together); chance to win puts "
+                          "the likeliest first, mostly low odds that pay little",
+                          "Oczekiwany zwrot układa zakłady wg ceny (szansa i kurs razem); szansa na wygraną stawia "
+                          "najpierw najbardziej prawdopodobne, głównie po niskim kursie, który mało płaci"),
     'props.kpi.shown': _w("Lines shown", "Pokazane linie"),
     'props.kpi.shown_help': _w("Lines that pass the filters, of every line Superbet offers",
                                "Linie spełniające filtry, spośród wszystkich linii Superbetu"),
@@ -908,9 +933,18 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'props.kpi.red_help': _w("Lines with a reason to pass whatever the numbers say", "Linie z powodem, żeby "
                                                                                      "odpuścić, cokolwiek mówią "
                                                                                      "liczby"),
-    'props.order.tip': _w("Earliest tip-off first; within a game 🟢 first, then the biggest edge",
-                          "Najpierw najwcześniejszy start; w meczu najpierw 🟢, potem największa przewaga"),
-    'props.order.edge': _w("🟢 first, then the biggest edge", "Najpierw 🟢, potem największa przewaga"),
+    'props.order.return': _w("🟢 and 🟡 first, then the best expected return",
+                             "Najpierw 🟢 i 🟡, potem najlepszy oczekiwany zwrot"),
+    'props.order.chance': _w("The highest chance to win first (mostly low odds)",
+                             "Najpierw najwyższa szansa na wygraną (głównie niskie kursy)"),
+    'props.order.tip': _w("Earliest tip-off first; within a game the best expected return first",
+                          "Najpierw najwcześniejszy start; w meczu najpierw najlepszy oczekiwany zwrot"),
+    'props.all_pass': _w("**No line has a positive edge right now**, so every pick is a *pass*: by our numbers every "
+                         "bet loses on average. If you bet anyway, the top of the table (expected return) loses the "
+                         "least: about {best:+.1f} per 100 staked, against a typical {typical:+.1f}.",
+                         "**Żadna linia nie ma teraz dodatniej przewagi**, więc każdy typ to *odpuść*: według naszych "
+                         "liczb każdy zakład średnio traci. Jeśli mimo to grasz, góra tabeli (oczekiwany zwrot) "
+                         "traci najmniej: ok. {best:+.1f} zł na 100 zł, wobec typowych {typical:+.1f}."),
     'props.order.rest': _w(", 🔴 last. ⏰ = starts within the hour; a line leaves the list when its game starts. "
                            "Hover a header for what it means; pick a row for the details. Most lines are a **pass**: "
                            "our numbers rarely disagree with the bookmaker enough to beat its margin.",
@@ -1970,6 +2004,19 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "przewagi się nie potwierdziła. **🟡 dodatnia przewaga**: opłaca się na papierze, jeszcze "
                             "niepotwierdzona. **🔴 ostrzeżenie**: odpuść, cokolwiek mówią liczby. **Puste**: brak "
                             "przewagi, odpuść. Większość linii nie ma sygnału: to normalne i uczciwe, a nie błąd."),
+    'help.allpass.title': _w("When every line says pass", "Gdy wszystko jest 'odpuść'"),
+    'help.allpass.body': _w("Most days no line has a positive edge: by our numbers every bet loses a little on average. "
+                            "If you still want to bet, don't pick the **highest chance**: a high chance mostly means "
+                            "low odds (72.7% at 1.32 still loses about 4 per 100 staked). Rank by **expected return "
+                            "per 100** instead: our chance × odds − 100. It weighs the chance against the price; the "
+                            "top lines lose the least (about −2 per 100 instead of the usual −6). It's still a loss "
+                            "on average, just a smaller one.",
+                            "Najczęściej żadna linia nie ma dodatniej przewagi: według naszych liczb każdy zakład "
+                            "średnio trochę traci. Jeśli mimo to chcesz grać, nie wybieraj **najwyższej szansy**: "
+                            "wysoka szansa to głównie niski kurs (72.7% po 1.32 i tak traci ok. 4 zł na 100). Układaj "
+                            "wg **oczekiwanego zwrotu na 100 zł**: nasza szansa × kurs − 100. Waży szansę wobec ceny; "
+                            "linie na górze tracą najmniej (ok. −2 zł na 100 zamiast typowych −6). To wciąż średnio "
+                            "strata, tylko mniejsza."),
     'help.flags.title': _w("6. Warnings", "6. Ostrzeżenia"),
     'help.flags.body': _w("A warning (🔴, the 'warning' column) is a reason to pass on its own: fewer than 8 games "
                           "behind the numbers, only preseason games, the player may not play (RotoWire), his minutes "
@@ -1998,13 +2045,17 @@ TEXTS: Dict[str, Dict[str, str]] = {
                            "więc traktuj to jako wskazówkę."),
     'help.steps.title': _w("How to choose a prop, in 5 steps", "Jak wybrać zakład, w 5 krokach"),
     'help.steps.body': _w("1. On **Props**, set the signal filter to **🟢🟡 Positive edge**: only lines worth it on "
-                          "paper stay.\n2. Prefer a bigger **edge (pp)** and an **edge, cautious** above 0.\n3. Skip any "
+                          "paper stay.\n2. Prefer a bigger **edge (pp)** and **expected return per 100**, and an "
+                          "**edge, cautious** above 0. If every line is a pass, sort by expected return (see "
+                          "below).\n3. Skip any "
                           "line with a **warning**.\n4. Click the row: read the **verdict** and the reasons ✅ / ❌; "
                           "check **tonight's role** (is the player playing?).\n5. Bet small. An edge is a small "
                           "advantage over many bets, not a sure thing tonight; if nothing qualifies, don't bet.",
                           "1. W **Zakładach na zawodników** ustaw filtr sygnału na **🟢🟡 Dodatnia przewaga**: "
                           "zostaną tylko linie opłacalne na papierze.\n2. Wybieraj większą **przewagę (pp)** i "
-                          "**przewagę ostrożnie** większą od 0.\n3. Pomiń każdą linię z **ostrzeżeniem**.\n4. "
+                          "**oczekiwany zwrot na 100 zł** oraz **przewagę ostrożnie** większą od 0. Jeśli wszystko "
+                          "to odpuść, sortuj wg oczekiwanego zwrotu (zobacz niżej).\n3. Pomiń każdą linię z "
+                          "**ostrzeżeniem**.\n4. "
                           "Kliknij wiersz: przeczytaj **werdykt** i powody ✅ / ❌; sprawdź **rolę dziś** (czy "
                           "zawodnik gra?).\n5. Graj małymi stawkami. Przewaga to mała korzyść na wielu zakładach, a "
                           "nie pewniak na dziś; jeśli nic się nie kwalifikuje, nie graj."),
@@ -2071,14 +2122,16 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                "🟢 / 🟡 do ponownego dopasowania: `python daily_snapshot.py --reprice`, potem "
                                "`python -m backtest.calibrate`."),
     'overview.best_props': _w("Best player lines", "Najlepsze linie zawodników"),
+    'overview.least_loss': _w("Least loss (no line has an edge)", "Najmniejsza strata (żadna linia nie ma przewagi)"),
+    'overview.least_loss_caption': _w("Every line loses on average by our numbers; these lose the least per 100 staked "
+                                      "(expected return). Pick one to open it on Props.",
+                                      "Według naszych liczb każda linia średnio traci; te tracą najmniej na 100 zł "
+                                      "(oczekiwany zwrot). Wybierz jedną, żeby otworzyć ją w Zakładach na "
+                                      "zawodników."),
     'overview.best_props_caption': _w("Only lines with a positive edge (every other line is a pass): 🟢 first, then by "
                                       "edge. Pick one to open it on Props.",
                                       "Tylko linie z dodatnią przewagą (pozostałe to odpuść): najpierw 🟢, potem wg "
                                       "przewagi. Wybierz jedną, żeby otworzyć ją w Zakładach na zawodników."),
-    'overview.no_edge': _w("No line has a positive edge right now: our numbers agree with Superbet's prices, so "
-                           "there's nothing to bet. That's the usual case.",
-                           "Żadna linia nie ma teraz dodatniej przewagi: nasze liczby zgadzają się z kursami "
-                           "Superbetu, więc nie ma czego grać. To typowa sytuacja."),
 }
 
 

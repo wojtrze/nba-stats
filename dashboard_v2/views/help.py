@@ -15,7 +15,7 @@ with st.container(border=True):
     st.markdown(f"#### {t('help.steps.title', lang)}")
     st.markdown(t('help.steps.body', lang))
 
-for section in ('odds', 'margin', 'chance', 'edge', 'signals', 'flags', 'verdict', 'player'):
+for section in ('odds', 'margin', 'chance', 'edge', 'signals', 'allpass', 'flags', 'verdict', 'player'):
     st.markdown(f"#### {t(f'help.{section}.title', lang)}")
     st.markdown(t(f'help.{section}.body', lang))
 

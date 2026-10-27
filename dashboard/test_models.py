@@ -1,6 +1,7 @@
 """Run with: python -m pytest dashboard"""
 import numpy as np
 import pandas as pd
+import pytest
 
 import models
 from models import DEFAULT_SEASON_TYPES, price_props, top_up_logs
@@ -172,3 +173,12 @@ def test_no_valid_calibration_means_no_pick(monkeypatch, tmp_path):
         row = _priced_without_explicit_calibration(monkeypatch, tmp_path, saved)
         assert row['calibration'] == status and row['edge pp'] > 0     # the raw numbers stay for research
         assert row['signal'] == '' and row['bet'] == ''                 # but they're not a pick
+
+
+def test_expected_return_per_100(monkeypatch, tmp_path):
+    fitted = {'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': None,
+              'model_version': models.MODEL_VERSION}
+    row = _priced_without_explicit_calibration(monkeypatch, tmp_path, fitted)
+    assert row['ev 100'] == pytest.approx(row['model %'] * row['pick odds'] - 100)
+    # a positive edge is a positive expected return, and both say the same per unit of odds
+    assert row['ev 100'] > 0 and row['ev 100'] == pytest.approx(row['edge pp'] * row['pick odds'])

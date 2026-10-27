@@ -29,11 +29,25 @@ if warning := calibration_warning(table_all['calibration'].iloc[0] if len(table_
 DEFAULT_TYPES = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP']
 SIGNALS = {key: t(f'props.signal.{key}', lang) for key in ('all', 'positive', 'sure')}
 FORMATS = {'raw model %': '%.0f',
-           'line': '%g', 'edge pp': '%+.1f', 'edge low': '%+.1f', 'pick odds': '%.2f', 'model %': '%.0f',
+           'line': '%g', 'edge pp': '%+.1f', 'ev 100': '%+.1f', 'edge low': '%+.1f', 'pick odds': '%.2f', 'model %': '%.0f',
            'proj avg': '%.1f', 'pick % L10': '%.0f', 'pick %': '%.0f', 'break-even %': '%.0f', 'market %': '%.0f',
            'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'percentile': '%.0f',
            'over_odds': '%.2f', 'under_odds': '%.2f', 'games': '%d', 'line move': '%+g', 'open line': '%g',
            'spread': '%+g', 'game total': '%g'}
+
+
+# how the table can be ordered (i18n 'props.sort.*'); the expected return ranks bets by their price
+SORTS = ['return', 'chance', 'tip']
+
+
+def sort_lines(rows: pd.DataFrame, how: str) -> pd.DataFrame:
+    """The lines in the chosen order, 🔴 always last. return: 🟢, 🟡, then the best expected return per 100; chance:
+    the highest chance to win (mostly low odds); tip: the earliest game first, then the best expected return."""
+    rank = {'🟢': 0, '🟡': 1, '': 2, '🔴': 3} if how != 'chance' else {'🟢': 0, '🟡': 0, '': 0, '🔴': 1}
+    by = {'return': ['signal', 'ev 100'], 'chance': ['signal', 'model %'],
+          'tip': ['tip_at', 'game', 'signal', 'ev 100']}[how]
+    return rows.sort_values(by, ascending=[True] * (len(by) - 1) + [False], kind='stable',
+                            key=lambda c: c.map(rank) if c.name == 'signal' else c)
 
 
 def display_values(rows: pd.DataFrame) -> pd.DataFrame:
@@ -241,9 +255,11 @@ lineup_banner()
 # --- filters ---
 for key, default in (('props_games', []), ('props_types', DEFAULT_TYPES), ('props_signal', 'all'),
                      ('props_hide_out', True), ('props_min_games', 5), ('props_more', False),
-                     ('props_sort', 'tip-off')):
+                     ('props_sort', 'return')):
     persist(key, default)
-f = st.columns([2, 4, 2, 1], vertical_alignment='bottom')
+if st.session_state['props_sort'] not in SORTS:      # an older choice ('edge') is now the expected return
+    st.session_state['props_sort'] = st.session_state['_props_sort'] = 'return'
+f = st.columns([2, 4, 2, 3, 1], vertical_alignment='bottom')
 # tip-off times change their label as the game nears, so they're computed on every run, not cached
 table_all = table_all.assign(**{'tip-off': [pl_time(t) for t in table_all['start_time']],
                                 'tip_at': pd.to_datetime(table_all['start_time'], utc=True)})
@@ -258,16 +274,15 @@ type_filter = f[1].pills(t('props.filter.types', lang), available, key='props_ty
 signal = f[2].segmented_control(t('props.filter.signal', lang), list(SIGNALS), format_func=SIGNALS.get,
                                 key='props_signal', on_change=remember, args=('props_signal',),
                                 help=signal_legend(lang) + " " + t('props.filter.red_only_all', lang))
-with f[3].popover(t('props.more', lang), width='stretch'):
+sort = f[3].segmented_control(t('props.sort', lang), SORTS, key='props_sort', on_change=remember,
+                              args=('props_sort',), format_func=lambda k: t(f'props.sort.{k}', lang),
+                              help=t('props.sort_help', lang)) or 'return'
+with f[4].popover(t('props.more', lang), width='stretch'):
     hide_out = st.toggle(t('props.hide_out', lang), key='props_hide_out', on_change=remember,
                          args=('props_hide_out',))
     min_games = st.number_input(t('props.min_games', lang), 0, 100, key='props_min_games', on_change=remember,
                                 args=('props_min_games',), help=t('props.min_games_help', lang))
     more = st.toggle(t('props.every_column', lang), key='props_more', on_change=remember, args=('props_more',))
-    sort = st.segmented_control(t('props.sort', lang), ['tip-off', 'edge'], key='props_sort', on_change=remember,
-                                args=('props_sort',), format_func={'tip-off': t('props.sort.tip', lang),
-                                                                   'edge': t('props.sort.edge', lang)}.get) \
-        or 'tip-off'
 
 shown = table_all[table_all['games'] >= min_games]
 if game_filter:
@@ -280,11 +295,7 @@ elif signal == 'sure':
     shown = shown[shown['signal'] == '🟢']
 if hide_out:
     shown = shown[~shown['RotoWire'].str.startswith(('Out', 'OFS'))]
-# earliest game first, greens and the biggest edges first within a game; or edge only
-order = (['tip_at', 'game'] if sort == 'tip-off' else []) + ['signal', 'edge pp']
-shown = shown.sort_values(order, ascending=[True] * (len(order) - 1) + [False],
-                          key=lambda c: c.map({'🟢': 0, '🟡': 1, '': 2, '🔴': 3}) if c.name == 'signal' else c)
-shown = shown.reset_index(drop=True)
+shown = sort_lines(shown, sort).reset_index(drop=True)
 
 kpis([{'label': t('props.kpi.shown', lang), 'value': f"{len(shown)} / {len(table_all)}",
        'help': t('props.kpi.shown_help', lang)},
@@ -297,10 +308,13 @@ kpis([{'label': t('props.kpi.shown', lang), 'value': f"{len(shown)} / {len(table
        'help': t('props.kpi.red_help', lang)}])
 
 st.markdown(t('props.how_to_choose', lang))
+priced = table_all[table_all['signal'] != '🔴']
+if len(priced) and not priced['signal'].isin(['🟢', '🟡']).any():
+    st.info(t('props.all_pass', lang, best=priced['ev 100'].max(), typical=priced['ev 100'].median()), icon="⚖️")
 columns = MAIN_COLUMNS + (MORE_COLUMNS if more else [])
 picked = table(display_values(shown), columns, FORMATS, key='props_table', select=True, height=420,
                legend=['superbet', 'rotowire', 'stats'])
-st.caption(t('props.order.tip' if sort == 'tip-off' else 'props.order.edge', lang) + t('props.order.rest', lang))
+st.caption(t(f'props.order.{sort}', lang) + t('props.order.rest', lang))
 
 # a line sent from the Overview opens here until a row is picked
 focus = st.session_state.get('props_focus')
