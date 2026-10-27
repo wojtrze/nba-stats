@@ -10,11 +10,11 @@ from core import freshness
 from core.data import LAST_FETCH
 from core.state import language, scope, scope_label, scope_picker
 from glossary import column_config, source_legend, tinted
+from i18n import t
 
 # the app's pages by key, filled by app.py on every run, so pages can link to each other
 PAGES: Dict = {}
 
-SOURCE_NAMES = {'stats': "📊 ESPN stats", 'superbet': "💰 Superbet odds", 'rotowire': "📋 RotoWire lineups"}
 
 
 def page_header(title: str, purpose: str, with_scope: bool = False):
@@ -23,21 +23,22 @@ def page_header(title: str, purpose: str, with_scope: bool = False):
     left.title(title)
     left.caption(purpose)
     if with_scope:
-        with right.popover(f"Scope: {scope_label()}", width='stretch',
-                           help="Which seasons and game types the numbers on every page use"):
+        with right.popover(t('scope.button', language(), label=scope_label()), width='stretch',
+                           help=t('scope.help', language())):
             scope_picker()
     return scope()
 
 
 def sidebar_status():
     """The freshness strip under the navigation, on every page."""
-    status = freshness.overview(LAST_FETCH)
+    lang = language()
+    status = freshness.overview(LAST_FETCH, lang=lang)
     with st.sidebar:
-        st.markdown("**Data freshness**")
+        st.markdown(t('side.freshness', lang))
         for key, s in status.items():
-            st.markdown(f"{s['icon']} {SOURCE_NAMES[key]}  \n:gray[{s['label']}]", help=s['detail'])
+            st.markdown(f"{s['icon']} {t(f'side.{key}', lang)}  \n:gray[{s['label']}]", help=s['detail'])
         if any(s['level'] != 'ok' for s in status.values()) and 'data' in PAGES:
-            st.page_link(PAGES['data'], label="Update in the Data center", icon="🔄")
+            st.page_link(PAGES['data'], label=t('side.update', lang), icon="🔄")
 
 
 def no_offers(status: Dict):
@@ -45,12 +46,13 @@ def no_offers(status: Dict):
     fetched, a link to fetch again (Data center) and one to that night's results."""
     from components import night_stored
     from schedule import no_offers_text
+    lang = language()
     with st.container(border=True):
-        st.markdown(no_offers_text(status, night_stored(status)))
+        st.markdown(no_offers_text(status, night_stored(status), lang))
         c = st.columns(2)
         if 'data' in PAGES:
-            c[0].page_link(PAGES['data'], label="Fetch new offers in the Data center", icon="🔄")
-        if status['state'] == 'all_started' and c[1].button("See how the last night's lines resolved",
+            c[0].page_link(PAGES['data'], label=t('ui.fetch_new', lang), icon="🔄")
+        if status['state'] == 'all_started' and c[1].button(t('ui.last_night', lang),
                                                              icon="📈", key='no_offers_results'):
             st.session_state['results_night'] = status['nights']
             st.switch_page(PAGES['results'])
@@ -67,7 +69,7 @@ def go_to_data(message: str):
     with st.container(border=True):
         st.markdown(message)
         if 'data' in PAGES:
-            st.page_link(PAGES['data'], label="Open the Data center", icon="🔄")
+            st.page_link(PAGES['data'], label=t('ui.open_data', language()), icon="🔄")
 
 
 def kpis(items: Sequence[Dict]):

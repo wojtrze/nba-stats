@@ -12,6 +12,10 @@ from models import DEFAULT_SEASON_TYPES
 SEASON_TYPE_LABELS = {'pre': "Preseason", 'regular': "Regular season", 'playin': "Play-in", 'post': "Playoffs"}
 
 
+def type_label(season_type: str) -> str:
+    return i18n.t(f'type.{season_type}', language())
+
+
 def persist(key: str, default):
     """Restore the widget `key` before it's drawn; pass on_change=remember, args=(key,) to the widget."""
     st.session_state[key] = st.session_state.get(f"_{key}", default)
@@ -45,18 +49,18 @@ def scope() -> Tuple[List[int], List[str]]:
 def scope_label() -> str:
     seasons, types = scope()
     return (", ".join(season_label(s) for s in sorted(seasons)) + " · "
-            + (", ".join(SEASON_TYPE_LABELS[t].lower() for t in types) if len(types) < 4 else "all game types"))
+            + (", ".join(type_label(t).lower() for t in types) if len(types) < 4
+               else i18n.t('scope.all_types', language())))
 
 
 def scope_picker():
     """The seasons and game-type pickers, drawn where it's called (the header's Scope popover)."""
     persist('scope_seasons', [CURRENT_SEASON])
     persist('scope_types', DEFAULT_SEASON_TYPES)
-    st.multiselect("Seasons", sorted(SEASONS, reverse=True), key='scope_seasons', format_func=season_label,
-                   on_change=remember, args=('scope_seasons',),
-                   help="Games from these seasons feed the averages, hit rates and the model")
-    st.pills("Game types", list(SEASON_TYPE_LABELS), key='scope_types', selection_mode='multi',
-             format_func=SEASON_TYPE_LABELS.get, on_change=remember, args=('scope_types',),
-             help="Preseason is left out by default (starters play short minutes). Props of players with fewer "
-                  "than 10 games are topped up with last season's")
-    st.caption("Applies to every page.")
+    lang = language()
+    st.multiselect(i18n.t('scope.seasons', lang), sorted(SEASONS, reverse=True), key='scope_seasons',
+                   format_func=season_label, on_change=remember, args=('scope_seasons',),
+                   help=i18n.t('scope.seasons_help', lang))
+    st.pills(i18n.t('scope.types', lang), list(SEASON_TYPE_LABELS), key='scope_types', selection_mode='multi',
+             format_func=type_label, on_change=remember, args=('scope_types',), help=i18n.t('scope.types_help', lang))
+    st.caption(i18n.t('scope.every_page', lang))

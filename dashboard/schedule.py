@@ -67,15 +67,15 @@ def nights_text(nights) -> str:
     return f"{nights[0]:%b %d}" + (f" – {nights[-1]:%b %d}" if nights[-1] != nights[0] else '')
 
 
-def no_offers_text(status: Dict, results_stored: bool) -> str:
+def no_offers_text(status: Dict, results_stored: bool, lang: str = 'en') -> str:
     """Markdown for the pages when the last fetch has nothing left to bet (status: offers_status output).
-    results_stored: the stored stats already hold that night, so its lines are settled."""
+    results_stored: the stored stats already hold that night, so its lines are settled. lang: i18n language."""
+    from i18n import t
     if status['state'] == 'none_saved':
-        return "**No Superbet offers yet.** Nothing has been fetched: fetch today's offers manually."
+        return t('offers.none_saved', lang)
     when = pd.Timestamp(status['fetched_at']).tz_convert(PL)
-    text = (f"**No Superbet bets available right now.** Every game of the last fetch ({when:%a %d %b %H:%M}: "
-            f"{status['lines']:,} player lines on {status['games']} games, night of {nights_text(status['nights'])}) "
-            f"has tipped off. Fetch new offers manually; the last night's lines can be checked against the results.")
+    text = t('offers.all_started', lang, when=f"{when:%a %d %b %H:%M}", lines=f"{status['lines']:,}",
+             games=status['games'], nights=nights_text(status['nights']))
     if not results_stored:
-        text += " Their results are pending until the stats are updated with that night's games."
+        text += t('offers.pending', lang)
     return text

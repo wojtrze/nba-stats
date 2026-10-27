@@ -113,3 +113,37 @@ def test_game_reasons_and_labels_in_polish():
     assert winner({'margin': -3.5}, 'bos', 'ny', 'pl') == "NY o 3.5"
     assert game_flags(20, 2, False, 'pl')[0].startswith("Początek sezonu")
     assert len(game_flags(20, 2, False)) == 3 and game_flags(1, 20, True, 'pl') == []
+
+
+def test_research_backtest_and_data_columns_have_terms():
+    from core.backtest_view import BET_COLUMNS, SUMMARY_FORMATS
+    from metrics import STATS
+    research = (['split', 'value', 'games', 'avg', 'median', 'over %', 'minutes', 'shots', 'research:percentile']
+                + ['Date', 'OPP', 'type', 'Result', 'season_type', 'starter', 'PLUS_MINUS', 'rest_days'] + STATS)
+    team = ['location', 'games', 'wins', 'pts', 'opp_pts', 'margin', 'position', 'allowed', 'league avg', 'vs avg %',
+            'rank', 'name', 'starts', 'missed', 'mpg', 'last_game']
+    lineup = ['Out', 'name', 'role', 'estimate', 'change', 'signal', 'confidence', 'usual', 'games', 'exact match',
+              'exact games', 'usual MIN', 'exact MIN']
+    backtest = BET_COLUMNS + ['bet_type', 'strategy', 'lines', 'month'] + list(SUMMARY_FORMATS)
+    data = ['season', 'games', 'last game', 'checked through', 'pre', 'regular', 'playin', 'post', 'allstar', 'file',
+            'rows', 'snapshots', 'first', 'last', 'started_at', 'job', 'command', 'exit_code', 'seconds', 'summary',
+            'source', 'name', 'team', 'note', 'date', 'season_id', 'home', 'away', 'home_score', 'away_score',
+            'home pts (players)', 'away pts (players)']
+    for context, columns in (('research', research), ('team', team), ('lineup', lineup), ('backtest', backtest),
+                             ('data', data)):
+        for column in columns:
+            name = column.split(':')[-1]
+            assert i18n.term(name, context) is not None, (context, column)
+    assert i18n.label('games', 'pl', 'lineup') == "mecze" and i18n.label('ARP', 'pl') == "PRA"
+    assert i18n.tooltip('3PM', 'pl') == "Celne rzuty za 3"
+
+
+def test_freshness_and_no_offers_in_polish():
+    from datetime import datetime, timedelta, timezone
+    from core.freshness import age_text, stats_status
+    from schedule import no_offers_text
+    now = datetime(2026, 10, 27, 12, tzinfo=timezone.utc)
+    assert age_text(timedelta(minutes=5), 'pl') == "5 min temu" and age_text(timedelta(days=3), 'pl') == "3 dni temu"
+    assert stats_status('2026-10-23', now)['detail'].startswith("3 days of games missing")
+    assert stats_status('2026-10-25', now, 'pl')['detail'] == "Brakuje meczów z 1 dnia: uruchom aktualizację statystyk"
+    assert no_offers_text({'state': 'none_saved'}, False, 'pl').startswith("**Brak ofert Superbetu.**")

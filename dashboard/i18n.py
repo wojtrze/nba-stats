@@ -488,6 +488,163 @@ TERMS: Dict[str, Term] = {
                                                                    "skalibrowany).")),
     'best result': Term(_w("its result", "jego wynik"), _w("How that bet did.", "Jak poszedł ten zakład.")),
 
+    # --- research pages: a player's games, a team, a lineup ---
+    'split': Term(_w("split", "podział"), _w("How the games are divided.", "Jak podzielono mecze.")),
+    'value': Term(_w("group", "grupa"), _w("The group within the split.", "Grupa w ramach podziału.")),
+    'median': Term(_w("median", "mediana"), _w("The middle result: half the games were above it, half below.",
+                                               "Środkowy wynik: połowa meczów była wyżej, połowa niżej.")),
+    'research:percentile': Term(_w("percentile", "percentyl"),
+                                _w("The share of games at or below the value: 30th = 30% of games were lower.",
+                                   "Odsetek meczów z wynikiem nie wyższym: 30. = 30% meczów było niżej.")),
+    'Date': Term(_w("date", "data"), _w("Game date (US time).", "Data meczu (czas USA).")),
+    'OPP': Term(_w("opponent", "rywal"), _w("The opposing team.", "Drużyna przeciwna.")),
+    'type': Term(_w("home/away", "dom/wyjazd"), _w("Home or away game.", "Mecz u siebie czy na wyjeździe.")),
+    'Result': Term(_w("result", "wynik"), _w("Win (W) or loss (L) and the final score, from the player's team's "
+                                             "side.", "Wygrana (W) lub porażka (L) i wynik, z perspektywy drużyny "
+                                                      "zawodnika.")),
+    'season_type': Term(_w("game type", "rodzaj meczu"), _w("pre = preseason, regular, playin = play-in, post = "
+                                                            "playoffs.", "pre = przedsezon, regular = sezon "
+                                                                         "zasadniczy, playin = baraże, post = play-off.")),
+    'starter': Term(_w("started", "w piątce"), _w("✔ = started the game.", "✔ = zaczął mecz w pierwszej piątce.")),
+    'rest_days': Term(_w("rest days", "dni przerwy"), _w("Days since the player's previous game (1 = the second of two "
+                                                         "days in a row).", "Dni od poprzedniego meczu zawodnika (1 = "
+                                                                            "drugi z dwóch meczów dzień po dniu).")),
+    'location': Term(_w("home/away", "dom/wyjazd"), _w("Home or away games.", "Mecze u siebie czy na wyjeździe.")),
+    'wins': Term(_w("wins", "wygrane"), _w("Games won.", "Wygrane mecze.")),
+    'pts': Term(_w("points", "punkty"), _w("Points scored per game.", "Zdobyte punkty na mecz."),
+                _w("A stronger attack.", "Mocniejszy atak."), _w("A weaker attack.", "Słabszy atak.")),
+    'opp_pts': Term(_w("points allowed", "punkty stracone"), _w("Points allowed per game.", "Stracone punkty na mecz."),
+                    _w("A weaker defense.", "Słabsza obrona."), _w("A stronger defense.", "Mocniejsza obrona.")),
+    'margin': Term(_w("margin", "różnica"), _w("Average points scored minus allowed.",
+                                               "Średnio punkty zdobyte minus stracone."),
+                   _w("Wins by more.", "Wygrywa wyżej."), _w("Loses by more.", "Przegrywa wyżej.")),
+    'allowed': Term(_w("allowed", "pozwala"), _w("Per game, by all opposing players at the position together.",
+                                                 "Na mecz, wszystkim rywalom na tej pozycji razem."),
+                    _w("A weak defense there: good for Overs against them.", "Słaba obrona na tej pozycji: dobrze "
+                                                                              "dla Powyżej przeciw nim."),
+                    _w("A strong defense there: good for Unders.", "Mocna obrona: dobrze dla Poniżej.")),
+    'league avg': Term(_w("league avg", "średnia ligi"), _w("The average NBA defense.", "Przeciętna obrona NBA.")),
+    'vs avg %': Term(_w("vs average %", "wobec średniej %"), _w("How much more (+) or less (−) than the average "
+                                                                "defense allows.", "O ile więcej (+) lub mniej (−) "
+                                                                                   "niż przeciętna obrona."),
+                     _w("Gives up more: good for Overs against them.", "Pozwala więcej: dobrze dla Powyżej przeciw "
+                                                                       "nim."),
+                     _w("Gives up less: good for Unders.", "Pozwala mniej: dobrze dla Poniżej.")),
+    'rank': Term(_w("rank", "miejsce"), _w("1 = allows the most in the league.", "1 = pozwala najwięcej w lidze.")),
+    'starts': Term(_w("starts", "w piątce"), _w("Games started.", "Mecze w pierwszej piątce.")),
+    'missed': Term(_w("missed", "opuścił"), _w("Team games without the player (including games before he joined).",
+                                               "Mecze drużyny bez zawodnika (także sprzed jego przyjścia).")),
+    'mpg': Term(_w("minutes per game", "minuty na mecz"), _w("Average minutes played.", "Średnio rozegrane minuty."),
+                _w("A bigger role.", "Większa rola."), _w("A smaller role.", "Mniejsza rola.")),
+    'last_game': Term(_w("last game", "ostatni mecz"), _w("The most recent game.", "Najnowszy mecz.")),
+    'minutes': Term(_w("minutes", "minuty"), _w("Average minutes.", "Średnie minuty.")),
+    'shots': Term(_w("shots", "rzuty"), _w("Average field-goal attempts.", "Średnio oddane rzuty z gry.")),
+    'Out': Term(_w("out", "nie gra"), _w("Tick to mark the player out tonight and see how everyone else's estimate "
+                                         "shifts.", "Zaznacz, żeby oznaczyć zawodnika jako nieobecnego i zobaczyć, "
+                                                    "jak zmienia się szacunek pozostałych.")),
+    'role': Term(_w("role", "rola"), _w("Starter, bench or out in this lineup.", "Pierwsza piątka, rezerwa lub "
+                                                                                 "nieobecny w tym składzie.")),
+    'usual': Term(_w("usual", "zwykle"), _w("The player's average of this stat for this team.",
+                                            "Średnia zawodnika w tej statystyce w tej drużynie.")),
+    'estimate': Term(_w("estimate", "szacunek"),
+                     _w("usual + each out player's change, shrunk when it rests on few games.",
+                        "zwykle + zmiana od każdego nieobecnego, osłabiona, gdy opiera się na małej liczbie meczów."),
+                     _w("He should get more in this lineup.", "W tym składzie powinien zdobyć więcej."),
+                     _w("He should get less.", "Powinien zdobyć mniej.")),
+    'change': Term(_w("change", "zmiana"), _w("estimate − usual.", "szacunek − zwykle."),
+                   _w("More than usual.", "Więcej niż zwykle."), _w("Less than usual.", "Mniej niż zwykle.")),
+    'confidence': Term(_w("confidence", "pewność"), _w("How many games the estimate rests on: high = 10+, medium = 4–9, "
+                                                       "low = fewer.", "Na ilu meczach opiera się szacunek: wysoka = "
+                                                                       "10+, średnia = 4–9, niska = mniej.")),
+    'exact match': Term(_w("exact match", "dokładne dopasowanie"),
+                        _w("The average in team games where all five chosen starters played and everyone marked out "
+                           "missed: the closest real match, but often only a few games.",
+                           "Średnia z meczów, w których grała cała wybrana piątka, a wszyscy oznaczeni jako "
+                           "nieobecni nie grali: najbliższa prawdziwa sytuacja, ale często tylko kilka meczów.")),
+    'exact games': Term(_w("exact games", "mecze dokładne"), _w("Number of exact-match games.",
+                                                                "Liczba meczów z dokładnym dopasowaniem."),
+                        _w("A more reliable exact match.", "Bardziej wiarygodne dopasowanie."),
+                        _w("A shaky exact match.", "Niepewne dopasowanie.")),
+    'usual MIN': Term(_w("usual minutes", "zwykłe minuty"), _w("Usual minutes per game.", "Zwykłe minuty na mecz.")),
+    'exact MIN': Term(_w("exact minutes", "minuty dokładne"), _w("Minutes in the exact-match games.",
+                                                                 "Minuty w meczach z dokładnym dopasowaniem.")),
+    'lineup:signal': Term(_w("signal", "sygnał"), _w("🟢 the estimate is at least 1 above usual, 🔴 at least 1 below.",
+                                                     "🟢 szacunek jest o co najmniej 1 wyżej niż zwykle, 🔴 o co "
+                                                     "najmniej 1 niżej.")),
+    'lineup:games': Term(_w("games", "mecze"), _w("Games the player played for this team.",
+                                                  "Mecze zawodnika w tej drużynie.")),
+    'lineup:name': Term(_w("player", "zawodnik"), _w("The player.", "Zawodnik.")),
+    'team:position': Term(_w("position", "pozycja"), _w("Guards, forwards or centers.",
+                                                        "Obrońcy, skrzydłowi lub środkowi.")),
+    'team:games': Term(_w("games", "mecze"), _w("Games in the scope.", "Mecze w zakresie.")),
+    'team:name': Term(_w("player", "zawodnik"), _w("The player.", "Zawodnik.")),
+    'team:wins': Term(_w("wins", "wygrane"), _w("Games won.", "Wygrane mecze.")),
+
+    # --- the Data center ---
+    'season': Term(_w("season", "sezon"), _w("The season (named by its first year).", "Sezon (nazwany pierwszym "
+                                                                                     "rokiem).")),
+    'data:games': Term(_w("games", "mecze"), _w("Games stored.", "Zapisane mecze.")),
+    'last game': Term(_w("last game", "ostatni mecz"), _w("Date of the newest stored game.",
+                                                          "Data najnowszego zapisanego meczu.")),
+    'checked through': Term(_w("complete through", "kompletne do"),
+                            _w("Every game up to this date is stored; the next update starts the day after.",
+                               "Każdy mecz do tej daty jest zapisany; następna aktualizacja zaczyna się dzień "
+                               "później.")),
+    'pre': Term(_w("preseason", "przedsezon"), _w("Preseason games.", "Mecze przedsezonowe.")),
+    'regular': Term(_w("regular", "zasadniczy"), _w("Regular-season games.", "Mecze sezonu zasadniczego.")),
+    'playin': Term(_w("play-in", "baraże"), _w("Play-in games.", "Mecze barażowe.")),
+    'post': Term(_w("playoffs", "play-off"), _w("Playoff games.", "Mecze play-off.")),
+    'allstar': Term(_w("all-star", "all-star"), _w("All-Star games (kept out of the regular-season stats).",
+                                                   "Mecze gwiazd (poza statystykami sezonu zasadniczego).")),
+    'file': Term(_w("file", "plik"), _w("The snapshot file.", "Plik z zapisami.")),
+    'rows': Term(_w("rows", "wiersze"), _w("Rows stored.", "Zapisane wiersze.")),
+    'snapshots': Term(_w("fetches", "pobrania"), _w("Separate fetches saved.", "Zapisane osobne pobrania.")),
+    'first': Term(_w("first", "pierwsze"), _w("Oldest fetch (UTC).", "Najstarsze pobranie (UTC).")),
+    'last': Term(_w("last", "ostatnie"), _w("Newest fetch (UTC).", "Najnowsze pobranie (UTC).")),
+    'started_at': Term(_w("started (UTC)", "start (UTC)"), _w("When the run started.", "Kiedy uruchomiono.")),
+    'job': Term(_w("job", "zadanie"), _w("stats, snapshot, fetch (Superbet) or lineups (a RotoWire change).",
+                                         "stats, snapshot, fetch (Superbet) lub lineups (zmiana w RotoWire).")),
+    'command': Term(_w("command", "polecenie"), _w("What ran.", "Co uruchomiono.")),
+    'exit_code': Term(_w("exit", "kod"), _w("0 = success.", "0 = sukces.")),
+    'seconds': Term(_w("seconds", "sekundy"), _w("How long it took.", "Ile trwało.")),
+    'summary': Term(_w("summary", "podsumowanie"), _w("What was saved, or why it failed.",
+                                                      "Co zapisano albo dlaczego się nie udało.")),
+    'source': Term(_w("source", "źródło"), _w("Where the name comes from.", "Skąd pochodzi nazwisko.")),
+    'note': Term(_w("note", "uwaga"), _w("Injury tag or role.", "Oznaczenie kontuzji lub rola.")),
+    'date': Term(_w("date", "data"), _w("Game date.", "Data meczu.")),
+    'season_id': Term(_w("season", "sezon"), _w("The season's first year.", "Pierwszy rok sezonu.")),
+    'home': Term(_w("home", "gospodarz"), _w("The home team.", "Gospodarz.")),
+    'away': Term(_w("away", "gość"), _w("The away team.", "Gość.")),
+    'home_score': Term(_w("home score", "punkty gospodarza"), _w("The home team's points.", "Punkty gospodarza.")),
+    'away_score': Term(_w("away score", "punkty gościa"), _w("The away team's points.", "Punkty gościa.")),
+    'home pts (players)': Term(_w("home pts (players)", "pkt gospodarza (zawodnicy)"),
+                               _w("The home players' points added up.", "Suma punktów zawodników gospodarza.")),
+    'away pts (players)': Term(_w("away pts (players)", "pkt gościa (zawodnicy)"),
+                               _w("The away players' points added up.", "Suma punktów zawodników gościa.")),
+
+    # --- the 2022/23 backtest ---
+    'name_ESPN': Term(_w("player", "zawodnik"), _w("The player.", "Zawodnik.")),
+    'bet side': Term(_w("bet side", "grana strona"), _w("The side the chosen strategy bets.",
+                                                        "Strona, którą gra wybrana strategia.")),
+    'bet odds': Term(_w("odds", "kurs"), _w("Unibet's odds for that side.", "Kurs Unibetu na tę stronę.")),
+    'bet result': Term(_w("result", "rezultat"), _w("win / loss / push.", "wygrana / przegrana / zwrot.")),
+    'bet profit': Term(_w("profit", "zysk"), _w("Profit for 1 unit.", "Zysk na 1 jednostce."),
+                       _w("The bet won.", "Zakład wygrał."), _w("The bet lost.", "Zakład przegrał.")),
+    'strategy': Term(_w("strategy", "strategia"), _w("How the lines were bet.", "Jak grano linie.")),
+    'avg line': Term(_w("avg line", "średnia linia"), _w("Average line.", "Średnia linia.")),
+    'avg actual': Term(_w("avg result", "średni wynik"), _w("Average result.", "Średni wynik.")),
+    'actual − line': Term(_w("result − line", "wynik − linia"), _w("Average miss.", "Średni błąd linii."),
+                          _w("The lines were too low for this player.", "Linie były za niskie dla tego zawodnika."),
+                          _w("The lines were too high.", "Linie były za wysokie.")),
+    'month': Term(_w("month", "miesiąc"), _w("The month of the games.", "Miesiąc meczów.")),
+    'backtest:avg': Term(_w("avg before", "średnia przed"), _w("Season average before the game.",
+                                                               "Średnia sezonu przed meczem.")),
+    'backtest:games': Term(_w("games before", "mecze przed"), _w("Games before the line.", "Mecze przed linią.")),
+    'backtest:best side': Term(_w("model pick", "typ modelu"), _w("The model's pick.", "Typ modelu.")),
+    'backtest:team': Term(_w("team", "drużyna"), _w("The player's team.", "Drużyna zawodnika.")),
+    'backtest:signal': Term(_w("signal", "sygnał"), _w("The model's signal on the line (none = no edge).",
+                                                       "Sygnał modelu na linii (brak = bez przewagi).")),
+
     # --- game markets (Overview's biggest game edges; the Games page) ---
     'start (PL)': Term(_w("tip-off", "start"), _w("Tip-off, Polish time; ⏰ = within the next hour.",
                                                   "Start meczu, czasu polskiego; ⏰ = w ciągu godziny.")),
@@ -594,6 +751,29 @@ TERMS: Dict[str, Term] = {
                           _w("The model likes it less than the odds do.", "Model lubi go mniej niż kurs.")),
 }
 
+# the box-score stats, as columns: the code stays the header, the tooltip says what it counts
+STAT_NAMES = {'PTS': _w("Points", "Punkty"), 'REB': _w("Rebounds (offensive + defensive)", "Zbiórki (w ataku + w "
+                                                                                           "obronie)"),
+              'AST': _w("Assists", "Asysty"), '3PM': _w("Three-pointers made", "Celne rzuty za 3"),
+              '3PA': _w("Three-pointers attempted", "Rzuty za 3 oddane"), 'PA': _w("Points + assists", "Punkty + "
+                                                                                                     "asysty"),
+              'PR': _w("Points + rebounds", "Punkty + zbiórki"), 'RA': _w("Rebounds + assists", "Zbiórki + asysty"),
+              'ARP': _w("Points + rebounds + assists (PRA)", "Punkty + zbiórki + asysty (PRA)"),
+              'STL': _w("Steals", "Przechwyty"), 'BLK': _w("Blocks", "Bloki"), 'TO': _w("Turnovers", "Straty"),
+              'FGM': _w("Field goals made (2s and 3s)", "Celne rzuty z gry (za 2 i 3)"),
+              'FGA': _w("Field goals attempted (2s and 3s)", "Rzuty z gry oddane (za 2 i 3)"),
+              'FTM': _w("Free throws made", "Celne rzuty wolne"), 'FTA': _w("Free throws attempted",
+                                                                            "Rzuty wolne oddane"),
+              'PF': _w("Personal fouls", "Faule osobiste"), 'MIN': _w("Minutes played", "Rozegrane minuty"),
+              'OREB': _w("Offensive rebounds", "Zbiórki w ataku"), 'DREB': _w("Defensive rebounds",
+                                                                             "Zbiórki w obronie"),
+              'PLUS_MINUS': _w("+/-: team's points minus opponent's while the player was on court",
+                               "+/-: punkty drużyny minus rywala, gdy zawodnik był na boisku")}
+for _code, _name in STAT_NAMES.items():
+    TERMS.setdefault(_code, Term(_w('PRA' if _code == 'ARP' else '+/-' if _code == 'PLUS_MINUS' else _code,
+                                    'PRA' if _code == 'ARP' else '+/-' if _code == 'PLUS_MINUS' else _code),
+                                 _name))
+
 # the numbers a pick is decided on: their tooltips must say what more and what less means
 DECISION_TERMS = ['edge pp', 'model %', 'pick odds', 'break-even %', 'market %', 'proj avg', 'pick % L10', 'line',
                   'edge low', 'avg', 'games', 'percentile', 'line move', 'min L5', 'spread', 'game total']
@@ -634,6 +814,16 @@ VALUES = {'win': _w("win", "wygrana"), 'loss': _w("loss", "przegrana"), 'push': 
           'unresolved': _w("unresolved", "nierozstrzygnięty"), 'none': _w("none", "brak"),
           'home': _w("home", "gospodarz"), 'away': _w("away", "gość"), 'over': _w("over", "powyżej"),
           'under': _w("under", "poniżej"),
+          'Home': _w("Home", "U siebie"), 'Away': _w("Away", "Na wyjeździe"), 'Starter': _w("Starter",
+                                                                                              "Pierwsza piątka"),
+          'Bench': _w("Bench", "Rezerwa"), 'Back-to-back': _w("Back-to-back", "Dzień po dniu"),
+          '1+ days rest': _w("1+ days rest", "1+ dzień przerwy"), 'First game': _w("First game", "Pierwszy mecz"),
+          'location': _w("location", "miejsce"), 'rest': _w("rest", "przerwa"), 'minutes': _w("minutes", "minuty"),
+          'role': _w("role", "rola"), 'Teammate played': _w("Teammate played", "Kolega grał"),
+          'Teammate out': _w("Teammate out", "Kolegi nie było"), 'Out': _w("Out", "Nie gra"),
+          'Guards': _w("Guards", "Obrońcy"), 'Forwards': _w("Forwards", "Skrzydłowi"),
+          'Centers': _w("Centers", "Środkowi"), 'high': _w("high", "wysoka"), 'medium': _w("medium", "średnia"),
+          'low': _w("low", "niska"),
           'Over': _w("Over", "Powyżej"), 'Under': _w("Under", "Poniżej"), 'pass': _w("pass", "odpuść"),
           '': _w("", ""), 'starter': _w("starter", "pierwsza piątka"), 'bench': _w("bench", "rezerwa"),
           'soft': _w("soft", "łatwy"), 'tough': _w("tough", "trudny"), 'average': _w("average", "przeciętny")}
@@ -1233,6 +1423,495 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                  "Oczekiwanych wyników nie zapisywano przy tych pobraniach (są od 22.10), więc "
                                  "przeliczono je tak, jak zrobiłby to dashboard: ratingi z meczów sprzed tamtego "
                                  "wieczoru i składy RotoWire zapisane przed startem."),
+
+    # Player history
+    'ph.title': _w("Player history", "Historia zawodnika"),
+    'ph.purpose': _w("One player's games: form, how results spread around a line, season trends, splits, opponents and "
+                     "teammates.", "Mecze jednego zawodnika: forma, rozkład wyników wokół linii, sezony, podziały, "
+                                   "rywale i koledzy z drużyny."),
+    'ph.no_games': _w("No games stored for these game types.", "Brak zapisanych meczów dla tych rodzajów meczów."),
+    'ph.player': _w("Player", "Zawodnik"), 'ph.type_name': _w("Type a name...", "Wpisz nazwisko..."),
+    'ph.stat': _w("Stat", "Statystyka"), 'ph.line': _w("Line (optional)", "Linia (opcjonalnie)"),
+    'ph.line_example': _w("e.g. 18.5", "np. 18.5"),
+    'ph.line_help': _w("Colours the games over / under it and adds how often he went over",
+                       "Koloruje mecze powyżej / poniżej niej i dodaje, jak często ją przekraczał"),
+    'ph.pick': _w("Pick a player to see their history.", "Wybierz zawodnika, żeby zobaczyć jego historię."),
+    'ph.no_scope': _w("{name} has no games in the scope; the season trend below covers every stored season.",
+                      "{name} nie ma meczów w zakresie; trend sezonów poniżej obejmuje wszystkie zapisane sezony."),
+    'ph.kpi.avg': _w("Average", "Średnia"), 'ph.kpi.avg_help': _w("{n} games in the scope",
+                                                                 "{n} {n|mecz|mecze|meczów} w zakresie"),
+    'ph.kpi.last5': _w("Last 5", "Ostatnie 5"), 'ph.kpi.last5_help': _w("Average over the last 5 games, vs the average",
+                                                                       "Średnia z ostatnich 5 meczów wobec średniej"),
+    'ph.kpi.last10': _w("Last 10", "Ostatnie 10"), 'ph.kpi.median': _w("Median", "Mediana"),
+    'ph.kpi.median_help': _w("Half the games above, half below", "Połowa meczów wyżej, połowa niżej"),
+    'ph.kpi.minutes': _w("Minutes", "Minuty"),
+    'ph.kpi.minutes_help': _w("Average minutes; the small text is the last 5 games vs that",
+                              "Średnie minuty; mały tekst to ostatnie 5 meczów wobec nich"),
+    'ph.kpi.over': _w("Over {line:g}", "Powyżej {line:g}"),
+    'ph.kpi.over_help': _w("Share of games over the line; the line's percentile {pct:.0f}",
+                           "Odsetek meczów powyżej linii; percentyl linii {pct:.0f}"),
+    'ph.open_lab': _w("Open the team in Lineup lab", "Otwórz drużynę w Laboratorium składów"),
+    'ph.tab.log': _w("Game log", "Mecze"), 'ph.tab.dist': _w("Distribution", "Rozkład"),
+    'ph.tab.trend': _w("Season trend", "Sezony"), 'ph.tab.splits': _w("Splits", "Podziały"),
+    'ph.tab.opp': _w("Opponents", "Rywale"), 'ph.tab.mates': _w("With / without", "Z / bez kolegi"),
+    'ph.tab.all': _w("All games", "Wszystkie mecze"),
+    'ph.none': _w("No games in the scope.", "Brak meczów w zakresie."),
+    'ph.games': _w("Games", "Mecze"), 'ph.last_n': _w("last {n}", "ostatnie {n}"), 'ph.all': _w("all", "wszystkie"),
+    'ph.log_title': _w("{stat} per game", "{stat} na mecz"), 'ph.vs_line': _w(" vs the line", " wobec linii"),
+    'ph.log_caption': _w("Bars: each game (green over / red under the line; light = preseason). Orange: 5- and 10-game "
+                         "averages. Grey: minutes (right axis).",
+                         "Słupki: każdy mecz (zielony powyżej / czerwony poniżej linii; jasny = przedsezon). "
+                         "Pomarańczowe: średnie z 5 i 10 meczów. Szare: minuty (prawa oś)."),
+    'ph.dist_title': _w("How often each {stat} result happened", "Jak często padał każdy wynik {stat}"),
+    'ph.percentiles': _w("**Percentiles**", "**Percentyle**"),
+    'ph.pct.10': _w("10th", "10."), 'ph.pct.30': _w("30th", "30."), 'ph.pct.50': _w("median", "mediana"),
+    'ph.pct.70': _w("70th", "70."), 'ph.pct.90': _w("90th", "90."),
+    'ph.pct_caption': _w("A line below the 30th or above the 70th percentile looks unusually low or high for this "
+                         "player.", "Linia poniżej 30. lub powyżej 70. percentyla jest jak na tego zawodnika "
+                                    "nietypowo niska lub wysoka."),
+    'ph.pct_line': _w(" This line sits at the {pct:.0f}th.", " Ta linia wypada na {pct:.0f}. percentylu."),
+    'ph.trend_caption': _w("Every stored season of the chosen game types, regardless of the scope.",
+                           "Wszystkie zapisane sezony wybranych rodzajów meczów, niezależnie od zakresu."),
+    'ph.season_hover': _w("%{x}: %{y:.1f} in %{customdata[0]} games, %{customdata[1]:.1f} min",
+                          "%{x}: %{y:.1f} w %{customdata[0]} meczach, %{customdata[1]:.1f} min"),
+    'ph.line_label': _w("line {line:g}", "linia {line:g}"),
+    'ph.per_season': _w("{stat} per season", "{stat} na sezon"), 'ph.per_month': _w("{stat} per month",
+                                                                                   "{stat} na miesiąc"),
+    'ph.month_hover': _w("%{x|%b %Y}: %{y:.1f} in %{customdata} games", "%{x|%b %Y}: %{y:.1f} w %{customdata} "
+                                                                       "meczach"),
+    'ph.overall': _w("overall", "ogółem"), 'ph.by_situation': _w("{stat} by situation", "{stat} wg sytuacji"),
+    'ph.games_short': _w("g", "m"),
+    'ph.opp_hover': _w("vs %{x}: %{y:.1f} in %{customdata} games", "z %{x}: %{y:.1f} w %{customdata} meczach"),
+    'ph.career_avg': _w("career avg", "średnia kariery"),
+    'ph.opp_title': _w("{stat} against each opponent (every stored season)",
+                       "{stat} przeciw każdemu rywalowi (wszystkie zapisane sezony)"),
+    'ph.opp_caption': _w("Green = above the player's average against everyone. Few games against a team make its bar "
+                         "noisy.", "Zielony = powyżej średniej zawodnika przeciw wszystkim. Mało meczów z drużyną = "
+                                   "niepewny słupek."),
+    'ph.no_mates': _w("No teammates in the stored games.", "Brak kolegów z drużyny w zapisanych meczach."),
+    'ph.mate': _w("Teammate", "Kolega"), 'ph.together': _w("{name} – {n} games together",
+                                                           "{name} – {n} {n|wspólny mecz|wspólne mecze|wspólnych "
+                                                           "meczów}"),
+    'ph.never_missed': _w("The teammate didn't miss any of the player's games while on the team, so there's nothing "
+                          "to compare.", "Kolega nie opuścił żadnego meczu zawodnika, gdy był w drużynie, więc nie ma "
+                                         "czego porównać."),
+    'ph.mates_caption': _w("Every stored season; only games from the teammate's first to last game on the team count. "
+                           "The full matrix for a whole rotation is in Lineup lab.",
+                           "Wszystkie zapisane sezony; liczą się tylko mecze od pierwszego do ostatniego meczu kolegi "
+                           "w drużynie. Pełna tabela dla całej rotacji jest w Laboratorium składów."),
+
+    # Team history
+    'th.title': _w("Team history", "Historia drużyny"),
+    'th.purpose': _w("One team's results, how its ratings moved, what its defense allows to each position and who "
+                     "plays.", "Wyniki jednej drużyny, zmiany jej ratingów, na co pozwala jej obrona na każdej "
+                               "pozycji i kto gra."),
+    'th.none': _w("No games in the scope.", "Brak meczów w zakresie."),
+    'th.team': _w("Team", "Drużyna"), 'th.team_help': _w("Teams playing in the next 36 hours are listed first",
+                                                         "Drużyny grające w najbliższych 36 godzinach są pierwsze"),
+    'th.no_team': _w("{team} has no games in the scope.", "{team} nie ma meczów w zakresie."),
+    'th.kpi.record': _w("Record", "Bilans"), 'th.kpi.home': _w("home {record}", "u siebie {record}"),
+    'th.kpi.off': _w("Attack rating", "Rating ataku"), 'th.kpi.off_help': _w("Points scored per 100 possessions",
+                                                                          "Punkty zdobyte na 100 posiadań"),
+    'th.kpi.rank': _w("#{rank} of {n}", "{rank}. z {n}"),
+    'th.kpi.def': _w("Defense rating", "Rating obrony"),
+    'th.kpi.def_help': _w("Points allowed per 100 possessions (lower is better)",
+                          "Punkty stracone na 100 posiadań (mniej = lepiej)"),
+    'th.kpi.net': _w("Net rating", "Bilans ratingów"), 'th.kpi.net_rank': _w("#{rank}", "{rank}."),
+    'th.kpi.pace': _w("Pace", "Tempo"), 'th.kpi.pace_rank': _w("#{rank} fastest", "{rank}. najszybsze"),
+    'th.kpi.pace_help': _w("Possessions per game", "Posiadania na mecz"),
+    'th.tab.results': _w("Results", "Wyniki"), 'th.tab.trend': _w("Ratings trend", "Trend ratingów"),
+    'th.tab.defense': _w("Defense vs position", "Obrona wg pozycji"), 'th.tab.players': _w("Players", "Zawodnicy"),
+    'th.margin_title': _w("Margin per game (green = win)", "Różnica punktów na mecz (zielony = wygrana)"),
+    'th.points': _w("points", "punkty"),
+    'th.window': _w("Rolling window", "Okno średniej"), 'th.window_value': _w("{n} games", "{n} meczów"),
+    'th.off_line': _w("Attack (scored)", "Atak (zdobyte)"), 'th.def_line': _w("Defense (allowed)", "Obrona (stracone)"),
+    'th.league_avg': _w("league avg", "średnia ligi"),
+    'th.rtg_title': _w("Points per 100 possessions, {n}-game average", "Punkty na 100 posiadań, średnia z {n} meczów"),
+    'th.pace_title': _w("Pace (possessions per game), {n}-game average",
+                        "Tempo (posiadania na mecz), średnia z {n} meczów"),
+    'th.trend_caption': _w("The green line above the red one = outscoring opponents. Possessions are estimated as "
+                           "FGA + 0.44·FTA + TO − OREB.",
+                           "Zielona linia nad czerwoną = drużyna zdobywa więcej niż traci. Posiadania szacowane jako "
+                           "FGA + 0.44·FTA + TO − OREB."),
+    'th.stat_allowed': _w("Stat allowed", "Statystyka rywali"),
+    'th.def_title': _w("{stat} {team} allows vs the average defense (green = gives up more: good for Overs against "
+                       "them)", "{stat}, na które {team} pozwala, wobec przeciętnej obrony (zielony = pozwala więcej: "
+                                "dobrze dla Powyżej przeciw nim)"),
+    'th.vs_league': _w("% vs league", "% wobec ligi"),
+    'th.no_players': _w("No players in the scope.", "Brak zawodników w zakresie."),
+    'th.open_lab': _w("Open {team} in Lineup lab", "Otwórz {team} w Laboratorium składów"),
+
+    # Lineup lab
+    'll.title': _w("Lineup lab", "Laboratorium składów"),
+    'll.purpose': _w("How each player's numbers change when a teammate doesn't play, for any team, with or without an "
+                     "expected lineup; then an estimate for a lineup you pick.",
+                     "Jak zmieniają się liczby każdego zawodnika, gdy kolega nie gra, dla dowolnej drużyny, z "
+                     "przewidywanym składem lub bez; potem szacunek dla wybranego składu."),
+    'll.source.rotowire': _w("📋 RotoWire tonight", "📋 RotoWire dziś"), 'll.source.last': _w("Last game",
+                                                                                            "Ostatni mecz"),
+    'll.source.frequent': _w("Most frequent (last 10)", "Najczęstszy (ost. 10)"),
+    'll.source.custom': _w("Custom", "Własny"),
+    'll.team': _w("Team", "Drużyna"), 'll.team_help': _w("Teams playing today (Superbet or RotoWire) are listed first",
+                                                         "Drużyny grające dziś (Superbet lub RotoWire) są pierwsze"),
+    'll.stat': _w("Stat", "Statystyka"),
+    'll.all_seasons': _w("Use every stored season", "Użyj wszystkich zapisanych sezonów"),
+    'll.all_seasons_help': _w("Early in the season there are too few games without anyone. Earlier seasons only count "
+                              "while both players were on the team.",
+                              "Na początku sezonu jest za mało meczów bez danego zawodnika. Wcześniejsze sezony liczą "
+                              "się tylko wtedy, gdy obaj byli w drużynie."),
+    'll.settings': _w("Settings", "Ustawienia"),
+    'll.min_games': _w("Rotation: min games", "Rotacja: min. meczów"),
+    'll.min_games_help': _w("Fewer games for this team = left out", "Mniej meczów w tej drużynie = pominięty"),
+    'll.min_minutes': _w("Rotation: min minutes", "Rotacja: min. minut"),
+    'll.min_minutes_help': _w("Lower average = left out", "Niższa średnia = pominięty"),
+    'll.min_without': _w("Table: min games without", "Tabela: min. meczów bez"),
+    'll.min_without_help': _w("Cells based on fewer games without the teammate stay empty",
+                              "Komórki z mniejszą liczbą meczów bez kolegi zostają puste"),
+    'll.shrink': _w("Estimate: shrink", "Szacunek: ostrożność"),
+    'll.shrink_help': _w("Each change is weighted by n / (n + this), n = games without that teammate",
+                         "Każda zmiana waży n / (n + ta liczba), n = mecze bez danego kolegi"),
+    'll.no_rotation': _w("No players with {games}+ games and {minutes}+ minutes for {team} in these games.",
+                         "Brak zawodników z {games}+ meczami i {minutes}+ minutami w {team} w tych meczach."),
+    'll.lineup_from': _w("Lineup from", "Skład z"),
+    'll.lineup_from_help': _w("RotoWire's expected starters and out players when it lists the team today; otherwise "
+                              "the last game's starters or the most frequent starters of the last 10 games",
+                              "Przewidywana piątka i nieobecni z RotoWire, gdy podaje drużynę dziś; inaczej piątka z "
+                              "ostatniego meczu lub najczęstsza z ostatnich 10 meczów"),
+    'll.no_rotowire': _w("📋 RotoWire lists no lineup for {team} today, so the lineup comes from the stored games. "
+                         "Pick who's out yourself.", "📋 RotoWire nie podaje dziś składu {team}, więc skład pochodzi z "
+                                                     "zapisanych meczów. Wybierz nieobecnych samodzielnie."),
+    'll.rotowire': _w("📋 RotoWire: **{status}** lineup. May not play: {names}",
+                      "📋 RotoWire: skład **{status}**. Może nie zagrać: {names}"),
+    'll.starting': _w("Starting five", "Pierwsza piątka"),
+    'll.starting_help': _w("Used for the exact-match games: team games where all five started",
+                           "Używana do dokładnego dopasowania: mecze, w których zaczęła cała piątka"),
+    'll.out': _w("Out", "Nieobecni"),
+    'll.out_help': _w("Missing players: their with / without changes are added to everyone else's estimate",
+                      "Brakujący zawodnicy: ich zmiany z / bez są dodawane do szacunku pozostałych"),
+    'll.pick_five': _w("Pick 5 starters ({n} selected).", "Wybierz 5 zawodników piątki (wybrano {n})."),
+    'll.matrix': _w("With / without table · {stat}", "Tabela z / bez · {stat}"),
+    'll.relative': _w("Show as % of the player's usual average", "Pokaż jako % zwykłej średniej zawodnika"),
+    'll.out_mark': _w(" (OUT)", " (NIE GRA)"),
+    'll.hover': _w("{row} when {col} is out<br>with: {with_:.1f} in {n_with:.0f} games<br>without: {without:.1f} in "
+                   "{n_without:.0f} games", "{row}, gdy {col} nie gra<br>z nim: {with_:.1f} w {n_with:.0f} meczach<br>"
+                                            "bez niego: {without:.1f} w {n_without:.0f} meczach"),
+    'll.never': _w("{col} never missed a game {row} played", "{col} nie opuścił żadnego meczu, w którym grał {row}"),
+    'll.colorbar': _w("change", "zmiana"), 'll.colorbar_pct': _w("% change", "% zmiany"),
+    'll.matrix_caption': _w("Each cell: the row player's {stat} when the column player is **out** minus when he plays "
+                            "(green = more). ★ = starting five. Empty: fewer than {n} games without that player. Only "
+                            "games inside the column player's time on the team count. Hover a cell for the averages "
+                            "and games behind it.",
+                            "Każda komórka: {stat} zawodnika z wiersza, gdy zawodnik z kolumny **nie gra**, minus gdy "
+                            "gra (zielony = więcej). ★ = pierwsza piątka. Puste: mniej niż {n} meczów bez tego "
+                            "zawodnika. Liczą się tylko mecze z okresu, gdy zawodnik z kolumny był w drużynie. Najedź "
+                            "na komórkę, żeby zobaczyć średnie i mecze."),
+    'll.estimate': _w("Estimate for this lineup", "Szacunek dla tego składu"),
+    'll.nobody_out': _w("Nobody is out, so every estimate equals the usual average. Tick Out to see how the others "
+                        "shift.", "Nikt nie jest nieobecny, więc każdy szacunek równa się zwykłej średniej. Zaznacz "
+                                  "'nie gra', żeby zobaczyć, jak zmieniają się pozostali."),
+    'll.calculated': _w(" — calculated from the scraped games", " — wyliczone z pobranych meczów"),
+    'll.scenario_caption': _w("Tick **out** to take a player out, untick to bring him back. estimate = usual + each "
+                              "out player's change, shrunk when based on few games; exact match = the average in "
+                              "games with exactly this situation.",
+                              "Zaznacz **nie gra**, żeby wyłączyć zawodnika, odznacz, żeby przywrócić. szacunek = "
+                              "zwykle + zmiana od każdego nieobecnego, osłabiona przy małej liczbie meczów; dokładne "
+                              "dopasowanie = średnia z meczów z dokładnie taką sytuacją."),
+    'll.open_player': _w("Open a player's history...", "Otwórz historię zawodnika..."),
+    'll.open': _w("Open in Player history", "Otwórz w Historii zawodnika"),
+    'll.matrix_spinner': _w("Calculating with / without for every pair...", "Liczę z / bez dla każdej pary..."),
+
+    # Backtest 2022/23 (core/backtest_view.py)
+    'bt.title': _w("Backtest 2022/23", "Test wsteczny 2022/23"),
+    'bt.purpose': _w("Today's props model on Unibet's 2022/23 player lines: how it would have done, a strategy tester "
+                     "for any slice of those lines, and how each player's lines resolved.",
+                     "Dzisiejszy model zawodników na liniach Unibetu z sezonu 2022/23: jak by sobie poradził, tester "
+                     "strategii dla dowolnego wycinka tych linii i jak rozstrzygały się linie każdego zawodnika."),
+    'bt.view.summary': _w("Summary", "Podsumowanie"), 'bt.view.tester': _w("Strategy tester", "Tester strategii"),
+    'bt.view.player': _w("Player", "Zawodnik"), 'bt.view.calibration': _w("Calibration", "Kalibracja"),
+    'bt.bet.model': _w("Model pick", "Typ modelu"), 'bt.bet.average': _w("Toward the season average",
+                                                                         "W stronę średniej sezonu"),
+    'bt.bet.under': _w("Always Under", "Zawsze Poniżej"), 'bt.bet.over': _w("Always Over", "Zawsze Powyżej"),
+    'bt.no_bets': _w("No decided bets.", "Brak rozstrzygniętych zakładów."),
+    'bt.kpi.bets': _w("Bets", "Zakłady"), 'bt.kpi.pushes': _w("{n} pushes", "{n} {n|zwrot|zwroty|zwrotów}"),
+    'bt.kpi.hit': _w("Won", "Wygrane"), 'bt.kpi.needs': _w("needs {be:.1f}%", "potrzeba {be:.1f}%"),
+    'bt.kpi.hit_help': _w("95% range {low:.1f}–{high:.1f}%. Needs = break-even at the odds (the average of 1 / odds)",
+                          "95% przedział {low:.1f}–{high:.1f}%. Potrzeba = próg opłacalności przy tych kursach "
+                          "(średnia z 1 / kurs)"),
+    'bt.kpi.profit': _w("Profit", "Zysk"), 'bt.kpi.profit_help': _w("Units, 1 unit on every bet",
+                                                                    "Jednostki, 1 jednostka na każdy zakład"),
+    'bt.kpi.roi': _w("Profit per 100", "Zysk na 100"),
+    'bt.curve_hover': _w("%{x|%b %d}: total %{y:+.1f} u<br>%{customdata[0]} bets, %{customdata[1]:+.1f} u that day",
+                         "%{x|%b %d}: łącznie %{y:+.1f} j.<br>%{customdata[0]} zakładów, %{customdata[1]:+.1f} j. "
+                         "tego dnia"),
+    'bt.units': _w("units", "jednostki"),
+    'bt.lines_caption': _w("{n} main lines of players with {games}+ games, {dates} dates.",
+                           "{n} głównych linii zawodników z {games}+ meczami, {dates} dni."),
+    'bt.kpi.picks_hit': _w("Model picks: won", "Typy modelu: wygrane"),
+    'bt.kpi.picks_hit_help': _w("Every line's model pick; break-even at these odds is about 52.5%",
+                                "Typ modelu na każdej linii; próg opłacalności przy tych kursach to ok. 52.5%"),
+    'bt.kpi.picks_roi': _w("Model picks: profit per 100", "Typy modelu: zysk na 100"),
+    'bt.kpi.green_roi': _w("🟢 picks: profit per 100", "Typy 🟢: zysk na 100"),
+    'bt.kpi.n_bets': _w("{n} bets", "{n} {n|zakład|zakłady|zakładów}"),
+    'bt.kpi.under_roi': _w("Always Under: profit per 100", "Zawsze Poniżej: zysk na 100"),
+    'bt.kpi.under_help': _w("The simplest baseline", "Najprostszy punkt odniesienia"),
+    'bt.strategies': _w("**Strategies on the same lines**", "**Strategie na tych samych liniach**"),
+    'bt.cal_title': _w("Model chance vs how often the pick won", "Szansa modelu a jak często typ wygrywał"),
+    'bt.by': _w("**Model pick – {what}**", "**Typ modelu – {what}**"),
+    'bt.by.signal': _w("by signal", "wg sygnału"), 'bt.by.edge': _w("by edge (pp)", "wg przewagi (pp)"),
+    'bt.by.stat': _w("by stat", "wg statystyki"), 'bt.by.month': _w("by month", "wg miesiąca"),
+    'bt.tester_caption': _w("Choose which lines to bet and how; every number below is for exactly that selection, 1 "
+                            "unit per bet at Unibet's odds.", "Wybierz, które linie grać i jak; każda liczba poniżej "
+                                                              "dotyczy dokładnie tego wyboru, 1 jednostka na zakład "
+                                                              "po kursach Unibetu."),
+    'bt.dates': _w("Game dates", "Daty meczów"), 'bt.players': _w("Players", "Zawodnicy"),
+    'bt.all_players': _w("All players", "Wszyscy zawodnicy"), 'bt.stats': _w("Stats", "Statystyki"),
+    'bt.none_all': _w("None picked = all", "Nic nie wybrane = wszystkie"),
+    'bt.signal': _w("Model signal", "Sygnał modelu"),
+    'bt.signal_help': _w("The model's signal on the line, whatever you bet on. None picked = all",
+                         "Sygnał modelu na linii, niezależnie od tego, co grasz. Nic nie wybrane = wszystkie"),
+    'bt.bet_on': _w("Bet on", "Graj"), 'bt.side': _w("Side", "Strona"),
+    'bt.side_help': _w("Only the bets on this side; none picked = both", "Tylko zakłady na tę stronę; nic = obie"),
+    'bt.more': _w("More filters", "Więcej filtrów"),
+    'bt.use_edge': _w("Minimum model edge", "Minimalna przewaga modelu"),
+    'bt.use_edge_help': _w("Only lines where the model's edge (for its own pick) is at least this many pp",
+                           "Tylko linie, gdzie przewaga modelu (dla jego typu) wynosi co najmniej tyle pp"),
+    'bt.edge': _w("Edge (pp)", "Przewaga (pp)"), 'bt.min_games': _w("Min games before the line",
+                                                                    "Min. meczów przed linią"),
+    'bt.main': _w("Main lines only", "Tylko główne linie"),
+    'bt.main_help': _w("The most balanced line per player, stat and game; off = also alternative lines",
+                       "Najbardziej wyrównana linia na zawodnika, statystykę i mecz; wyłączone = także linie "
+                       "alternatywne"),
+    'bt.filters': _w("Filters: {list}", "Filtry: {list}"), 'bt.f.edge': _w("edge ≥ {edge:g}", "przewaga ≥ {edge:g}"),
+    'bt.f.games': _w("{n}+ games", "{n}+ meczów"), 'bt.f.main': _w("main lines", "główne linie"),
+    'bt.no_match': _w("No bets match these filters.", "Żaden zakład nie pasuje do filtrów."),
+    'bt.curve': _w("Cumulative profit", "Łączny zysk"),
+    'bt.by_stat': _w("**By stat**", "**Wg statystyki**"), 'bt.by_side': _w("**By side**", "**Wg strony**"),
+    'bt.the_bets': _w("**The {n} bets**", "**{n} {n|zakład|zakłady|zakładów}**"),
+    'bt.player': _w("Player", "Zawodnik"), 'bt.player_lines': _w("{name} ({n} lines)", "{name} ({n} "
+                                                                                       "{n|linia|linie|linii})"),
+    'bt.player_pick': _w("Type a name... (most lines first)", "Wpisz nazwisko... (najwięcej linii najpierw)"),
+    'bt.pick_player': _w("Pick a player to see how their 2022/23 lines resolved and how the model did on them.",
+                         "Wybierz zawodnika, żeby zobaczyć, jak rozstrzygały się jego linie 2022/23 i jak radził "
+                         "sobie na nich model."),
+    'bt.kpi.lines': _w("Lines", "Linie"), 'bt.kpi.games': _w("{n} games", "{n} {n|mecz|mecze|meczów}"),
+    'bt.kpi.over': _w("Went over", "Powyżej linii"),
+    'bt.kpi.over_help': _w("How often the result beat the line (pushes left out)",
+                           "Jak często wynik przebił linię (zwroty pominięte)"),
+    'bt.kpi.miss': _w("Result − line", "Wynik − linia"),
+    'bt.kpi.miss_help': _w("Average miss: + = the lines were set too low for this player",
+                           "Średni błąd: + = linie były za niskie dla tego zawodnika"),
+    'bt.kpi.picks_profit': _w("Model picks: profit", "Typy modelu: zysk"),
+    'bt.stat': _w("Stat", "Statystyka"),
+    'bt.line': _w("line", "linia"), 'bt.avg_before': _w("season average before", "średnia sezonu przed"),
+    'bt.result': _w("result", "wynik"),
+    'bt.player_hover': _w("%{x|%b %d}: %{y} vs line %{customdata[0]}<br>model pick %{customdata[1]} %{customdata[2]}",
+                          "%{x|%b %d}: %{y} wobec linii %{customdata[0]}<br>typ modelu %{customdata[1]} "
+                          "%{customdata[2]}"),
+    'bt.player_chart': _w("{name}: {stat} lines and results (green = over the line)",
+                          "{name}: linie i wyniki {stat} (zielone = powyżej linii)"),
+    'bt.resolved': _w("**How the lines resolved, by stat**", "**Jak rozstrzygały się linie, wg statystyki**"),
+    'bt.model_on_them': _w("**The model's picks on them**", "**Typy modelu na nich**"),
+    'bt.every_pick': _w("Betting every model pick on {name}", "Granie każdego typu modelu na {name}"),
+    'bt.every_line': _w("**Every line**", "**Każda linia**"),
+    'bt.no_file': _w("No backtest yet. Run `python -m backtest.run` (about 10 minutes) to price Unibet's 2022/23 lines "
+                     "with today's model.", "Brak testu wstecznego. Uruchom `python -m backtest.run` (ok. 10 minut), "
+                                            "żeby wycenić linie Unibetu 2022/23 dzisiejszym modelem."),
+    'bt.lineup': _w("Tonight's lineup", "Dzisiejszy skład"),
+    'bt.lineup.none': _w("Not known (no RotoWire)", "Nieznany (bez RotoWire)"),
+    'bt.lineup.absences': _w("Perfectly known (upper bound)", "Znany idealnie (górna granica)"),
+    'bt.lineup_help': _w("What the model knew about who's out: nothing, or exactly who didn't play (an upper bound for "
+                         "RotoWire's value)", "Co model wiedział o nieobecnych: nic albo dokładnie, kto nie zagrał "
+                                              "(górna granica wartości RotoWire)"),
+    'bt.view': _w("View", "Widok"),
+    'bt.caption': _w("Unibet's 2022/23 player lines, each priced by today's props model from the games before its date "
+                     "only. No historical game odds, so the implied-team-total factor is off. Details: "
+                     "data/backtest/2022_summary.md.",
+                     "Linie Unibetu z sezonu 2022/23, każda wyceniona dzisiejszym modelem tylko z meczów sprzed jej "
+                     "daty. Brak historycznych kursów na mecze, więc czynnik oczekiwanych punktów drużyny jest "
+                     "wyłączony. Szczegóły: data/backtest/2022_summary.md."),
+    'bt.in_sample': _w(" Our chance, edges and signals are calibrated with coefficients fitted on this same season, so "
+                       "these numbers are in-sample: the honest check on unseen games is under Calibration.",
+                       " Nasza szansa, przewagi i sygnały są skalibrowane współczynnikami dopasowanymi na tym samym "
+                       "sezonie, więc te liczby są 'w próbie': rzetelny test na nieznanych meczach jest w "
+                       "Kalibracji."),
+    'bt.no_calibration': _w("No calibration yet. Run `python -m backtest.calibrate` after the backtest.",
+                            "Brak kalibracji. Uruchom `python -m backtest.calibrate` po teście wstecznym."),
+    'bt.report_english': _w("The report below is technical and in English.",
+                            "Raport poniżej jest techniczny i po angielsku."),
+
+    # every page: header, scope, sidebar, empty states (core/ui.py, core/state.py, core/freshness.py, schedule.py)
+    'scope.button': _w("Scope: {label}", "Zakres: {label}"),
+    'scope.help': _w("Which seasons and game types the numbers on every page use",
+                     "Z jakich sezonów i rodzajów meczów pochodzą liczby na każdej stronie"),
+    'scope.seasons': _w("Seasons", "Sezony"),
+    'scope.seasons_help': _w("Games from these seasons feed the averages, hit rates and the model",
+                             "Mecze z tych sezonów zasilają średnie, skuteczności i model"),
+    'scope.types': _w("Game types", "Rodzaje meczów"),
+    'scope.types_help': _w("Preseason is left out by default (starters play short minutes). Players with fewer than 10 "
+                           "games get their latest games of last season added",
+                           "Przedsezon jest domyślnie pominięty (podstawowi grają krótko). Zawodnikom z mniej niż 10 "
+                           "meczami dodawane są ostatnie mecze z zeszłego sezonu"),
+    'scope.every_page': _w("Applies to every page.", "Dotyczy każdej strony."),
+    'scope.all_types': _w("all game types", "wszystkie rodzaje meczów"),
+    'type.pre': _w("Preseason", "Przedsezon"), 'type.regular': _w("Regular season", "Sezon zasadniczy"),
+    'type.playin': _w("Play-in", "Baraże"), 'type.post': _w("Playoffs", "Play-off"),
+    'side.freshness': _w("**Data freshness**", "**Świeżość danych**"),
+    'side.stats': _w("📊 ESPN stats", "📊 Statystyki ESPN"), 'side.superbet': _w("💰 Superbet odds", "💰 Kursy Superbetu"),
+    'side.rotowire': _w("📋 RotoWire lineups", "📋 Składy RotoWire"),
+    'side.update': _w("Update in the Data center", "Zaktualizuj w Centrum danych"),
+    'ui.fetch_new': _w("Fetch new offers in the Data center", "Pobierz nowe oferty w Centrum danych"),
+    'ui.last_night': _w("See how the last night's lines resolved", "Zobacz, jak rozstrzygnęły się linie z wczoraj"),
+    'ui.open_data': _w("Open the Data center", "Otwórz Centrum danych"),
+    'fresh.just_now': _w("just now", "przed chwilą"), 'fresh.min_ago': _w("{n} min ago", "{n} min temu"),
+    'fresh.h_ago': _w("{n} h ago", "{n} h temu"), 'fresh.days_ago': _w("{n} days ago",
+                                                                      "{n} {n|dzień|dni|dni} temu"),
+    'fresh.no_games': _w("no games stored", "brak zapisanych meczów"),
+    'fresh.run_update': _w("Run the stats update", "Uruchom aktualizację statystyk"),
+    'fresh.through': _w("through {day}", "do {day}"),
+    'fresh.complete': _w("Every finished game is stored", "Każdy zakończony mecz jest zapisany"),
+    'fresh.behind': _w("{n} {n|day|days|days} of games missing: run the stats update",
+                       "Brakuje meczów z {n} {n|dnia|dni|dni}: uruchom aktualizację statystyk"),
+    'fresh.not_fetched': _w("not fetched", "nie pobrano"),
+    'fresh.none_yet': _w("No {what} yet: fetch them in the Data center", "Brak {what}: pobierz je w Centrum danych"),
+    'fresh.fetched': _w("fetched {age}", "pobrano {age}"),
+    'fresh.fetched_detail': _w("{count}fetched {when}", "{count}pobrano {when}"),
+    'fresh.count': _w("{n} {what}, ", "{n} {what}, "),
+    'fresh.snapshot': _w("snapshot, {age}", "zapis, {age}"),
+    'fresh.snapshot_count': _w("{n} {what} from the snapshot", "{n} {what} z zapisu"),
+    'fresh.snapshot_plain': _w("Snapshot", "Zapis"),
+    'fresh.saved': _w("{count} saved {when}", "{count} zapisano {when}"),
+    'fresh.unreachable': _w(": the site couldn't be reached", ": strona była niedostępna"),
+    'fresh.lines': _w("lines", "linii"), 'fresh.players': _w("players", "zawodników"),
+    'offers.none_saved': _w("**No Superbet offers yet.** Nothing has been fetched: fetch today's offers manually.",
+                            "**Brak ofert Superbetu.** Nic jeszcze nie pobrano: pobierz dzisiejsze oferty ręcznie."),
+    'offers.all_started': _w("**No Superbet bets available right now.** Every game of the last fetch ({when}: {lines} "
+                             "player lines on {games} games, night of {nights}) has tipped off. Fetch new offers "
+                             "manually; the last night's lines can be checked against the results.",
+                             "**Brak dostępnych zakładów Superbetu.** Wszystkie mecze z ostatniego pobrania ({when}: "
+                             "{lines} linii zawodników w {games} {games|meczu|meczach|meczach}, wieczór {nights}) już "
+                             "się zaczęły. Pobierz nowe oferty ręcznie; linie z ostatniego wieczoru można sprawdzić "
+                             "z wynikami."),
+    'offers.pending': _w(" Their results are pending until the stats are updated with that night's games.",
+                         " Ich wyniki będą dostępne po aktualizacji statystyk o mecze z tamtego wieczoru."),
+
+    # Data center
+    'dc.title': _w("Data center", "Centrum danych"),
+    'dc.purpose': _w("Fetch fresh stats, odds and lineups, and check that the stored data is complete. Every other page "
+                     "reads what's here.", "Pobierz świeże statystyki, kursy i składy oraz sprawdź, czy zapisane dane "
+                                           "są kompletne. Wszystkie inne strony czytają to, co jest tutaj."),
+    'dc.routine': _w("**Morning routine** · stores last night's games from ESPN, then saves a snapshot of Superbet's "
+                     "lines and RotoWire's lineups (needed for line movement and the Results page). About a minute.",
+                     "**Poranna rutyna** · zapisuje wczorajsze mecze z ESPN, potem zapis linii Superbetu i składów "
+                     "RotoWire (potrzebne do ruchu linii i strony Wyniki). Około minuty."),
+    'dc.run_both': _w("Run both", "Uruchom oba"),
+    'dc.cooldown': _w("Superbet was contacted less than {min} minutes ago; try again in {wait} min.",
+                      "Superbet był odpytywany mniej niż {min} minut temu; spróbuj ponownie za {wait} min."),
+    'dc.stats_only': _w(" Updating the stats only.", " Aktualizuję tylko statystyki."),
+    'dc.fetching': _w("Fetching and saving Superbet's offers...", "Pobieram i zapisuję oferty Superbetu..."),
+    'dc.fetch_failed': _w("Superbet couldn't be fetched: {error}. The pages keep using the previous fetch.",
+                          "Nie udało się pobrać Superbetu: {error}. Strony używają poprzedniego pobrania."),
+    'dc.fetched': _w("Fetched and saved Superbet's offers", "Pobrano i zapisano oferty Superbetu"),
+    'dc.last_stats': _w("{ok} Last stats update from the dashboard {when}: {summary}",
+                        "{ok} Ostatnia aktualizacja statystyk z dashboardu {when}: {summary}"),
+    'dc.no_output': _w("(no output)", "(brak komunikatu)"),
+    'dc.how.fetch': _w("Fetch & save / Fetch from Superbet", "Pobierz i zapisz / Pobierz z Superbetu"),
+    'dc.how.snapshot': _w("snapshot run", "zapis oferty"),
+    'dc.no_fetch': _w("No Superbet fetch saved yet.", "Nie zapisano jeszcze żadnego pobrania Superbetu."),
+    'dc.last_fetch': _w("✅ Last saved fetch {when}: {lines} player lines, {games} games",
+                        "✅ Ostatnie zapisane pobranie {when}: {lines} linii zawodników, {games} "
+                        "{games|mecz|mecze|meczów}"),
+    'dc.later_failed': _w("❌ Later attempt {when} ({how}) failed: {summary}",
+                          "❌ Późniejsza próba {when} ({how}) nie powiodła się: {summary}"),
+    'dc.no_lineups': _w("No RotoWire lineups saved yet.", "Nie zapisano jeszcze składów RotoWire."),
+    'dc.last_lineups': _w("✅ Last saved lineups {when}: {n} players ({days}). Every fetch that changed something is "
+                          "saved.", "✅ Ostatnie zapisane składy {when}: {n} zawodników ({days}). Każde pobranie, "
+                                    "które coś zmieniło, jest zapisywane."),
+    'dc.stats_card': _w("#### 📊 ESPN stats", "#### 📊 Statystyki ESPN"),
+    'dc.games_season': _w("Games this season", "Mecze w tym sezonie"), 'dc.last_game': _w("Last game",
+                                                                                          "Ostatni mecz"),
+    'dc.update': _w("Update {season}", "Aktualizuj {season}"),
+    'dc.update_help': _w("python -m espn_scraper: adds every finished game that isn't stored yet. Safe to run often.",
+                         "python -m espn_scraper: dodaje każdy zakończony mecz, którego jeszcze nie ma. Można "
+                         "uruchamiać często."),
+    'dc.other': _w("Other seasons, dates or one game", "Inne sezony, daty lub jeden mecz"),
+    'dc.season': _w("Season", "Sezon"),
+    'dc.how.new': _w("New games", "Nowe mecze"), 'dc.how.range': _w("A date range", "Zakres dat"),
+    'dc.how.one': _w("One game", "Jeden mecz"), 'dc.how.rebuild': _w("Rebuild the season", "Odbuduj sezon"),
+    'dc.from': _w("From", "Od"), 'dc.to': _w("To", "Do"), 'dc.game_id': _w("ESPN game id", "Id meczu ESPN"),
+    'dc.game_id_help': _w("Re-scrapes the game and replaces what's stored for it",
+                          "Pobiera mecz ponownie i zastępuje zapisane dane"),
+    'dc.rebuild_confirm': _w("Yes, delete {season} and scrape it again (takes long)",
+                             "Tak, usuń {season} i pobierz ponownie (trwa długo)"),
+    'dc.run': _w("Run", "Uruchom"),
+    'dc.superbet_card': _w("#### 💰 Superbet odds", "#### 💰 Kursy Superbetu"),
+    'dc.lines': _w("Player lines", "Linie zawodników"),
+    'dc.lines_help': _w("Over / Under lines on players in the next 36 hours (none in preseason)",
+                        "Linie Powyżej / Poniżej na zawodników w najbliższych 36 godzinach (brak w przedsezonie)"),
+    'dc.games': _w("Games", "Mecze"),
+    'dc.games_help': _w("Games with winner / handicap / total bets in the next 36 hours",
+                        "Mecze z zakładami na zwycięzcę / handicap / sumę w najbliższych 36 godzinach"),
+    'dc.superbet_caption': _w("Superbet blocks frequent requests, so it's only contacted when you press a button here "
+                              "(at most once per {min} minutes). Every fetch is saved; the pages use the newest one "
+                              "until its games tip off.",
+                              "Superbet blokuje częste zapytania, więc jest odpytywany tylko po naciśnięciu przycisku "
+                              "tutaj (najwyżej raz na {min} minut). Każde pobranie jest zapisywane; strony używają "
+                              "najnowszego, dopóki jego mecze się nie zaczną."),
+    'dc.all_started': _w("Every game of the last fetch has tipped off: fetch again for new offers.",
+                         "Wszystkie mecze z ostatniego pobrania już się zaczęły: pobierz ponownie po nowe oferty."),
+    'dc.last_failed': _w("The last fetch failed: {error}", "Ostatnie pobranie nie powiodło się: {error}"),
+    'dc.fetch': _w("Fetch & save", "Pobierz i zapisz"),
+    'dc.again_in': _w("Possible again in {n} min", "Możliwe ponownie za {n} min"),
+    'dc.fetch_help': _w("Fetch Superbet's offers and save them with our pick for every line (kept after a restart; "
+                        "used for line movement and the Results page)",
+                        "Pobierz oferty Superbetu i zapisz je z naszym typem dla każdej linii (zostają po restarcie; "
+                        "używane do ruchu linii i strony Wyniki)"),
+    'dc.snapshot': _w("Snapshot with lineups", "Zapis ze składami"),
+    'dc.snapshot_help': _w("python daily_snapshot.py: the same as Fetch & save, plus RotoWire's lineups saved with it",
+                           "python daily_snapshot.py: to samo co Pobierz i zapisz, plus zapis składów RotoWire"),
+    'dc.rotowire_card': _w("#### 📋 RotoWire lineups", "#### 📋 Składy RotoWire"),
+    'dc.teams': _w("Teams listed", "Podane drużyny"), 'dc.confirmed': _w("{n} confirmed", "{n} potwierdzonych"),
+    'dc.teams_help': _w("Teams on RotoWire's lineups page today", "Drużyny na stronie składów RotoWire dziś"),
+    'dc.may_not_play': _w("May not play", "Może nie zagrać"),
+    'dc.may_not_play_help': _w("Players listed as out, doubtful or questionable",
+                               "Zawodnicy oznaczeni jako nieobecni, wątpliwi lub niepewni"),
+    'dc.rw_error': _w("RotoWire couldn't be read, showing the last snapshot. {error}",
+                      "Nie udało się odczytać RotoWire, pokazuję ostatni zapis. {error}"),
+    'dc.fetch_live': _w("Fetch live", "Pobierz teraz"),
+    'dc.fetch_live_help': _w("Read RotoWire's lineups page again; saved when something changed",
+                             "Odczytaj ponownie stronę składów RotoWire; zapisywane, gdy coś się zmieniło"),
+    'dc.tomorrow': _w("Snapshot for tomorrow", "Zapis na jutro"),
+    'dc.tomorrow_help': _w("python daily_snapshot.py --tomorrow: RotoWire's lineups for tomorrow's games",
+                           "python daily_snapshot.py --tomorrow: składy RotoWire na jutrzejsze mecze"),
+    'dc.rw_caption': _w("RotoWire's lineups are kept for 30 minutes, then fetched again when a page needs them, and "
+                        "saved whenever they changed. To run the morning routine automatically, see the scheduled tasks "
+                        "in the README.", "Składy RotoWire są przechowywane 30 minut, potem pobierane ponownie, gdy "
+                                          "strona ich potrzebuje, i zapisywane, gdy się zmieniły. Aby poranna rutyna "
+                                          "uruchamiała się sama, zobacz zaplanowane zadania w README."),
+    'dc.reload': _w("Reload snapshots and lineups", "Wczytaj ponownie zapisy i składy"),
+    'dc.reload_help': _w("Re-read the saved snapshots and fetch RotoWire again (doesn't contact Superbet)",
+                         "Odczytaj ponownie zapisy i pobierz RotoWire (bez odpytywania Superbetu)"),
+    'dc.tab.stored': _w("Stored data", "Zapisane dane"), 'dc.tab.runs': _w("Recent runs", "Ostatnie uruchomienia"),
+    'dc.tab.names': _w("Name matching", "Dopasowanie nazwisk"), 'dc.tab.quality': _w("Data quality",
+                                                                                     "Jakość danych"),
+    'dc.no_runs': _w("No runs from the dashboard yet. They're logged to {path}.",
+                     "Brak uruchomień z dashboardu. Są zapisywane w {path}."),
+    'dc.unmatched': _w("{n} names from today's sources don't match a player in the game logs. Players without a game "
+                       "yet (rookies, long injuries) are expected; for others add an entry to OVERRIDES in "
+                       "name_resolver.py.", "{n} {n|nazwisko z dzisiejszych źródeł nie pasuje|nazwiska z dzisiejszych "
+                                            "źródeł nie pasują|nazwisk z dzisiejszych źródeł nie pasuje} do zawodnika w "
+                                            "meczach. Zawodnicy bez meczu (debiutanci, długie kontuzje) są oczekiwani; "
+                                            "dla pozostałych dodaj wpis do OVERRIDES w name_resolver.py."),
+    'dc.all_matched': _w("Every RotoWire and Superbet name matches a player in the game logs.",
+                         "Każde nazwisko z RotoWire i Superbetu pasuje do zawodnika w meczach."),
+    'dc.points_ok': _w("In every stored game the players' points add up to the team score.",
+                       "W każdym zapisanym meczu punkty zawodników sumują się do wyniku drużyny."),
+    'dc.points_bad': _w("{n} games where the players' points don't add up to the score. Usually ESPN listed a player "
+                        "without an id or name and the play-by-play didn't have them either. Lines of these games whose "
+                        "player has no row stay unresolved instead of void.",
+                        "{n} {n|mecz, w którym|mecze, w których|meczów, w których} punkty zawodników nie sumują się "
+                        "do wyniku. Zwykle ESPN podał zawodnika bez id lub nazwiska, a zapis akcji też go nie miał. "
+                        "Linie z tych meczów, których zawodnik nie ma wiersza, pozostają nierozstrzygnięte zamiast "
+                        "nieważnych."),
 
     # How to read this (views/help.py)
     'help.title': _w("How to read this", "Jak to czytać"),

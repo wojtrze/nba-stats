@@ -1,6 +1,7 @@
 from core import backtest_view
+from core.state import language
 from core.ui import page_header
+from i18n import t
 
-page_header("Backtest 2022/23", "Today's props model on Unibet's 2022/23 player lines: how it would have done, a "
-                                "strategy tester for any slice of those lines, and how each player's lines resolved.")
+page_header(t('bt.title', language()), t('bt.purpose', language()))
 backtest_view.render()
