@@ -73,8 +73,9 @@ for start in range(0, len(events), 3):
             if starts_soon(e['start_time'], now):
                 minutes = max(1, round(minutes_to(e['start_time'], now)))
                 st.markdown(f":orange-badge[{t('overview.soon', lang, minutes=minutes)}]")
-            st.caption(f"{pl_time(e['start_time'])} · " + t('overview.at', lang, away=NBA_TEAM_NAMES.get(e['away'], ''),
-                                                            home=NBA_TEAM_NAMES.get(e['home'], '')))
+            teams = t('overview.at', lang, away=NBA_TEAM_NAMES.get(e['away'], ''),
+                      home=NBA_TEAM_NAMES.get(e['home'], ''))
+            st.caption(f"{pl_time(e['start_time'])} · {teams}")
             odds_text = " · ".join(filter(None, [
                 f"{t('overview.ml', lang)} **{ml['away']:.2f}** / **{ml['home']:.2f}**"
                 if {'away', 'home'} <= set(ml.index) else '',
@@ -85,9 +86,11 @@ for start in range(0, len(events), 3):
             if g:
                 p = g['projection']
                 best = g['edges'].loc[g['edges']['edge pp'].idxmax()]
-                st.markdown(t('overview.projected', lang, winner=winner(p, g['home'], g['away']), total=p['total'])
-                            + "  \n" + t('overview.best_price', lang, bet=describe_outcome(best), odds=best['odds'],
-                                         edge=best['edge pp']))
+                projected = t('overview.projected', lang, winner=winner(p, g['home'], g['away'], lang),
+                              total=p['total'])
+                best_price = t('overview.best_price', lang, bet=describe_outcome(best, lang), odds=best['odds'],
+                               edge=best['edge pp'])
+                st.markdown(f"{projected}  \n{best_price}")
             st.markdown(lineup_line(e['away']) + "  \n" + lineup_line(e['home']))
 
 # --- the best bets ---
@@ -118,7 +121,7 @@ with right:
     else:
         edges = pd.concat([g['edges'].assign(game=f"{g['away'].upper()} @ {g['home'].upper()}") for g in games])
         top = edges.sort_values('edge pp', ascending=False).head(5).reset_index(drop=True)
-        top['bet'] = [describe_outcome(r) for _, r in top.iterrows()]
+        top['bet'] = [describe_outcome(r, lang) for _, r in top.iterrows()]
         picked = table(top, ['game', 'bet', 'odds', 'edge pp'], {'odds': '%.2f', 'edge pp': '%+.1f'},
                        sources={'bet': None, 'odds': 'superbet'}, key='top_games', select=True, context='games')
         st.caption(t('overview.game_edges_caption', lang))

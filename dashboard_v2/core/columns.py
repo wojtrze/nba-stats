@@ -9,3 +9,19 @@ PROPS_MORE = ['edge low', 'break-even %', 'market %', 'line move', 'open line', 
               'under_odds']
 # Overview → best player lines
 OVERVIEW_PROPS = ['name', 'bet_type', 'line', 'bet', 'signal', 'edge pp', 'pick odds', 'RotoWire']
+
+# Games: one row per game, then the chosen game's bets and each team's absences
+GAMES_SUMMARY = ['game', 'start (PL)', 'proj winner', 'proj score', 'proj total', 'best bet', 'signal', 'best edge pp',
+                 'best odds', 'RotoWire']
+GAMES_MARKETS = ['market', 'team', 'side', 'line', 'signal', 'edge pp', 'odds', 'odds move', 'implied %', 'model %',
+                 'fair odds', 'red flag']
+GAMES_ABSENCES = ['out', 'games missed', 'team pts change', 'opp pts change']
+# Results: every settled line, and the columns of the rates tables (metrics.grouped_rates, tracking.results_table /
+# threshold_table) next to the group they're split by
+RESULTS_ALL = ['game_date', 'name', 'game', 'bet_type', 'line', 'pre avg', 'pre avg L10', 'pre games', 'proj_avg',
+               'actual', 'status', 'pre avg side', 'pre avg result', 'pick', 'result', 'over_odds', 'under_odds',
+               'last line']
+RESULTS_BY_TYPE = ['bet_type', 'lines', 'over %', 'line error', 'line − avg', 'toward avg hit %', 'toward avg ROI %',
+                   'toward proj hit %']
+RATE_COLUMNS = ['bets', 'expected %', 'hit %', 'ci low %', 'ci high %', 'ROI %', 'avg odds', 'avg odds vs last %',
+                'edge ≥ pp', 'signal', 'edge bucket', 'pick', 'market']

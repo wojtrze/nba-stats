@@ -189,8 +189,8 @@ def flag_props(table: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame) -
     return out
 
 
-def game_reasons(outcome: Dict, ctx: Dict) -> List[Dict]:
-    """Reasons for one game outcome (a row of metrics.market_edges).
+def game_reasons(outcome: Dict, ctx: Dict, lang: str = 'en') -> List[Dict]:
+    """Reasons for one game outcome (a row of metrics.market_edges), worded in `lang` (i18n 'game.*').
 
     ctx: projection (game_projection), ratings (blended_ratings), home, away, absences ({team: [(name, impact)]}),
     home_court, games_played ({team: current-season games}), rotowire (bool: RotoWire lists the game).
@@ -198,80 +198,76 @@ def game_reasons(outcome: Dict, ctx: Dict) -> List[Dict]:
     p, r, home, away = ctx['projection'], ctx['ratings'], ctx['home'], ctx['away']
     market, side, line = outcome['market'], outcome['side'], outcome['line']
     reasons = [_reason(outcome['edge pp'] > 0,
-                       f"Model: {outcome['model %']:.0f}% vs {outcome['implied %']:.0f}% implied by odds "
-                       f"{outcome['odds']:.2f} (edge {outcome['edge pp']:+.1f} pp)")]
+                       i18n.t('game.model', lang, model=outcome['model %'], implied=outcome['implied %'],
+                              odds=outcome['odds'], edge=outcome['edge pp']))]
     league = r[['off_rtg', 'def_rtg', 'pace']].mean()
     if market in ('ML', 'SPREAD'):
         team, opp = (home, away) if side == 'home' else (away, home)
         margin = p['margin'] if side == 'home' else -p['margin']
         cover = margin + (line if market == 'SPREAD' and pd.notna(line) else 0)
-        what = f"wins by {margin:.1f}" if margin >= 0 else f"loses by {-margin:.1f}"
-        reasons.append(_reason(cover > 0, f"Projection: {team.upper()} {what}"
-                               + (f", {'covering' if cover > 0 else 'missing'} {line:+g} by {abs(cover):.1f}"
-                                  if market == 'SPREAD' and pd.notna(line) else "")))
-        net = lambda t: r.loc[t, 'off_rtg'] - r.loc[t, 'def_rtg']
-        reasons.append(_reason(net(team) > net(opp),
-                               f"Net rating {team.upper()} {net(team):+.1f} vs {opp.upper()} {net(opp):+.1f} points "
-                               f"per 100 possessions"))
-        reasons.append(_reason(team == home, f"Home court: {home.upper()} +{ctx['home_court']:g} points"))
-        for t in (team, opp):
-            for name, imp in ctx['absences'].get(t, []):
+        what = i18n.t('game.wins_by' if margin >= 0 else 'game.loses_by', lang, margin=abs(margin))
+        spread_part = i18n.t('game.covering' if cover > 0 else 'game.missing', lang, line=line, gap=abs(cover)) \
+            if market == 'SPREAD' and pd.notna(line) else ""
+        reasons.append(_reason(cover > 0, i18n.t('game.projection', lang, team=team.upper(), what=what) + spread_part))
+        net = lambda tm: r.loc[tm, 'off_rtg'] - r.loc[tm, 'def_rtg']
+        reasons.append(_reason(net(team) > net(opp), i18n.t('game.net', lang, team=team.upper(), net=net(team),
+                                                            opp=opp.upper(), opp_net=net(opp))))
+        reasons.append(_reason(team == home, i18n.t('game.home_court', lang, home=home.upper(),
+                                                    points=ctx['home_court'])))
+        for tm in (team, opp):
+            for name, imp in ctx['absences'].get(tm, []):
                 swing = imp['pts_for'] - imp['pts_against']
                 if imp['n_without'] and abs(swing) >= 0.5:
-                    helps = (swing > 0) == (t == team)
-                    reasons.append(_reason(helps, f"{t.upper()} without {name}: {swing:+.1f} point margin per game "
-                                                  f"({imp['n_without']} games missed)"))
+                    helps = (swing > 0) == (tm == team)
+                    reasons.append(_reason(helps, i18n.t('game.absence_margin', lang, team=tm.upper(), name=name,
+                                                         swing=swing, n=imp['n_without'])))
     else:
         over = side == 'over'
         expected = {'TOTAL': p['total'], 'HOME_TOTAL': p['home_pts'], 'AWAY_TOTAL': p['away_pts']}[market]
         gap = expected - line
         reasons.append(_reason(gap > 0 if over else gap < 0,
-                               f"Projected {expected:.1f} points vs the line {line:g} ({gap:+.1f})"))
+                               i18n.t('game.projected_total', lang, expected=expected, line=line, gap=gap)))
         faster = p['pace'] - league['pace']
         reasons.append(_reason(None if abs(faster) < 1 else (faster > 0) == over,
-                               f"Pace {p['pace']:.1f} possessions vs league {league['pace']:.1f}: a "
-                               f"{'faster' if p['pace'] > league['pace'] else 'slower'} game than average"))
+                               i18n.t('game.pace_faster' if p['pace'] > league['pace'] else 'game.pace_slower', lang,
+                                      pace=p['pace'], league=league['pace'])))
         teams = {'TOTAL': (home, away), 'HOME_TOTAL': (home,), 'AWAY_TOTAL': (away,)}[market]
-        for t in teams:
-            opp = away if t == home else home
-            attack = r.loc[t, 'off_rtg'] - league['off_rtg'] + r.loc[opp, 'def_rtg'] - league['def_rtg']
+        for tm in teams:
+            opp = away if tm == home else home
+            attack = r.loc[tm, 'off_rtg'] - league['off_rtg'] + r.loc[opp, 'def_rtg'] - league['def_rtg']
             reasons.append(_reason(None if abs(attack) < 1 else (attack > 0) == over,
-                                   f"{t.upper()} offense {r.loc[t, 'off_rtg']:.1f} vs {opp.upper()} defense "
-                                   f"{r.loc[opp, 'def_rtg']:.1f} (league {league['off_rtg']:.1f}): "
-                                   f"{attack:+.1f} per 100 possessions"))
-        for t in (home, away):
-            for name, imp in ctx['absences'].get(t, []):
+                                   i18n.t('game.attack', lang, team=tm.upper(), off=r.loc[tm, 'off_rtg'],
+                                          opp=opp.upper(), defense=r.loc[opp, 'def_rtg'], league=league['off_rtg'],
+                                          attack=attack)))
+        for tm in (home, away):
+            for name, imp in ctx['absences'].get(tm, []):
                 change = imp['pts_for'] + imp['pts_against'] if market == 'TOTAL' else \
-                    imp['pts_for'] if t in teams else imp['pts_against']
+                    imp['pts_for'] if tm in teams else imp['pts_against']
                 if imp['n_without'] and abs(change) >= 0.5:
                     reasons.append(_reason((change > 0) == over,
-                                           f"{t.upper()} without {name}: {change:+.1f} points ({imp['n_without']} "
-                                           f"games missed)"))
+                                           i18n.t('game.absence_points', lang, team=tm.upper(), name=name,
+                                                  change=change, n=imp['n_without'])))
 
     played = min(ctx['games_played'].get(t, 0) for t in (home, away))
-    reasons += [_reason(False, text, flag=True) for text in game_flags(outcome['edge pp'], played, ctx['rotowire'])]
+    reasons += [_reason(False, text, flag=True)
+                for text in game_flags(outcome['edge pp'], played, ctx['rotowire'], lang)]
     return reasons
 
 
-def game_flags(edge_pp: float, games_played: int, rotowire: bool) -> List[str]:
+def game_flags(edge_pp: float, games_played: int, rotowire: bool, lang: str = 'en') -> List[str]:
     """The reasons to pass a game market whatever its numbers say. games_played: the fewer of the two teams'
     current-season games; rotowire: RotoWire lists the game."""
-    flags = []
-    if games_played < 5:
-        flags.append("Early season: the ratings are still mostly last season's, which don't know about summer trades")
-    if not rotowire:
-        flags.append("RotoWire doesn't list this game yet: absences aren't in the projection")
-    if edge_pp > 15:
-        flags.append("Edge over 15 pp: more likely the model is missing something (a trade, rest) than the market "
-                     "being that wrong")
-    return flags
+    keys = (['gameflag.early'] if games_played < 5 else []) + ([] if rotowire else ['gameflag.no_lineup']) \
+        + (['gameflag.big_edge'] if edge_pp > 15 else [])
+    return [i18n.t(key, lang) for key in keys]
 
 
-def flag_game_outcomes(edges: pd.DataFrame, games_played: int, rotowire: bool) -> pd.DataFrame:
+def flag_game_outcomes(edges: pd.DataFrame, games_played: int, rotowire: bool, lang: str = 'en') -> pd.DataFrame:
     """metrics.market_edges rows of one game with 'red flag' (game_flags, joined) and 'signal': 🔴 when flagged,
     otherwise ''. The game model isn't calibrated (it was overconfident on the settled nights: see the game section
     of data/backtest/calibration.md), so its edges are estimates and never 🟢 / 🟡."""
-    flags = pd.Series(['; '.join(game_flags(e, games_played, rotowire)) for e in edges['edge pp']], index=edges.index)
+    flags = pd.Series(['; '.join(game_flags(e, games_played, rotowire, lang)) for e in edges['edge pp']],
+                      index=edges.index)
     signal = np.where(flags != '', '🔴', '')
     return edges.assign(signal=signal, **{'red flag': flags})
 
@@ -299,5 +295,6 @@ def verdict(reasons: List[Dict], edge_pp: float, edge_low: float = np.nan, lang:
     if strong and pros > cons:
         return 'Bet', 'green', i18n.t('verdict.strong', lang, pros=pros, cons=cons)
     if pros >= cons:
-        return 'Lean', 'orange', i18n.t('verdict.lean' if strong else 'verdict.lean_unproven', lang, pros=pros, cons=cons)
+        return 'Lean', 'orange', i18n.t('verdict.lean' if strong else 'verdict.lean_unproven', lang, pros=pros,
+                                        cons=cons)
     return 'Pass', 'gray', i18n.t('verdict.more_against', lang, pros=pros, cons=cons)

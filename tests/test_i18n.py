@@ -87,3 +87,29 @@ def test_reasons_and_warnings_in_polish():
     word, _, why = verdict([{'supports': False, 'text': 'x', 'flag': False}], 2.4, np.nan, 'pl')
     assert word == 'Pass' and why.startswith("Model meczów")                     # a game outcome: never past Pass
     assert i18n.t('verdict.Pass', 'pl') == "Odpuść"
+
+
+def test_every_results_and_games_column_has_a_term_in_its_context():
+    import night_view
+    from core.columns import (GAMES_ABSENCES, GAMES_MARKETS, GAMES_SUMMARY, RATE_COLUMNS, RESULTS_ALL,
+                              RESULTS_BY_TYPE)
+    from nightly import GROUP_AXES
+    for context, columns in (('games', GAMES_SUMMARY + GAMES_MARKETS + GAMES_ABSENCES),
+                             ('results', RESULTS_ALL + RESULTS_BY_TYPE + RATE_COLUMNS + night_view.LINE_COLUMNS
+                              + night_view.GROUP_COLUMNS + night_view.GAME_COLUMNS + list(GROUP_AXES))):
+        for column in columns:
+            assert i18n.term(column, context) is not None, (context, column)
+    assert i18n.label('pick', 'en', 'results') == "our pick then"            # not tonight's pick
+    assert i18n.label('model %', 'pl', 'games') == "szansa z modelu %"        # the game model's, not calibrated
+
+
+def test_game_reasons_and_labels_in_polish():
+    from core.labels import describe_outcome, winner
+    from reasons import game_flags
+    outcome = {'market': 'TOTAL', 'side': 'over', 'line': 225.5, 'team': None}
+    assert describe_outcome(outcome) == "Total over 225.5"
+    assert describe_outcome(outcome, 'pl') == "Suma powyżej 225.5"
+    assert describe_outcome({'market': 'ML', 'side': 'home', 'line': np.nan, 'team': 'bos'}, 'pl') == "Zwycięzca BOS"
+    assert winner({'margin': -3.5}, 'bos', 'ny', 'pl') == "NY o 3.5"
+    assert game_flags(20, 2, False, 'pl')[0].startswith("Początek sezonu")
+    assert len(game_flags(20, 2, False)) == 3 and game_flags(1, 20, True, 'pl') == []
