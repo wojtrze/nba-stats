@@ -4,20 +4,20 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core import charts
-from core.state import persist, remember
+from core.state import language, persist, remember
 from core.ui import PAGES, kpis, page_header, stop
-from glossary import STAT_HELP, column_config
+from glossary import column_config
+from i18n import STAT_NAMES, label, t, value
 from loaders import filtered_logs, player_logs, season_label
 from metrics import STATS, line_percentile, player_summary, splits, teammates, with_without
 
-seasons, season_types = page_header("Player history", "One player's games: form, how results spread around a line, "
-                                                      "season trends, splits, opponents and teammates.",
-                                    with_scope=True)
+lang = language()
+seasons, season_types = page_header(t('ph.title', lang), t('ph.purpose', lang), with_scope=True)
 logs = filtered_logs(seasons, season_types)
 every = player_logs()
 every = every[every['season_type'].isin(season_types)]
 if every.empty:
-    st.info("No games stored for these game types.")
+    st.info(t('ph.no_games', lang))
     stop()
 
 # a line opened from Props preselects player, stat and line
@@ -36,76 +36,77 @@ if pre and pre['player_id'] in labels:
         remember(key)
 
 c = st.columns([3, 2, 1])
-player_id = c[0].selectbox("Player", list(labels), format_func=labels.get, key='ph_player', index=None,
-                           placeholder="Type a name...", on_change=remember, args=('ph_player',))
-stat = c[1].selectbox("Stat", STATS, key='ph_stat', format_func=lambda s: f"{s} – {STAT_HELP[s]}",
+player_id = c[0].selectbox(t('ph.player', lang), list(labels), format_func=labels.get, key='ph_player', index=None,
+                           placeholder=t('ph.type_name', lang), on_change=remember, args=('ph_player',))
+stat = c[1].selectbox(t('ph.stat', lang), STATS, key='ph_stat', format_func=lambda s: f"{s} – {STAT_NAMES[s][lang]}",
                       on_change=remember, args=('ph_stat',))
-line = c[2].number_input("Line (optional)", min_value=0.0, step=0.5, key='ph_line',
-                         placeholder="e.g. 18.5", on_change=remember, args=('ph_line',),
-                         help="Colours the games over / under it and adds hit rates")
+line = c[2].number_input(t('ph.line', lang), min_value=0.0, step=0.5, key='ph_line',
+                         placeholder=t('ph.line_example', lang), on_change=remember, args=('ph_line',),
+                         help=t('ph.line_help', lang))
 if player_id is None:
-    st.info("Pick a player to see their history.", icon="👆")
+    st.info(t('ph.pick', lang), icon="👆")
     stop()
 
 games = logs[logs['player_id_ESPN'] == player_id].sort_values('Date')
 career = every[every['player_id_ESPN'] == player_id].sort_values('Date')
 if games.empty:
-    st.warning(f"{players.loc[player_id, 'name']} has no games in the scope; the season trend below covers every "
-               f"stored season.")
+    st.warning(t('ph.no_scope', lang, name=players.loc[player_id, 'name']))
 else:
     s = player_summary(games, stat, line)
-    items = [{'label': "Average", 'value': f"{s['avg']:.1f}", 'help': f"{s['games']} games in the scope"},
-             {'label': "Last 5", 'value': f"{s['avg_last5']:.1f}", 'delta': f"{s['avg_last5'] - s['avg']:+.1f}",
-              'help': "Average over the last 5 games, vs the average"},
-             {'label': "Last 10", 'value': f"{s['avg_last10']:.1f}", 'delta': f"{s['avg_last10'] - s['avg']:+.1f}"},
-             {'label': "Median", 'value': f"{s['median']:.1f}", 'help': "Half the games above, half below"},
-             {'label': "Minutes", 'value': f"{s['min_avg']:.1f}", 'delta': f"{s['min_avg_last5'] - s['min_avg']:+.1f} L5",
-              'help': "Average minutes; the small text is the last 5 games vs that"}]
+    items = [{'label': t('ph.kpi.avg', lang), 'value': f"{s['avg']:.1f}",
+              'help': t('ph.kpi.avg_help', lang, n=s['games'])},
+             {'label': t('ph.kpi.last5', lang), 'value': f"{s['avg_last5']:.1f}",
+              'delta': f"{s['avg_last5'] - s['avg']:+.1f}", 'help': t('ph.kpi.last5_help', lang)},
+             {'label': t('ph.kpi.last10', lang), 'value': f"{s['avg_last10']:.1f}",
+              'delta': f"{s['avg_last10'] - s['avg']:+.1f}"},
+             {'label': t('ph.kpi.median', lang), 'value': f"{s['median']:.1f}", 'help': t('ph.kpi.median_help', lang)},
+             {'label': t('ph.kpi.minutes', lang), 'value': f"{s['min_avg']:.1f}",
+              'delta': f"{s['min_avg_last5'] - s['min_avg']:+.1f} L5", 'help': t('ph.kpi.minutes_help', lang)}]
     if line is not None:
-        items.append({'label': f"Over {line:g}", 'value': f"{100 * s['over']:.0f}%",
+        items.append({'label': t('ph.kpi.over', lang, line=line), 'value': f"{100 * s['over']:.0f}%",
                       'delta': f"{100 * s['over_last10']:.0f}% L10", 'delta_color': 'off',
-                      'help': f"Share of games over the line; percentile of the line {s['percentile']:.0f}"})
+                      'help': t('ph.kpi.over_help', lang, pct=s['percentile'])})
     kpis(items)
-    if c[0].button("Open the team in Lineup lab", key='ph_lab'):
+    if c[0].button(t('ph.open_lab', lang), key='ph_lab'):
         st.session_state['lineup_team'] = games['team'].iloc[-1]
         st.switch_page(PAGES['lineup'])
 
 log_tab, dist_tab, trend_tab, split_tab, opp_tab, mate_tab, table_tab = st.tabs(
-    ["Game log", "Distribution", "Season trend", "Splits", "Opponents", "With / without", "All games"])
+    [t(f'ph.tab.{k}', lang) for k in ('log', 'dist', 'trend', 'splits', 'opp', 'mates', 'all')])
 
 with log_tab:
     if games.empty:
-        st.caption("No games in the scope.")
+        st.caption(t('ph.none', lang))
     else:
-        n = st.segmented_control("Games", [10, 20, 40, 0], default=20, format_func=lambda v: f"last {v}" if v else "all",
+        n = st.segmented_control(t('ph.games', lang), [10, 20, 40, 0], default=20,
+                                 format_func=lambda v: t('ph.last_n', lang, n=v) if v else t('ph.all', lang),
                                  key='ph_last')
         charts.show(charts.game_log(games, stat, line, last=n or None, minutes=True,
-                                    title=f"{stat} per game" + (" vs the line" if line is not None else "")),
-                    key='ph_log')
-        st.caption("Bars: each game (green over / red under the line; light = preseason). Orange: 5- and 10-game "
-                   "averages. Grey: minutes (right axis).")
+                                    title=t('ph.log_title', lang, stat=stat)
+                                    + (t('ph.vs_line', lang) if line is not None else "")), key='ph_log')
+        st.caption(t('ph.log_caption', lang))
 
 with dist_tab:
     if games.empty:
-        st.caption("No games in the scope.")
+        st.caption(t('ph.none', lang))
     else:
         left, right = st.columns([3, 2])
         with left:
-            charts.show(charts.distribution(games[stat], stat, line, f"How often each {stat} result happened"),
+            charts.show(charts.distribution(games[stat], stat, line, t('ph.dist_title', lang, stat=stat)),
                         key='ph_dist')
         with right:
             values = games[stat]
             q = values.quantile([0.1, 0.3, 0.5, 0.7, 0.9])
-            st.markdown("**Percentiles**")
-            st.dataframe(pd.DataFrame({'percentile': ['10th', '30th', 'median', '70th', '90th'], stat: q.values}),
-                         hide_index=True, width='stretch',
-                         column_config={stat: st.column_config.NumberColumn(format='%.1f')})
-            st.caption("A line below the 30th or above the 70th percentile looks unusually low or high for this "
-                       "player." + (f" This line sits at the {line_percentile(values, line):.0f}th." if line is not None
-                                    else ""))
+            st.markdown(t('ph.percentiles', lang))
+            pct = pd.DataFrame({'percentile': [t(f'ph.pct.{p}', lang) for p in (10, 30, 50, 70, 90)],
+                                stat: q.values})
+            st.dataframe(pct, hide_index=True, width='stretch',
+                         column_config=column_config(pct.columns, {stat: '%.1f'}, lang=lang, context='research'))
+            st.caption(t('ph.pct_caption', lang)
+                       + (t('ph.pct_line', lang, pct=line_percentile(values, line)) if line is not None else ""))
 
 with trend_tab:
-    st.caption("Every stored season of the chosen game types, regardless of the scope.")
+    st.caption(t('ph.trend_caption', lang))
     by_season = career.groupby('season_id').agg(games=(stat, 'size'), avg=(stat, 'mean'), minutes=('MIN', 'mean'),
                                                  team=('team', 'last')).reset_index()
     by_season['season'] = by_season['season_id'].map(season_label)
@@ -116,68 +117,72 @@ with trend_tab:
         fig = go.Figure(go.Bar(x=by_season['season'], y=by_season['avg'], marker_color=charts.NEUTRAL,
                                text=by_season['avg'].map('{:.1f}'.format), textposition='outside',
                                customdata=by_season[['games', 'minutes']],
-                               hovertemplate="%{x}: %{y:.1f} in %{customdata[0]} games, %{customdata[1]:.1f} min"
-                                             "<extra></extra>"))
+                               hovertemplate=t('ph.season_hover', lang) + "<extra></extra>"))
         if line is not None:
-            fig.add_hline(y=line, line_dash='dash', annotation_text=f"line {line:g}")
-        charts.show(charts.layout(fig, 300, f"{stat} per season"), key='ph_season')
+            fig.add_hline(y=line, line_dash='dash', annotation_text=t('ph.line_label', lang, line=line))
+        charts.show(charts.layout(fig, 300, t('ph.per_season', lang, stat=stat)), key='ph_season')
     with right:
         fig = go.Figure(go.Scatter(x=monthly['month'], y=monthly['avg'], mode='lines+markers',
                                    line=dict(color=charts.AVERAGE), customdata=monthly['games'],
-                                   hovertemplate="%{x|%b %Y}: %{y:.1f} in %{customdata} games<extra></extra>"))
-        charts.show(charts.layout(fig, 300, f"{stat} per month"), key='ph_month')
+                                   hovertemplate=t('ph.month_hover', lang) + "<extra></extra>"))
+        charts.show(charts.layout(fig, 300, t('ph.per_month', lang, stat=stat)), key='ph_month')
 
 with split_tab:
     if games.empty:
-        st.caption("No games in the scope.")
+        st.caption(t('ph.none', lang))
     else:
         sp = splits(games, stat, line)
-        fig = go.Figure(go.Bar(x=sp['avg'], y=sp['split'] + ': ' + sp['value'].astype(str), orientation='h',
+        sp = sp.assign(split=sp['split'].map(lambda v: value(v, lang)),
+                       value=sp['value'].astype(str).map(lambda v: value(v, lang)))
+        fig = go.Figure(go.Bar(x=sp['avg'], y=sp['split'] + ': ' + sp['value'], orientation='h',
                                marker_color=charts.NEUTRAL, text=sp['avg'].map('{:.1f}'.format) + ' (' +
-                               sp['games'].astype(str) + ' g)', textposition='outside'))
-        fig.add_vline(x=games[stat].mean(), line_color=charts.AVERAGE, annotation_text="overall")
+                               sp['games'].astype(str) + f" {t('ph.games_short', lang)})", textposition='outside'))
+        fig.add_vline(x=games[stat].mean(), line_color=charts.AVERAGE, annotation_text=t('ph.overall', lang))
         if line is not None:
-            fig.add_vline(x=line, line_dash='dash', annotation_text=f"line {line:g}")
-        charts.show(charts.layout(fig, 60 + 30 * len(sp), f"{stat} by situation", yaxis=dict(autorange='reversed')),
-                    key='ph_splits')
+            fig.add_vline(x=line, line_dash='dash', annotation_text=t('ph.line_label', lang, line=line))
+        charts.show(charts.layout(fig, 60 + 30 * len(sp), t('ph.by_situation', lang, stat=stat),
+                                  yaxis=dict(autorange='reversed')), key='ph_splits')
         st.dataframe(sp, hide_index=True, width='stretch',
-                     column_config=column_config(sp.columns, {'avg': '%.1f', 'median': '%.1f', 'over %': '%.0f'}))
+                     column_config=column_config(sp.columns, {'avg': '%.1f', 'median': '%.1f', 'over %': '%.0f'},
+                                                 lang=lang, context='research'))
 
 with opp_tab:
     vs = career.groupby('OPP').agg(games=(stat, 'size'), avg=(stat, 'mean'), last=('Date', 'max')).reset_index()
     vs = vs.sort_values('avg', ascending=False)
     fig = go.Figure(go.Bar(x=vs['OPP'], y=vs['avg'], marker_color=np.where(vs['avg'] >= career[stat].mean(),
                                                                           charts.OVER, charts.UNDER),
-                           customdata=vs['games'], hovertemplate="vs %{x}: %{y:.1f} in %{customdata} games"
-                                                                  "<extra></extra>"))
-    fig.add_hline(y=career[stat].mean(), line_color=charts.AVERAGE, annotation_text="career avg")
-    charts.show(charts.layout(fig, 320, f"{stat} against each opponent (every stored season)"), key='ph_opp')
-    st.caption("Green = above the player's average against everyone. Few games against a team make its bar noisy.")
+                           customdata=vs['games'], hovertemplate=t('ph.opp_hover', lang) + "<extra></extra>"))
+    fig.add_hline(y=career[stat].mean(), line_color=charts.AVERAGE, annotation_text=t('ph.career_avg', lang))
+    charts.show(charts.layout(fig, 320, t('ph.opp_title', lang, stat=stat)), key='ph_opp')
+    st.caption(t('ph.opp_caption', lang))
 
 with mate_tab:
     mates = teammates(career, player_id)
     if mates.empty:
-        st.caption("No teammates in the stored games.")
+        st.caption(t('ph.no_mates', lang))
     else:
-        mate_labels = dict(zip(mates['player_id_ESPN'], mates['player_display_name'] + " – "
-                               + mates['shared_games'].astype(str) + " games together"))
-        mate = st.selectbox("Teammate", list(mate_labels), format_func=mate_labels.get, key='ph_mate')
+        mate_labels = {pid: t('ph.together', lang, name=name, n=n)
+                       for pid, name, n in zip(mates['player_id_ESPN'], mates['player_display_name'],
+                                               mates['shared_games'])}
+        mate = st.selectbox(t('ph.mate', lang), list(mate_labels), format_func=mate_labels.get, key='ph_mate')
         ww = with_without(career, player_id, mate, stat)
         if len(ww) < 2:
-            st.caption("The teammate didn't miss any of the player's games while on the team, so there's nothing to "
-                       "compare.")
+            st.caption(t('ph.never_missed', lang))
         if len(ww):
+            ww = ww.rename(index=lambda v: value(v, lang))
             st.dataframe(ww, width='stretch',
                          column_config=column_config(ww.columns, {c: '%.1f' for c in ['avg', 'median', 'minutes',
-                                                                                     'shots']}))
-        st.caption("Every stored season; only games from the teammate's first to last game on the team count. "
-                   "The full matrix for a whole rotation is in Lineup lab.")
+                                                                                     'shots']},
+                                                     lang=lang, context='research'))
+        st.caption(t('ph.mates_caption', lang))
 
 with table_tab:
     cols = ['Date', 'OPP', 'type', 'Result', 'season_type', 'starter', 'MIN', 'PTS', 'REB', 'AST', '3PM', 'PA', 'PR',
             'ARP', 'STL', 'BLK', 'TO', 'FGM', 'FGA', '3PA', 'FTM', 'FTA', 'PLUS_MINUS', 'rest_days']
     full = career[cols].sort_values('Date', ascending=False)
     st.dataframe(full, hide_index=True, width='stretch', height=420,
-                 column_config=column_config(cols) | {'Date': st.column_config.DateColumn(format='YYYY-MM-DD')})
-    st.download_button("Download CSV", full.to_csv(index=False),
+                 column_config=column_config(cols, lang=lang, context='research')
+                 | {'Date': st.column_config.DateColumn(label('Date', lang),
+                                                        format='YYYY-MM-DD')})
+    st.download_button(t('results.download', lang), full.to_csv(index=False),
                        file_name=f"{career['player_name_ESPN'].iloc[0]}.csv")

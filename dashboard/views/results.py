@@ -16,14 +16,16 @@ st.caption("Collect bets from Today's props and Games, size them, and see how bo
            "the morning after.")
 
 RESULT_FORMATS = {'bets': '%d', 'expected %': '%.0f', 'hit %': '%.0f', 'ci low %': '%.0f', 'ci high %': '%.0f',
-                  'ROI %': '%+.1f', 'avg odds': '%.2f', 'avg CLV %': '%+.1f', 'edge ≥ pp': '%d'}
+                  'ROI %': '%+.1f', 'avg odds': '%.2f', 'avg odds vs last %': '%+.1f', 'edge ≥ pp': '%d'}
 RESULT_TIPS = {'bets': "Won and lost bets (pushes and voids left out)",
                'expected %': "How often the model expected these picks to win (its average chance). An accurate "
                              "signal's hit % lands close to it",
                'edge ≥ pp': "Every pick whose saved edge reached this many points (0 = any positive edge), so the rows "
                             "overlap",
-               'avg CLV %': "Average closing line value: your odds vs the last snapshot before tip-off for the same "
-                            "line, in %. Beating the close consistently is the best early sign of real edge."}
+               'avg odds vs last %': "Your odds vs the last quote the snapshots saw before tip-off for the same "
+                                     "line, in %. Not the true closing line (there are only a few snapshots a day), "
+                                     "but beating it consistently is an early sign of a real edge.",
+               'h before tip': "How many hours before tip-off the bet's quote was taken"}
 
 
 @st.cache_data(ttl=600, show_spinner="Settling the snapshots...")
@@ -82,8 +84,8 @@ def kpis(settled: pd.DataFrame, stake_col=None):
     m[1].metric("Hit rate", f"{100 * (decided['result'] == 'win').mean():.0f}%" if len(decided) else "–")
     m[2].metric("Profit" if stake_col else "Profit (1 unit each)", f"{profit:+.2f}")
     m[3].metric("ROI", f"{100 * profit / staked:+.1f}%" if staked else "–", help="Profit per 100 staked")
-    m[4].metric("Avg CLV", f"{decided['clv odds %'].mean():+.1f}%" if decided['clv odds %'].notna().any() else "–",
-                help=RESULT_TIPS['avg CLV %'])
+    m[4].metric("Odds vs last quote", f"{decided['odds vs last %'].mean():+.1f}%"
+                if decided['odds vs last %'].notna().any() else "–", help=RESULT_TIPS['avg odds vs last %'])
 
 
 NIGHT_TAB = "🌙 Previous night"
@@ -172,13 +174,13 @@ with mine_tab:
         settled['bet'] = settled['bet_id'].map(labels)
         settled['P&L'] = settled['profit'] * settled['stake']
         kpis(settled, stake_col='stake')
-        cols = ['game_date', 'bet', 'odds', 'stake', 'model_pct', 'edge_pp', 'status', 'result', 'P&L', 'clv odds %']
+        cols = ['game_date', 'bet', 'odds', 'stake', 'model_pct', 'edge_pp', 'status', 'result', 'P&L', 'odds vs last %']
         formats = {'odds': '%.2f', 'stake': '%.2f', 'model_pct': '%.0f', 'edge_pp': '%+.1f', 'P&L': '%+.2f',
-                   'clv odds %': '%+.1f'}
+                   'odds vs last %': '%+.1f'}
         st.dataframe(tinted(settled[cols], formats), hide_index=True, width='stretch',
                      column_config=column_config(cols, formats, tips={
                          'model_pct': "Model's chance when you added the bet", 'edge_pp': "Edge when you added it",
-                         'P&L': "Profit or loss at your stake", 'clv odds %': RESULT_TIPS['avg CLV %'],
+                         'P&L': "Profit or loss at your stake", 'odds vs last %': RESULT_TIPS['avg odds vs last %'],
                          'status': "settled, pending (game not in the stored stats yet), void (didn't play) or "
                                    "unresolved (can't be settled from the stored stats)",
                          'game_date': "Game date (US Eastern)"})

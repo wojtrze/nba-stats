@@ -20,7 +20,7 @@ from superbet_fetcher import main_lines
 CALIBRATION_FILE = os.path.join('data', 'backtest', 'calibration.json')
 # which model priced a line: bump it whenever price_props / price_games change what they return, so a calibration
 # is only fitted on (and trusted for) chances of one model (nightly.LINEAGE_COLUMNS, backtest/calibrate.py)
-MODEL_VERSION = '2026-10-26'
+MODEL_VERSION = '2026-10-26-count'   # count distribution in metrics.prop_probability (was '2026-10-26': normal)
 # calibration_status: fitted for this model; no file (the raw chances are used); fitted for another model version
 FITTED, MISSING, VERSION_MISMATCH, GIVEN = 'fitted', 'missing', 'version mismatch', 'given'
 FROM_FILE = object()   # price_props' default green_edge: the one saved in CALIBRATION_FILE
@@ -111,9 +111,13 @@ def calibration_status(path: Optional[str] = None) -> str:
     return FITTED if saved.get('model_version') == MODEL_VERSION else VERSION_MISMATCH
 
 
-def calibration_warning(status: Optional[str] = None) -> str:
-    """What the pages say when the chances aren't validated ('' when they are)."""
+def calibration_warning(status: Optional[str] = None, lang: Optional[str] = None) -> str:
+    """What the pages say when the chances aren't validated ('' when they are); in `lang` (dashboard v2)."""
     status = status or calibration_status()
+    if lang and status in (MISSING, VERSION_MISMATCH):
+        from i18n import t
+        return t('calibration.missing', lang) if status == MISSING else \
+            t('calibration.mismatch', lang, version=MODEL_VERSION)
     if status == MISSING:
         return ("No calibration (data/backtest/calibration.json): model % is the raw model's chance, which was "
                 "overconfident on past lines. No 🟢 / 🟡 picks and no stakes until `python -m backtest.calibrate` "
@@ -168,7 +172,8 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     the same. adjust(logs, players, out, stats): absence_adjustments, or a cached version of it.
     Adds, per line: the player's numbers (avg, sd, hit rates, percentile...), RotoWire status, lineup adj and adj avg,
     the game context (opponent, spread, implied total, matchup) and proj avg, and the pick: best side (the side
-    with the bigger edge, even a negative one), model %, market % (margin-free), break-even %, edge pp, edge low,
+    with the bigger edge, even a negative one), model %, market % (margin-free), break-even %, edge pp, ev 100 (the
+    expected return of 100 staked on it: model % × pick odds − 100), edge low,
     pick odds, signal (metrics.prop_signal with green_edge, default: the one in CALIBRATION_FILE), bet (best side
     when there's a positive edge, else '' = pass) and lean (the projection's side when it's well off the line).
     model %, edge pp and edge low are calibrated (metrics.calibrate with `calibration`, default: the fitted
@@ -270,6 +275,9 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
         return pd.Series(best | raw)
 
     table = pd.concat([table, table.apply(price, axis=1)], axis=1)
+    # what 100 staked on the better side returns on average by our chance: 0 = break-even, + = a value bet. Unlike
+    # model %, which is mostly the odds (a 1.30 favourite always looks likely), it ranks bets by their price
+    table['ev 100'] = table['model %'] * table['pick odds'] - 100
     table['in band'] = (table['p30'] <= table['line']) & (table['line'] <= table['p70'])
     table['calibration'] = status
     table['signal'] = prop_signal(table['edge pp'], load_green_edge() if green_edge is FROM_FILE else green_edge)

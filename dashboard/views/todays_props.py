@@ -55,7 +55,7 @@ PROP_TIPS = {'model %': "Chance the pick wins, calibrated on 2022/23: the model'
                         "overconfident, so this sits close to the market's margin-free chance.",
              'raw model %': "The model's own chance before calibration: the hit rate pulled toward the market's "
                             "margin-free chance (worth 10 games), averaged with the chance from proj avg and the "
-                            "player's usual spread of results"}
+                            "player's usual spread of results (a count distribution around proj avg)"}
 
 
 def prop_panel(row):

@@ -42,13 +42,16 @@ def locked(path: str, timeout: float = LOCK_TIMEOUT) -> Iterator[None]:
             os.write(fd, f"{os.getpid()}\n".encode())
             os.close(fd)
             break
-        except FileExistsError:
+        except (FileExistsError, PermissionError):
+            # PermissionError: on Windows the lock file is being deleted by its holder right now: busy, try again
             try:
                 if time.time() - os.path.getmtime(lock) > STALE_SECONDS:
                     os.remove(lock)
                     continue
             except FileNotFoundError:
                 continue
+            except PermissionError:
+                pass
             if time.monotonic() - start > timeout:
                 raise TimeoutError(f"{path} is locked by another writer ({lock})")
             time.sleep(0.05)
@@ -57,10 +60,14 @@ def locked(path: str, timeout: float = LOCK_TIMEOUT) -> Iterator[None]:
         yield
     finally:
         held.discard(lock)
-        try:
-            os.remove(lock)
-        except FileNotFoundError:
-            pass
+        for attempt in range(100):     # a waiting process may be looking at the file this instant (Windows)
+            try:
+                os.remove(lock)
+                break
+            except FileNotFoundError:
+                break
+            except PermissionError:
+                time.sleep(0.01)
 
 
 def _replace(tmp: str, path: str, attempts: int = 100):

@@ -1,24 +1,24 @@
 {
   "coefficients": {
-    "a": 1.1199279785290381,
-    "b": 0.09983477124509413,
+    "a": 1.1347005551952127,
+    "b": 0.12739374637004583,
     "c": 0.0,
     "d": 0.0
   },
   "green_edge_pp": null,
-  "superbet_through": "2026-10-25",
-  "model_version": "2026-10-26",
-  "fitted_on": "2026-10-26",
+  "superbet_through": "2026-10-26",
+  "model_version": "2026-10-26-count",
+  "fitted_on": "2026-10-27",
   "source": "Unibet 2022/23 main lines (players with 5+ games, backtest variant 'none') and every settled Superbet line (last fetch before tip-off)",
   "lines": {
     "Unibet 2022/23": 29331,
-    "Superbet 2026/27": 8222
+    "Superbet 2026/27": 9768
   },
-  "rows": 75106,
+  "rows": 78198,
   "held_out": {
     "coefficients": {
-      "a": 1.2407531623882284,
-      "b": 0.05153695833871981,
+      "a": 1.219118254857769,
+      "b": 0.06751861482690279,
       "c": 0.0,
       "d": 0.0
     },
@@ -32,30 +32,30 @@
             "Brier": 0.24816767659257583
           },
           "Uncalibrated model": {
-            "log loss": 0.7054866226592328,
-            "Brier": 0.25518470866244986
+            "log loss": 0.7050924998839999,
+            "Brier": 0.2549622133963469
           },
           "Calibrated model": {
-            "log loss": 0.6895619245871379,
-            "Brier": 0.24821059965456305
+            "log loss": 0.6893502365019895,
+            "Brier": 0.2481071481745783
           }
         }
       },
       "superbet": {
-        "fit on": "Oct 20 2026 \u2013 Oct 23 2026",
-        "scored on": "Oct 24 2026 \u2013 Oct 25 2026",
+        "fit on": "Oct 20 2026 \u2013 Oct 24 2026",
+        "scored on": "Oct 25 2026 \u2013 Oct 26 2026",
         "scores": {
           "Market (margin-free price)": {
-            "log loss": 0.6876970000178323,
-            "Brier": 0.247308010410069
+            "log loss": 0.6839021018996052,
+            "Brier": 0.24544446526620792
           },
           "Uncalibrated model": {
-            "log loss": 0.6958398883021841,
-            "Brier": 0.250861623045067
+            "log loss": 0.6875005579895411,
+            "Brier": 0.24712788420862006
           },
           "Calibrated model": {
-            "log loss": 0.6877106800930446,
-            "Brier": 0.24731618961424484
+            "log loss": 0.6827808201758176,
+            "Brier": 0.24491232386315173
           }
         }
       }

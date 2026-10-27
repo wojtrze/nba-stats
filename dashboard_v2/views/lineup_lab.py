@@ -5,20 +5,20 @@ import streamlit as st
 
 from core import charts
 from core.data import lineups as rotowire_lineups, props
-from core.state import persist, remember
+from core.state import language, persist, remember
 from core.ui import PAGES, page_header, stop
 from espn_scraper import NBA_TEAM_ABBRS, NBA_TEAM_NAMES
-from glossary import HELP, STAT_HELP, column_config, source_legend
+from glossary import column_config, source_legend
+import i18n
+from i18n import STAT_NAMES, t
 from loaders import filtered_logs, player_logs
 from metrics import lineup_scenario, rotowire_team, starting_lineup, team_rotation, with_without_matrix
 
 STATS = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP', 'STL', 'BLK', 'TO', 'MIN', 'FGA']
-SOURCES = {'rotowire': "📋 RotoWire tonight", 'last': "Last game", 'frequent': "Most frequent (last 10)",
-           'custom': "Custom"}
+lang = language()
+SOURCES = {key: t(f'll.source.{key}', lang) for key in ('rotowire', 'last', 'frequent', 'custom')}
 
-seasons, season_types = page_header(
-    "Lineup lab", "How each player's numbers change when a teammate doesn't play, for any team, with or without "
-                  "an expected lineup; then an estimate for a lineup you pick.", with_scope=True)
+seasons, season_types = page_header(t('ll.title', lang), t('ll.purpose', lang), with_scope=True)
 
 # --- team and data ---
 today = props()
@@ -34,22 +34,18 @@ if requested in teams:
 persist('ll_stat', 'PTS')
 persist('ll_all_seasons', True)
 c = st.columns([2, 2, 2, 1], vertical_alignment='bottom')
-team = c[0].selectbox("Team", teams, key='ll_team', on_change=remember, args=('ll_team',),
-                      format_func=lambda t: f"{t.upper()} – {NBA_TEAM_NAMES.get(t, '')}",
-                      help="Teams playing today (Superbet or RotoWire) are listed first")
-stat = c[1].selectbox("Stat", STATS, key='ll_stat', on_change=remember, args=('ll_stat',),
-                      format_func=lambda s: f"{s} – {STAT_HELP[s]}")
-all_seasons = c[2].toggle("Use every stored season", key='ll_all_seasons', on_change=remember,
-                          args=('ll_all_seasons',),
-                          help="Early in the season there are too few games without anyone. Earlier seasons only "
-                               "count while both players were on the team.")
-with c[3].popover("Settings", width='stretch'):
-    min_games = st.number_input("Rotation: min games", 1, 82, 5, help="Fewer games for this team = left out")
-    min_minutes = st.number_input("Rotation: min minutes", 0, 40, 10, help="Lower average = left out")
-    min_without = st.number_input("Matrix: min games without", 1, 20, 3,
-                                  help="Cells based on fewer games without the teammate stay empty")
-    shrink = st.number_input("Estimate: shrink", 0, 30, 5,
-                             help="Each change is weighted by n / (n + shrink), n = games without that teammate")
+team = c[0].selectbox(t('ll.team', lang), teams, key='ll_team', on_change=remember, args=('ll_team',),
+                      format_func=lambda tm: f"{tm.upper()} – {NBA_TEAM_NAMES.get(tm, '')}",
+                      help=t('ll.team_help', lang))
+stat = c[1].selectbox(t('ll.stat', lang), STATS, key='ll_stat', on_change=remember, args=('ll_stat',),
+                      format_func=lambda s: f"{s} – {STAT_NAMES[s][lang]}")
+all_seasons = c[2].toggle(t('ll.all_seasons', lang), key='ll_all_seasons', on_change=remember,
+                          args=('ll_all_seasons',), help=t('ll.all_seasons_help', lang))
+with c[3].popover(t('ll.settings', lang), width='stretch'):
+    min_games = st.number_input(t('ll.min_games', lang), 1, 82, 5, help=t('ll.min_games_help', lang))
+    min_minutes = st.number_input(t('ll.min_minutes', lang), 0, 40, 10, help=t('ll.min_minutes_help', lang))
+    min_without = st.number_input(t('ll.min_without', lang), 1, 20, 3, help=t('ll.min_without_help', lang))
+    shrink = st.number_input(t('ll.shrink', lang), 0, 30, 5, help=t('ll.shrink_help', lang))
 
 logs = player_logs()[player_logs()['season_type'].isin(season_types)] if all_seasons else \
     filtered_logs(seasons, season_types)
@@ -57,11 +53,11 @@ rotation = team_rotation(logs, team, min_games, min_minutes)
 roster = team_rotation(logs, team, 1, 0)
 names = roster['name'].to_dict()
 if rotation.empty:
-    st.info(f"No players with {min_games}+ games and {min_minutes}+ minutes for {team.upper()} in these games.")
+    st.info(t('ll.no_rotation', lang, games=min_games, minutes=min_minutes, team=team.upper()))
     stop()
 
 
-@st.cache_data(show_spinner="Calculating with/without for every pair...")
+@st.cache_data(show_spinner=False)
 def matrix(all_seasons, seasons, season_types, ids, stat):
     source = player_logs()[player_logs()['season_type'].isin(season_types)] if all_seasons else \
         filtered_logs(list(seasons), list(season_types))
@@ -106,69 +102,63 @@ for key, value in ((source_key, saved[team]['source']), (starters_key, saved[tea
         st.session_state[key] = value
 
 with st.container(border=True):
-    st.segmented_control("Lineup from", list(choices) + ['custom'], format_func=SOURCES.get, key=source_key,
-                         on_change=pick_source,
-                         help="RotoWire's expected starters and out players when it lists the team today; "
-                              "otherwise the last game's starters or the most frequent starters of the last 10 games")
+    st.segmented_control(t('ll.lineup_from', lang), list(choices) + ['custom'], format_func=SOURCES.get,
+                         key=source_key, on_change=pick_source, help=t('ll.lineup_from_help', lang))
     listed = lineups_rw[lineups_rw['team'] == team]
     if listed.empty:
-        st.caption(f"📋 RotoWire lists no lineup for {team.upper()} today, so the lineup comes from the stored "
-                   f"games. Pick who's out yourself.")
+        st.caption(t('ll.no_rotowire', lang, team=team.upper()))
     else:
         notes = [f"{r['name']} ({r['injury'] or '?'}, {r['play_pct']:.0f}%)" for _, r in listed.iterrows()
                  if r['role'] == 'may_not_play']
-        st.caption(f"📋 RotoWire: **{listed['lineup_status'].iloc[0] or 'listed'}** lineup. May not play: "
-                   f"{', '.join(notes) or '–'}")
+        status = listed['lineup_status'].iloc[0] or 'listed'
+        status = t(f'overview.{status}', lang) if status in ('confirmed', 'expected') else status
+        st.caption(t('ll.rotowire', lang, status=status, names=', '.join(notes) or '–'))
     label = lambda p: f"{names.get(p, p)} ({roster['position'].get(p, '')}, {roster['mpg'].get(p, 0):.0f} mpg)"
     l1, l2 = st.columns(2)
-    starters = l1.multiselect("Starting five", list(roster.index), key=starters_key, format_func=label,
-                              max_selections=5, on_change=manual_change,
-                              help="Used for the exact-match games: team games where all five started")
+    starters = l1.multiselect(t('ll.starting', lang), list(roster.index), key=starters_key, format_func=label,
+                              max_selections=5, on_change=manual_change, help=t('ll.starting_help', lang))
     st.session_state[out_key] = [p for p in st.session_state[out_key] if p not in starters]
-    out = l2.multiselect("Out", [p for p in roster.index if p not in starters], key=out_key, format_func=label,
-                         on_change=manual_change, help="Missing players: their with/without changes are added to "
-                                                       "everyone else's estimate")
+    out = l2.multiselect(t('ll.out', lang), [p for p in roster.index if p not in starters], key=out_key,
+                         format_func=label, on_change=manual_change, help=t('ll.out_help', lang))
     if len(starters) < 5:
-        st.warning(f"Pick 5 starters ({len(starters)} selected).")
+        st.warning(t('ll.pick_five', lang, n=len(starters)))
 bench = [p for p in rotation.index if p not in starters and p not in out]
 
 # --- the full matrix ---
-st.subheader(f"With / without matrix · {stat}")
+st.subheader(t('ll.matrix', lang, stat=stat))
 ids = tuple(sorted(set(rotation.index) | set(starters) | set(out)))
-m = matrix(all_seasons, tuple(seasons), tuple(season_types), ids, stat)
+with st.spinner(t('ll.matrix_spinner', lang)):
+    m = matrix(all_seasons, tuple(seasons), tuple(season_types), ids, stat)
 rows = list(dict.fromkeys(starters + [p for p in rotation.index if p not in out]))
 cols = list(dict.fromkeys(rows + out))
-relative = st.toggle("Show as % of the player's usual average", key='ll_relative')
+relative = st.toggle(t('ll.relative', lang), key='ll_relative')
 delta = m['delta'].loc[rows, cols].astype(float)
 n_without = m['n_without'].loc[rows, cols]
 usual = logs[logs['team'] == team].groupby('player_id_ESPN')[stat].mean()
 if relative:
     delta = delta.div(usual.reindex(rows), axis=0) * 100
 shown = delta.where(n_without >= min_without)
-col_labels = [names.get(p, str(p)) + (" (OUT)" if p in out else "") for p in cols]
+col_labels = [names.get(p, str(p)) + (t('ll.out_mark', lang) if p in out else "") for p in cols]
 row_labels = [names.get(p, str(p)) + (" ★" if p in starters else "") for p in rows]
-hover = [[f"{names.get(r)} when {names.get(c_)} is out<br>"
-          f"with: {m['with'].loc[r, c_]:.1f} in {m['n_with'].loc[r, c_]:.0f} games<br>"
-          f"without: {m['without'].loc[r, c_]:.1f} in {m['n_without'].loc[r, c_]:.0f} games"
+hover = [[t('ll.hover', lang, row=names.get(r), col=names.get(c_), with_=m['with'].loc[r, c_],
+            n_with=m['n_with'].loc[r, c_], without=m['without'].loc[r, c_], n_without=m['n_without'].loc[r, c_])
           if r != c_ and m['n_without'].loc[r, c_] > 0 else
-          ("" if r == c_ else f"{names.get(c_)} never missed a game {names.get(r)} played")
+          ("" if r == c_ else t('ll.never', lang, col=names.get(c_), row=names.get(r)))
           for c_ in cols] for r in rows]
 limit = np.nanmax(np.abs(shown.values)) if np.isfinite(shown.values).any() else 1
 text = np.vectorize(lambda v: f"{v:+.0f}%" if relative else f"{v:+.1f}")(shown.fillna(0).values)
 fig = go.Figure(go.Heatmap(z=shown.values, x=col_labels, y=row_labels, colorscale='RdYlGn', zmid=0, zmin=-limit,
                            zmax=limit, text=np.where(np.isnan(shown.values), '', text), texttemplate='%{text}',
                            hovertext=hover, hoverinfo='text', xgap=2, ygap=2,
-                           colorbar=dict(title='% change' if relative else 'change')))
+                           colorbar=dict(title=t('ll.colorbar_pct' if relative else 'll.colorbar', lang))))
 charts.show(charts.layout(fig, 80 + 34 * len(rows), yaxis=dict(autorange='reversed'),
                           xaxis=dict(side='top', tickangle=-35)), key='ll_matrix')
-st.caption(f"Each cell: the row player's {stat} when the column player is **out** minus when they play (green = "
-           f"more). ★ = starting five. Empty: fewer than {min_without} games without that player. Only games inside "
-           f"the column player's time on the team count. Hover a cell for the averages and games behind it.")
+st.caption(t('ll.matrix_caption', lang, stat=stat, n=min_without))
 
 # --- the scenario ---
-st.subheader("Estimate for this lineup")
+st.subheader(t('ll.estimate', lang))
 if not out:
-    st.caption("Nobody is out, so every estimate equals the usual average. Tick Out to see how the others shift.")
+    st.caption(t('ll.nobody_out', lang))
 scenario = lineup_scenario(logs[logs['player_id_ESPN'].isin(ids)], team, starters, out, bench, stat, shrink,
                            matrix={k: v.astype(float) for k, v in m.items()})
 out_rows = pd.DataFrame({'player_id_ESPN': out, 'name': [names.get(p, str(p)) for p in out], 'role': 'Out'})
@@ -197,25 +187,24 @@ def toggle_out():
 
 
 shown_table = scenario_table.drop(columns='player_id_ESPN')
-st.caption(source_legend(['stats']) + " — calculated from the scraped games")
+shown_table = shown_table.assign(role=shown_table['role'].map(lambda v: i18n.value(v, lang)),
+                                 confidence=shown_table['confidence'].map(lambda v: i18n.value(v, lang)))
+st.caption(source_legend(['stats']) + t('ll.calculated', lang))
 st.data_editor(shown_table, hide_index=True, width='stretch', key=editor_key, on_change=toggle_out,
                disabled=[c_ for c_ in shown_table.columns if c_ != 'Out'],
                column_config=column_config(
                    shown_table.columns,
                    formats={'usual': '%.1f', 'exact match': '%.1f', 'estimate': '%.1f', 'change': '%+.1f',
                             'usual MIN': '%.1f', 'exact MIN': '%.1f', 'games': '%d', 'exact games': '%d'},
-                   tips={'games': f"Games the player played for {team.upper()}",
-                         'usual': f"Player's average {stat} for {team.upper()}",
-                         'signal': f"🟢 estimate at least 1 {stat} above usual, 🔴 at least 1 below"},
-                   base={'Out': st.column_config.CheckboxColumn(help=HELP['Out'])},
+                   base={'Out': st.column_config.CheckboxColumn(i18n.label('Out', lang), help=i18n.tooltip('Out', lang))},
                    sources={c_: 'stats' for c_ in ['estimate', 'change', 'signal', 'confidence', 'usual', 'games',
-                                                   'exact match', 'exact games', 'usual MIN', 'exact MIN']}))
-st.caption("Tick **Out** to take a player out, untick to bring them back. estimate = usual + each out player's "
-           "change, shrunk when based on few games; exact match = the average in games with exactly this situation.")
+                                                   'exact match', 'exact games', 'usual MIN', 'exact MIN']},
+                   lang=lang, context='lineup'))
+st.caption(t('ll.scenario_caption', lang))
 
 p1, p2 = st.columns([3, 1])
-open_id = p1.selectbox("Player details", scenario['player_id_ESPN'], format_func=lambda p: names.get(p, str(p)),
-                       index=None, placeholder="Open a player's history...", label_visibility='collapsed')
-if p2.button("Open in Player history", disabled=open_id is None, width='stretch'):
+open_id = p1.selectbox(t('ll.open', lang), scenario['player_id_ESPN'], format_func=lambda p: names.get(p, str(p)),
+                       index=None, placeholder=t('ll.open_player', lang), label_visibility='collapsed')
+if p2.button(t('ll.open', lang), disabled=open_id is None, width='stretch'):
     st.session_state['player_preset'] = {'player_id': open_id, 'stat': stat if stat != 'FGA' else 'PTS', 'line': None}
     st.switch_page(PAGES['player'])

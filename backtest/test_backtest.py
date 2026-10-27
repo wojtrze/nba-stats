@@ -383,3 +383,33 @@ def test_ablation_ladder_finds_an_informative_average():
     assert result.loc["1. Market (margin-free price)", 'vs market'] == 0
     full = result.loc["8. + matchup = the full model"]
     assert full['vs market'] < 0 and full['range high'] < 0            # clearly beats the price, nights resampled
+
+
+# --- candidate model changes (backtest/ideas.py) ---
+
+def test_count_over_array_matches_poisson_negative_binomial_and_the_model():
+    from backtest.ablation import count_over_array
+    from metrics import count_over
+    mean, var, line = np.array([1.8, 1.8, 6.2]), np.array([3.0, 1.2, 9.0]), np.array([1.5, 2.5, 5.5])
+    got = count_over_array(mean, var, line)
+    assert got == pytest.approx([count_over(m, v, k) for m, v, k in zip(mean, var, line)])
+    # Poisson(1.8): P(X ≥ 3) = 1 − e^-1.8 (1 + 1.8 + 1.8²/2)
+    assert got[1] == pytest.approx(1 - math.exp(-1.8) * (1 + 1.8 + 1.8 ** 2 / 2))
+    # negative binomial with mean 1.8, variance 3: r = 2.7, q = 0.4; P(X ≥ 2) = 1 − (0.6^2.7)(1 + 2.7·0.4)
+    assert got[0] == pytest.approx(1 - 0.6 ** 2.7 * (1 + 2.7 * 0.4))
+    assert got[2] == pytest.approx(0.551969, abs=1e-6)                 # scipy.stats.nbinom, checked by hand once
+
+
+def test_recency_features_weight_recent_games():
+    from backtest.ideas import recency_features
+    logs = pd.DataFrame({'player_id_ESPN': 1, 'Date': pd.to_datetime(['2022-11-01', '2022-11-03', '2022-11-05',
+                                                                       '2022-11-09']),
+                         'game_id': [1, 2, 3, 4], 'PTS': [10.0, 10.0, 30.0, 99.0]})
+    lines = pd.DataFrame({'player_id_ESPN': [1], 'game_date': pd.to_datetime(['2022-11-07']), 'bet_type': ['PTS'],
+                          'line': [15.5]})
+    out = recency_features(lines, logs, half_lives=(1,)).iloc[0]
+    assert out['check games'] == 3                                       # only the games before the line's date
+    w = np.array([0.25, 0.5, 1.0])                                       # 2, 1 and 0 games ago, half-life 1
+    assert out['ew mean h1'] == pytest.approx(np.sum(w * [10, 10, 30]) / w.sum())
+    assert out['ew n h1'] == pytest.approx(w.sum() ** 2 / np.sum(w ** 2))
+    assert out['ew over h1'] == pytest.approx(out['ew n h1'] * 1.0 / w.sum())

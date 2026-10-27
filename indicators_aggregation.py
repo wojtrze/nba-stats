@@ -1,3 +1,6 @@
+"""Legacy: 2023 analysis of the rule votes in all_assessed_bets20230424.csv (no longer in the repository), so it doesn't run.
+Kept for reference; nothing in the dashboards or the daily runs uses it.
+"""
 import numpy
 import pandas as pd
 import numpy as np

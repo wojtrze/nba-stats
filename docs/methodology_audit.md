@@ -31,7 +31,7 @@ Dashboards: newest fetch ─ price_props / price_games (live, current RotoWire, 
             bet slip ─ bets.kelly_stake(staking_chance) ─ bets.save_bets ─► my_bets.csv
 
 Settlement / evaluation:
-  tracking.settle_props / settle_games   first pre-tip snapshot = the bet, last = "closing" quote
+  tracking.settle_props / settle_games   first pre-tip snapshot = the bet, last = last observed pregame quote
   nightly.night_props                     last pre-tip snapshot; recomputes missing picks (marked recomputed)
   backtest.calibrate.superbet_lines       last pre-tip snapshot's raw_* → calibration fit
   backtest.run.settle                     2022/23 lines
@@ -68,6 +68,15 @@ fetch time. Before the step 1 fix, neither of them records the model version or 
 | Settlement (F7, F8) | `test_settle_props`, `test_side_result_push_and_profit`, `test_save_and_settle_my_bets`, `dashboard/test_tracking.py::test_side_result_and_profit`, `test_settle_props_statuses`, `test_settle_games_postponed_is_unresolved` | – |
 | Persistence (F9) | `tests/test_safe_io.py` (4 concurrent writer processes, byte-exact appends, interrupted write, exclusive / reentrant / stale lock, shared Superbet cooldown, one RotoWire change saved once) | – |
 
+## P2: wording and side effects (Oct 26)
+
+- "Closing line" → *last observed pregame quote*: `last line`, `last odds`, `line vs last`, `odds vs last %` (was `close line`, `clv line`, `clv odds %`, `avg CLV %`), with `h before tip` / `last h before tip` (`tracking.settle_props` / `settle_games`).
+- Signals mean the same on every page (the `signal` tip and `GAME_SIGNAL_TIP` in `dashboard/glossary.py`): 🟢 = held up on 10+ unseen nights, 🟡 = a positive *estimated* edge, 🔴 = a reason to pass; game outcomes only 🔴.
+- The calibration report says how to read b (how much of the model's disagreement held up; not interval coverage, not a betting edge).
+- Legacy entry points are labelled in the README and in the files (`bet_fetcher.py`, `bet_scrapper.py`, `indicators_aggregation.py`, `bet_analyst.py`'s Unibet mode, `nba2024/`, `Untitled6.ipynb`).
+- `bet_analyst` fetched RotoWire at import (a class attribute); `BetAssessment(bets, doubtful_players=...)` now takes the list, fetched only when a bet needs it (`tests/test_feeds.py::test_bet_assessment_needs_no_network_until_asked`).
+- `safe_io.locked` on Windows: a writer waiting for a lock that was being deleted got PermissionError and crashed (the intermittent `test_appends_from_several_processes_all_land`); now treated as busy (0 failures in 15 stress runs, 2 in 8 before).
+
 ## Model contribution (step 7, `backtest/ablation.py`)
 
 On identical lines, fitted on the earlier part and scored on the later part of each source, with night-resampled ranges (report: `data/backtest/ablation.md`):
@@ -78,6 +87,15 @@ On identical lines, fitted on the earlier part and scored on the later part of e
 Implication: no component earns more complexity yet. The next model changes should be judged on this ladder, and the side bias is the first suspect (it doesn't carry across periods or bookmakers).
 
 **First change judged on it (Oct 26): the calibration no longer fits the Over/Under bias or the offset** (`backtest/calibrate.py` `FITTED = ['a', 'b']`). Fitted on both sources' earlier lines and scored on each one's later lines: shared bias 2022 −0.0007 / Superbet +0.0008 vs the price; no bias +0.0001 / −0.0002; bias per bookmaker −0.0003 / +0.0027. The bias belongs to Unibet 2022/23 and doesn't carry to Superbet, and Superbet's own is too noisy to fit yet. Refit: a = 1.120, b = 0.100; held-out Superbet log loss 0.6877 (= the price; was 0.6887). Raw chances are unchanged, so `MODEL_VERSION` stays; the new calibration has a new `calibration_id`.
+
+**Candidate model changes on 2022/23** (`backtest/ideas.py`, report `data/backtest/ideas_2022.md`; exploratory: 8 candidates on the same 77 nights, calibrated a, b as the dashboards are; difference from the current model per line side, night-resampled range):
+
+- Count distribution (negative binomial / Poisson with the player's own spread) for every stat: −0.0002 (−0.0002…−0.0001), on 3PM −0.0004 (−0.0006…−0.0002). Small but consistently better; the only candidate whose range is clearly below 0. For 3PM only or 3PM/AST/REB: −0.0001.
+- Recency weighting (half-life 5 / 10 / 20 games): worse, +0.0002 to +0.0003. The season's equal weights are better.
+- Distribution only (no hit rate): +0.0001, worse on 3PM (+0.0005).
+- No candidate's positive-edge picks beat break-even in a way the interval supports.
+
+Adopted (Oct 26) as model `2026-10-26-count` (`metrics.count_over` in `metrics.prop_probability`); the 2022 backtest rerun and the Superbet lines repriced (the replay keeps both versions), calibration refitted: a = 1.116, b = 0.121; held-out log loss 2022 0.6894 (price 0.6895, normal model 0.6896), Superbet 0.6876 (price 0.6877). Recency weighting dropped. The F6 docstring is corrected (the range is the hit rate's sampling noise, not a Beta posterior or a prediction interval), and on whole-number lines the distribution's P(over) + P(under) + P(push) = 1 (`test_prop_probability_whole_line_pushes`). Judge it on Superbet as nights settle (`python -m backtest.ablation --refresh`).
 
 ## Fix order
 

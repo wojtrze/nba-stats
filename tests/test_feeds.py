@@ -99,3 +99,16 @@ def test_name_resolver_prefers_team_and_initial_fallback():
 def test_main_lines_keep_moneyline_after_pandas_round_trip(event):
     rows = pd.DataFrame(event_game_odds(event)).to_dict('records')     # moneyline line None -> NaN
     assert {r['side'] for r in main_lines(rows) if r['market'] == 'ML'} == {'home', 'away'}
+
+
+def test_bet_assessment_needs_no_network_until_asked(monkeypatch):
+    import socket
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("the network was used")
+    monkeypatch.setattr(socket.socket, 'connect', no_network)
+    import importlib
+    import bet_analyst
+    importlib.reload(bet_analyst)                               # importing it used to fetch RotoWire
+    assessment = bet_analyst.BetAssessment([], doubtful_players=[{'team': 'bos', 'name': 'A Player'}])
+    assert assessment._doubtful_players == [{'team': 'bos', 'name': 'A Player'}]

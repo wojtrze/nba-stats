@@ -72,17 +72,43 @@ def no_vig(over_odds: float, under_odds: float):
     return over / (over + under), under / (over + under)
 
 
+def count_over(mean: float, var: float, line: float) -> float:
+    """P(X > line) for a count X with this mean and variance: negative binomial when var > mean, else Poisson
+    (results that vary less than their average still get a Poisson's spread). X > line means X ≥ floor(line) + 1."""
+    mean = max(float(mean), 1e-6)
+    k_max = math.floor(line)
+    if k_max < 0:
+        return 1.0
+    if var > mean * 1.0001:
+        r, q = mean ** 2 / (var - mean), 1 - mean / var
+        pmf = math.exp(r * math.log(1 - q))
+        step = lambda k: (k + r) / (k + 1) * q
+    else:
+        pmf = math.exp(-mean)
+        step = lambda k: mean / (k + 1)
+    cdf = pmf
+    for k in range(k_max):
+        pmf *= step(k)
+        cdf += pmf
+    return min(max(1 - cdf, 0.0), 1.0)
+
+
 def prop_probability(values: pd.Series, line: float, side: str, market: float, mean: Optional[float] = None,
                      prior_games: float = 10) -> Dict[str, float]:
     """Chance that `side` ('Over' / 'Under') wins, with a 95% range.
 
     - hit: the side's hit rate, pulled toward the margin-free market chance `market` as if the market were worth
       `prior_games` games, so 4 of 5 doesn't read as 80%
-    - dist: the chance of a result beyond the line if results scatter normally around `mean` (default: the
-      player's average; pass adj avg to include tonight's absences) with the player's standard deviation,
-      pulled toward the market the same way (a 5-game standard deviation is no more reliable than a hit rate)
-    p is the average of the two (only hit with fewer than 3 games). The range is p ± 2 standard deviations of a
-    Beta posterior worth n + prior_games games: wide with few games, so a hot start doesn't look certain."""
+    - dist: the chance of a result beyond the line if the result is a count (count_over: negative binomial, or
+      Poisson when the player's results vary less than their average) around `mean` (default: the player's
+      average; pass adj avg / proj avg to include tonight's adjustments) with the player's own variance, scaled
+      with the mean; pulled toward the market the same way (a 5-game spread is no more reliable than a hit rate).
+      A count fits whole-number stats better than a normal curve, most of all for small ones like 3PM
+      (backtest/ideas.py)
+    p is the average of the two (only hit with fewer than 3 games). The range is p ± 1.96 standard errors of a
+    hit rate worth n + prior_games games: the sampling noise of the player's record, wide with few games so a hot
+    start doesn't look certain. It is not a prediction interval and leaves out the projection's and the
+    model's own errors."""
     market = 0.5 if pd.isna(market) else market
     n = len(values)
     weight = n / (n + prior_games)
@@ -90,12 +116,14 @@ def prop_probability(values: pd.Series, line: float, side: str, market: float, m
     shrunk = (hits + prior_games * market) / (n + prior_games)
     dist = np.nan
     if n >= 3:
-        sd = max(values.std(), 0.5)
-        centre = values.mean() if mean is None or pd.isna(mean) else mean
+        average = values.mean()
+        centre = average if mean is None or pd.isna(mean) else mean
+        # the player's variance, scaled with the projection: a count's spread grows with its mean
+        var = (values.var() if pd.notna(values.var()) else 0.0) * (centre / average if average > 0 else 1.0)
         # a whole-number line pushes on the line itself: Over needs line + 1, Under line - 1
         whole = float(line).is_integer()
         cut = line + 0.5 if whole and side == 'Over' else line - 0.5 if whole else line
-        over = 1 - _normal_cdf((cut - centre) / sd)
+        over = count_over(centre, var, cut)
         dist = weight * (over if side == 'Over' else 1 - over) + (1 - weight) * market
     p = shrunk if np.isnan(dist) else (shrunk + dist) / 2
     half = 1.96 * math.sqrt(p * (1 - p) / (n + prior_games + 1))

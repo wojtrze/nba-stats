@@ -6,8 +6,9 @@ import pandas as pd
 import pytest
 
 from metrics import (absence_adjustments, absence_impact, add_combined_stats, allowed_by_position, blended_ratings,
-                     game_projection, hit_rates, line_percentile, lineup_scenario, market_edges, model_probability,
-                     no_vig, percentile_band, prop_probability, roi, rotowire_team, rule_stats, starting_lineup, stint_games, team_rotation,
+                     count_over, game_projection, hit_rates, line_percentile, lineup_scenario, market_edges,
+                     model_probability, no_vig, percentile_band, prop_probability, roi, rotowire_team, rule_stats,
+                     starting_lineup, stint_games, team_rotation,
                      vote_pattern, wilson_interval, with_without, with_without_matrix)
 
 
@@ -66,7 +67,8 @@ def test_prop_probability_shrinks_small_samples():
     values = pd.Series([30.0] * 10)
     chance = prop_probability(values, 20.5, 'Over', 0.5, prior_games=10)
     assert chance['hit'] == pytest.approx(0.75)        # (10 + 10 * 0.5) / 20, not 100%
-    assert chance['dist'] == pytest.approx(0.75)      # every game far above the line, shrunk like the hit rate
+    # every game far above the line: a Poisson around 30 is above 20.5 almost always, shrunk like the hit rate
+    assert chance['dist'] == pytest.approx(0.5 * count_over(30, 0, 20.5) + 0.25) and chance['dist'] < 0.75
     assert chance['low'] < chance['p'] < chance['high']
     under = prop_probability(values, 20.5, 'Under', 0.5, prior_games=10)
     assert under['hit'] == pytest.approx(0.25)
@@ -83,8 +85,21 @@ def test_prop_probability_whole_line_pushes():
     values = pd.Series([19.0, 20, 21, 20, 20])
     over = prop_probability(values, 20, 'Over', 0.5)
     under = prop_probability(values, 20, 'Under', 0.5)
-    assert over['dist'] == pytest.approx(under['dist'])  # symmetric around the line
-    assert over['dist'] + under['dist'] < 1             # the rest is the push
+    # before the market prior: P(over) + P(under) + P(push) = 1, the push being exactly 20
+    weight = 5 / 15
+    raw_over, raw_under = ((over['dist'] - 0.5 * (1 - weight)) / weight, (under['dist'] - 0.5 * (1 - weight)) / weight)
+    push = count_over(20, 0.5, 19.5) - count_over(20, 0.5, 20)
+    assert raw_over + raw_under + push == pytest.approx(1)
+    assert push > 0.05
+
+
+def test_count_over():
+    stats = pytest.importorskip('scipy.stats')
+    assert count_over(1.8, 1.2, 2.5) == pytest.approx(1 - stats.poisson.cdf(2, 1.8))            # var < mean
+    r = 1.8 ** 2 / (3.0 - 1.8)
+    assert count_over(1.8, 3.0, 1.5) == pytest.approx(1 - stats.nbinom.cdf(1, r, r / (r + 1.8)))
+    assert count_over(25.0, 40.0, 24.5) == pytest.approx(1 - stats.nbinom.cdf(24, 25 ** 2 / 15, 25 / 40))
+    assert count_over(0.4, 0.2, -0.5) == 1.0
 
 
 def _logs():
