@@ -69,3 +69,9 @@ started_at,job,command,exit_code,seconds,summary
 2026-10-30T13:39:59Z,snapshot,python daily_snapshot.py,0,29.5,"rotowire_lineups: 167 rows, superbet_props: 1821 rows, superbet_game_odds: 1420 rows"
 2026-10-30T21:23:14Z,lineups,RotoWire lineups (dashboard),0,1.2,"saved 169 players for Oct 30: 18 changes – Dennis Schroder (CHA): starter → starter; new: Dailyn Swain (CHI, Ques 50%); Isaiah Joe (DET): Ques 50% → Out 0%; …and 15 more"
 2026-10-30T21:23:22Z,snapshot,python daily_snapshot.py,0,26.8,"rotowire_lineups: 169 rows, superbet_props: 1842 rows, superbet_game_odds: 1418 rows"
+2026-10-31T00:04:03Z,lineups,RotoWire lineups (dashboard),0,1.4,saved 157 players for Oct 30: 39 changes – CHA lineup confirmed; WSH lineup confirmed; CHI lineup confirmed; …and 36 more
+2026-10-31T07:14:30Z,lineups,RotoWire lineups (dashboard),0,1.2,saved 112 players for Oct 31 (first fetch of the day)
+2026-10-31T07:14:35Z,stats,python -m espn_scraper,0,16.0,"2026/27: added 10 games, 232 player lines. 7 games not final yet."
+2026-10-31T07:14:51Z,snapshot,python daily_snapshot.py,0,21.6,"rotowire_lineups: 112 rows, superbet_props: 1034 rows, superbet_game_odds: 994 rows"
+2026-10-31T17:06:39Z,lineups,RotoWire lineups (dashboard),0,0.6,"saved 115 players for Oct 31: 8 changes – LeBron James (PHI): starter → starter; new: Dean Wade (PHI, starter); Tacko Fall (PHI): Out 0% → Ques 100%; …and 5 more"
+2026-10-31T17:07:07Z,snapshot,python daily_snapshot.py,0,23.1,"rotowire_lineups: 115 rows, superbet_props: 1152 rows, superbet_game_odds: 994 rows"
