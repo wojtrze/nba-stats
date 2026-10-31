@@ -398,10 +398,10 @@ def _game_sources(games: pd.DataFrame) -> Optional[pd.DataFrame]:
     """game_lines of the saved Superbet game odds; None when they can't be read or settled (the props calibration
     goes on without the game report)."""
     from espn_scraper import CURRENT_SEASON
-    from espn_scraper.storage import snapshot_file
+    from espn_scraper.storage import read_snapshot, snapshot_file
     path = snapshot_file(CURRENT_SEASON, 'superbet_game_odds')
     try:
-        return game_lines(pd.read_csv(path), games) if os.path.exists(path) else pd.DataFrame()
+        return game_lines(read_snapshot(path), games) if os.path.exists(path) else pd.DataFrame()
     except Exception as e:
         log.warning("Game markets left out of the report: %s", e)
         return None

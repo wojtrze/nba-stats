@@ -19,7 +19,7 @@ from typing import Optional
 import pandas as pd
 
 from espn_scraper import CURRENT_SEASON, SEASONS
-from espn_scraper.storage import load_games, load_player_gamelogs, snapshot_file
+from espn_scraper.storage import load_games, load_player_gamelogs, read_snapshot, snapshot_file
 from safe_io import append_csv, atomic_to_csv, atomic_write_text, locked
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dashboard'))
@@ -266,8 +266,8 @@ def reprice_snapshots() -> int:
     path = snapshot_file(CURRENT_SEASON, 'superbet_props')
     model_cols = ['player_id_ESPN', *MODEL_COLUMNS, DECISION_COLUMN, *LINEAGE_COLUMNS]
     saved = pd.read_csv(path, dtype=str, keep_default_na=False).drop(columns=model_cols, errors='ignore')
-    props = pd.read_csv(path).drop(columns=model_cols, errors='ignore')
-    odds = pd.read_csv(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))
+    props = read_snapshot(path).drop(columns=model_cols, errors='ignore')
+    odds = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))
     rotowire = pd.read_csv(snapshot_file(CURRENT_SEASON, 'rotowire_lineups'))
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
     games = load_games(sorted(SEASONS))

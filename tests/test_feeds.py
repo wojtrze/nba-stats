@@ -112,3 +112,20 @@ def test_bet_assessment_needs_no_network_until_asked(monkeypatch):
     importlib.reload(bet_analyst)                               # importing it used to fetch RotoWire
     assessment = bet_analyst.BetAssessment([], doubtful_players=[{'team': 'bos', 'name': 'A Player'}])
     assert assessment._doubtful_players == [{'team': 'bos', 'name': 'A Player'}]
+
+
+def test_a_snapshot_with_columns_added_later_reads_without_a_dtype_warning(tmp_path):
+    """Rows saved before a column existed leave it empty, newer rows hold text: read in chunks, pandas warned
+    (DtypeWarning) on every page load."""
+    import warnings
+
+    import pandas as pd
+
+    from espn_scraper.storage import read_snapshot
+    n = 300_000
+    path = tmp_path / 'superbet_props.csv'
+    pd.DataFrame({'line': [20.5] * n, 'decision': [None] * (n - 10) + ['NIE_OBSTAWIAJ'] * 10}).to_csv(path, index=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        df = read_snapshot(path)
+    assert df['decision'].dropna().tolist() == ['NIE_OBSTAWIAJ'] * 10

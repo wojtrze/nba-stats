@@ -10,7 +10,7 @@ import streamlit as st
 
 from espn_scraper import CURRENT_SEASON, SEASONS
 from daily_snapshot import SUPERBET_COOLDOWN, claim_superbet, superbet_wait  # noqa: F401  (pages import them here)
-from espn_scraper.storage import checked_through, load_games, load_player_gamelogs, snapshot_file
+from espn_scraper.storage import checked_through, load_games, load_player_gamelogs, read_snapshot, snapshot_file
 from name_resolver import NameResolver
 
 from models import DEFAULT_SEASON_TYPES, prepare_logs
@@ -52,7 +52,7 @@ def _latest_snapshot(name: str) -> pd.DataFrame:
     path = snapshot_file(CURRENT_SEASON, name)
     if not os.path.exists(path):
         return pd.DataFrame()
-    df = pd.read_csv(path)
+    df = read_snapshot(path)
     return df[df['fetched_at'] == df['fetched_at'].max()].drop(columns='fetched_at')
 
 
@@ -60,7 +60,7 @@ def _latest_snapshot(name: str) -> pd.DataFrame:
 def snapshot_history(name: str) -> pd.DataFrame:
     """Every fetch stored by daily_snapshot.py (empty if none), for line movement and settling bets."""
     path = snapshot_file(CURRENT_SEASON, name)
-    return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame()
+    return read_snapshot(path) if os.path.exists(path) else pd.DataFrame()
 
 
 # --- the run log: every scraper run and Superbet fetch started from a dashboard ---
