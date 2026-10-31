@@ -182,3 +182,53 @@ def test_expected_return_per_100(monkeypatch, tmp_path):
     assert row['ev 100'] == pytest.approx(row['model %'] * row['pick odds'] - 100)
     # a positive edge is a positive expected return, and both say the same per unit of odds
     assert row['ev 100'] > 0 and row['ev 100'] == pytest.approx(row['edge pp'] * row['pick odds'])
+
+
+def test_net_columns_choose_the_side_by_expected_return_and_keep_the_legacy_ones(monkeypatch, tmp_path):
+    from metrics import ACTIVE_PROFILE, LEGACY, break_even, expected_return_100
+    fitted = {'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': None,
+              'model_version': models.MODEL_VERSION}
+    row = _priced_without_explicit_calibration(monkeypatch, tmp_path, fitted)
+    # legacy: plain odds, side by edge pp, as every saved snapshot was priced
+    assert row['break-even %'] == pytest.approx(100 / row['pick odds'])
+    assert row['ev 100'] == pytest.approx(float(expected_return_100(row['model %'] / 100, row['pick odds'], LEGACY)))
+    # net: the active profile, its own side and price
+    assert row['cost profile'] == ACTIVE_PROFILE and row['side'] in ('Over', 'Under')
+    assert row['break-even net %'] == pytest.approx(100 * float(break_even(row['side odds'], ACTIVE_PROFILE)))
+    assert row['ev net 100'] == pytest.approx(
+        float(expected_return_100(row['p win %'] / 100, row['side odds'], ACTIVE_PROFILE)))
+    assert row['ev net 100'] < row['ev 100']             # the stake tax costs something on the same side
+    assert row['p push %'] == 0                            # a half line can't push
+
+
+def test_price_props_net_side_on_a_whole_line_counts_the_push():
+    logs = _logs()
+    props = pd.DataFrame([{'name': 'B', 'name_ESPN': 'B', 'home': 'bos', 'away': 'ny', 'bet_type': 'PTS',
+                           'line': 20.0, 'event_id': 9, 'start_time': '2026-10-27T23:30:00Z', 'over_odds': 1.9,
+                           'under_odds': 1.9, 'player_id_ESPN': 2}])
+    empty = pd.DataFrame(columns=['team', 'player_id_ESPN', 'role', 'play_pct', 'lineup_status', 'injury'])
+    row = price_props(props, top_up_logs(_scoped(logs), logs, 2026, [2]), empty,
+                      pd.DataFrame(), pd.DataFrame(columns=['home', 'away']), adjust=lambda *a: pd.DataFrame(),
+                      calibration=models.IDENTITY_CALIBRATION).iloc[0]
+    # every game of player 2 scored exactly 20: a push is likely, and Over + Under + push add up to 1
+    over, under = row['raw over %'], row['raw under %']
+    assert row['p push %'] > 0
+    assert row['p win %'] in (pytest.approx(over), pytest.approx(under))
+    assert over + under + row['p push %'] == pytest.approx(100.0)
+
+
+def test_legacy_fields_dont_depend_on_the_cost_profile():
+    """What the snapshots save and the 2022/23 backtest reads stays as it was, whichever profile the pages use."""
+    logs = _logs()
+    props = pd.DataFrame([{'name': 'B', 'name_ESPN': 'B', 'home': 'bos', 'away': 'ny', 'bet_type': 'PTS',
+                           'line': 19.5, 'event_id': 9, 'start_time': '2026-10-27T23:30:00Z', 'over_odds': 1.95,
+                           'under_odds': 1.80, 'player_id_ESPN': 2}])
+    empty = pd.DataFrame(columns=['team', 'player_id_ESPN', 'role', 'play_pct', 'lineup_status', 'injury'])
+    priced = {profile: price_props(props, top_up_logs(_scoped(logs), logs, 2026, [2]), empty, pd.DataFrame(),
+                                   pd.DataFrame(columns=['home', 'away']), adjust=lambda *a: pd.DataFrame(),
+                                   calibration=models.IDENTITY_CALIBRATION, profile=profile).iloc[0]
+              for profile in ('legacy', 'superbet_standard')}
+    legacy = ['best side', 'model %', 'break-even %', 'edge pp', 'edge low', 'ev 100', 'pick odds', 'signal', 'bet']
+    assert priced['legacy'][legacy].tolist() == priced['superbet_standard'][legacy].tolist()
+    assert priced['legacy']['break-even net %'] == pytest.approx(priced['legacy']['break-even %'])
+    assert priced['superbet_standard']['break-even net %'] > priced['legacy']['break-even net %']

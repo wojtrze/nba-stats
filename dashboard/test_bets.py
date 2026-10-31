@@ -22,23 +22,28 @@ def _game(**kw):
 
 
 def test_kelly_stake():
-    # 60% at 2.0: full Kelly 20%, a quarter 5%
-    assert kelly_stake(0.6, 2.0, 1000) == 50
-    assert kelly_stake(0.6, 2.0, 1000, cap=0.02) == 20
-    assert kelly_stake(0.4, 2.0, 1000) == 0
+    # legacy (plain odds): 60% at 2.0 is a full Kelly of 20%, a quarter 5%
+    assert kelly_stake(0.6, 2.0, 1000, profile='legacy') == 50
+    assert kelly_stake(0.6, 2.0, 1000, cap=0.02, profile='legacy') == 20
+    assert kelly_stake(0.4, 2.0, 1000, profile='legacy') == 0
     assert kelly_stake(np.nan, 2.0, 1000) == 0
+    # Superbet's net price, 0.88 × 2.0 = 1.76: (0.6 × 1.76 − 1) / 0.76 = 7.37% full, 1.84% a quarter
+    assert kelly_stake(0.6, 2.0, 1000) == pytest.approx(18.42)
+    # 55% at 1.90 pays at the plain odds but loses after the stake tax (0.55 × 1.672 < 1): no stake
+    assert kelly_stake(0.55, 1.9, 1000, profile='legacy') > 0
+    assert kelly_stake(0.55, 1.9, 1000) == 0
 
 
-def test_staking_chance_uses_the_low_end_for_props():
-    assert staking_chance(_prop(model_pct=60.0, edge_pp=7.4, edge_low=1.0)) == pytest.approx(0.536)
-    assert kelly_stake(staking_chance(_prop(edge_low=-3.0)), 1.9, 1000) == 0      # 🟡: no stake
-    assert np.isnan(staking_chance(_game()))                                       # an uncalibrated game model
-    assert kelly_stake(staking_chance(_game()), 1.9, 1000) == 0
-
-
-def test_no_stake_on_an_uncalibrated_prop():
-    assert np.isnan(staking_chance(_prop(edge_low=1.0), calibrated=False))
-    assert kelly_stake(staking_chance(_prop(edge_low=1.0), calibrated=False), 1.9, 1000) == 0
+def test_staking_chance_needs_an_obstaw_decision_and_ignores_edge_low():
+    from decisions import CZEKAJ, NIE_OBSTAWIAJ, NIEDOSTEPNE, OBSTAW
+    assert staking_chance(_prop(decision=OBSTAW)) == pytest.approx(0.60)
+    # edge low (only the hit rate's sampling noise) doesn't move the stake
+    assert staking_chance(_prop(decision=OBSTAW, edge_low=-9.0)) == staking_chance(_prop(decision=OBSTAW,
+                                                                                      edge_low=5.0))
+    for status in (NIE_OBSTAWIAJ, CZEKAJ, NIEDOSTEPNE, None):
+        assert np.isnan(staking_chance(_prop(decision=status)))
+        assert kelly_stake(staking_chance(_prop(decision=status)), 1.9, 1000) == 0
+    assert np.isnan(staking_chance(_game(decision=OBSTAW)))                 # game markets are never admitted
 
 
 def test_describe():

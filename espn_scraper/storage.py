@@ -23,6 +23,13 @@ def snapshot_file(season: int, name: str) -> str:
     return os.path.join(data_dir(season), f"{name}.csv")
 
 
+def read_snapshot(path: str) -> pd.DataFrame:
+    """A snapshot file read whole. Columns added later (the net contract's cost_profile, eval_side, decision) are
+    empty in older rows and text in newer ones; read in chunks, pandas would guess their type per chunk and warn
+    (DtypeWarning) on every read."""
+    return pd.read_csv(path, low_memory=False)
+
+
 def _checked_file(season: int) -> str:
     return os.path.join(data_dir(season), "checked_through.txt")
 

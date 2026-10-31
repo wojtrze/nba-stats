@@ -1,11 +1,12 @@
 import pandas as pd
 import streamlit as st
 
-from components import reasons_panel
-from core.data import game_model, lineups as rotowire_lineups, priced_games, superbet
+from components import decision_text, decision_times, reasons_panel
+from core.data import game_model, lineups as rotowire_lineups, player_decisions, priced_games, priced_props, superbet
+from decisions import team_decision
 from core.columns import GAMES_ABSENCES, GAMES_MARKETS, GAMES_SUMMARY
 from core.labels import MARKET_LABELS, describe_outcome, market_label, winner
-from core.state import language
+from core.state import language, scope
 from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, stop, table
 from espn_scraper import CURRENT_SEASON
 from i18n import t, value
@@ -49,24 +50,24 @@ st.caption(t('games.ratings', lang, current=season_label(CURRENT_SEASON), n_curr
              prior=season_label(CURRENT_SEASON - 1), n_prior=model['prior']))
 
 priced = sorted(priced, key=lambda g: pd.Timestamp(g['start_time']))   # earliest tip-off first
+odds_at = superbet()['fetched_at']
+decided = player_decisions(priced_props(*scope())) if not superbet()['props'].empty else {}
 rows = []
 for g in priced:
     played = min(ratings['games'].get(g['home'], 0), ratings['games'].get(g['away'], 0))
     g['edges'] = flag_game_outcomes(g['edges'], played, g['home'] in set(lineups['team']), lang)
-    best = g['edges'].loc[g['edges']['edge pp'].idxmax()]
     p = g['projection']
+    players = decided.get(g['event_id'])
     rows.append({'event_id': g['event_id'], 'game': f"{g['away'].upper()} @ {g['home'].upper()}",
                  'start (PL)': pl_time(g['start_time']),
+                 'decision': t(f"decision.{team_decision(g)['status']}", lang),
+                 'players': t(f"decision.{players['status']}", lang) if players else '',
                  'proj score': f"{p['away_pts']:.0f} – {p['home_pts']:.0f}",
                  'proj winner': winner(p, g['home'], g['away'], lang),
-                 'proj total': p['total'], 'best bet': describe_outcome(best, lang), 'signal': best['signal'],
-                 'best edge pp': best['edge pp'],
-                 'best odds': best['odds'], 'RotoWire': '✔' if g['home'] in set(lineups['team']) else ''})
+                 'proj total': p['total'], 'RotoWire': '✔' if g['home'] in set(lineups['team']) else ''})
 summary = pd.DataFrame(rows)
-picked = table(summary, GAMES_SUMMARY,
-               {'proj total': '%.1f', 'best edge pp': '%+.1f', 'best odds': '%.2f'},
-               sources={'best odds': 'superbet'}, key='games_table', select=True, legend=['superbet', 'stats'],
-               context='games')
+picked = table(summary, GAMES_SUMMARY, {'proj total': '%.1f'}, key='games_table', select=True,
+               legend=['superbet', 'stats'], context='games')
 
 focus = st.session_state.get('games_focus')
 if picked is not None:
@@ -82,6 +83,11 @@ home, away, p, edges = game['home'], game['away'], game['projection'], game['edg
 
 with st.container(border=True):
     st.markdown(f"### {away.upper()} @ {home.upper()} · {pl_time(game['start_time'])}")
+    team = team_decision(game, odds_at)
+    st.markdown(f"**{t('decision.teams', lang)}:** {decision_text(team, lang)}")
+    if decided.get(event_id):
+        st.markdown(f"**{t('decision.players', lang)}:** {decision_text(decided[event_id], lang)}")
+        st.caption(decision_times(decided[event_id], lang))
     kpis([{'label': t('games.kpi.winner', lang), 'value': winner(p, home, away, lang),
            'help': t('games.kpi.winner_help', lang, margin=p['margin'])},
           {'label': t('games.kpi.total', lang), 'value': f"{p['total']:.1f}"},
@@ -101,17 +107,21 @@ with st.container(border=True):
         rows_ = rows_.sort_values(['order', 'line', 'side'])
         rows_['line'] = [('–' if pd.isna(v) else f"{v:+g}" if m == 'SPREAD' else f"{v:g}")
                          for v, m in zip(rows_['line'], edges.loc[rows_.index, 'market'])]
-        row = table(rows_, GAMES_MARKETS, {'implied %': '%.0f', 'model %': '%.0f', 'fair odds': '%.2f', 'odds': '%.2f',
-                                  'odds move': '%+.2f', 'edge pp': '%+.1f'},
-                    key=f"markets_{event_id}", select=True, context='games')
-        outcome = edges.loc[rows_.index[row]] if row is not None else edges.loc[edges['edge pp'].idxmax()]
-        ctx = {'projection': p, 'ratings': ratings, 'home': home, 'away': away, 'home_court': home_court,
-               'absences': {tm: [(str(names.get(pid, pid)), imp) for pid, imp in game['absences'][tm]]
-                            for tm in (home, away)},
-               'games_played': ratings['games'].to_dict(), 'rotowire': home in set(lineups['team'])}
-        reasons_panel(f"{describe_outcome(outcome, lang)} @ {outcome['odds']:.2f}",
-                      game_reasons(outcome.to_dict(), ctx, lang), outcome['edge pp'], lang=lang)
         st.caption(t('games.best_shown', lang))
+        row = table(rows_, GAMES_MARKETS, {'market %': '%.0f', 'model %': '%.0f', 'fair odds': '%.2f',
+                                           'odds': '%.2f', 'odds move': '%+.2f', 'break-even net %': '%.1f',
+                                           'edge net pp': '%+.1f', 'ev net 100': '%+.1f'},
+                    key=f"markets_{event_id}", select=True, context='games')
+        # no outcome is picked for the user: the reasons open only for the row they choose
+        if row is not None:
+            outcome = edges.loc[rows_.index[row]]
+            ctx = {'projection': p, 'ratings': ratings, 'home': home, 'away': away, 'home_court': home_court,
+                   'absences': {tm: [(str(names.get(pid, pid)), imp) for pid, imp in game['absences'][tm]]
+                                for tm in (home, away)},
+                   'games_played': ratings['games'].to_dict(), 'rotowire': home in set(lineups['team']),
+                   'odds_at': odds_at, 'stats_through': model['games']['date'].max()}
+            reasons_panel(f"{describe_outcome(outcome, lang)} @ {outcome['odds']:.2f}", team,
+                          game_reasons(outcome.to_dict(), ctx, lang), lang=lang)
 
     with teams_tab:
         cols = st.columns(2)

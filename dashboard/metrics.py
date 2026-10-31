@@ -342,6 +342,46 @@ def wilson_interval(hits: int, n: int, z: float = 1.96):
 
 # --- settling: the one place that turns a result into win / loss / push and a profit ---
 
+# What a bet costs. Superbet (Poland) keeps 12% of every stake as tax, so a winning bet pays alpha × odds × stake
+# with alpha = 0.88; 'legacy' is the plain decimal odds every saved field and report used before (alpha = 1), kept
+# so they stay reproducible. A push or void returns the whole stake in both. The 10% tax on large wins isn't
+# deducted. The pages price and decide with ACTIVE_PROFILE.
+LEGACY, SUPERBET_STANDARD = 'legacy', 'superbet_standard'
+COST_PROFILES = {LEGACY: 1.0, SUPERBET_STANDARD: 0.88}
+ACTIVE_PROFILE = SUPERBET_STANDARD
+
+
+def alpha(profile: str) -> float:
+    """The share of the stake that works for a bet under the cost profile (COST_PROFILES)."""
+    return COST_PROFILES[profile]
+
+
+def break_even(odds, profile: str = ACTIVE_PROFILE, p_push=0.0):
+    """The chance to win a bet needs to break even: (1 − p_push) / (alpha × odds); 1 / odds for one offer without
+    a push in 'legacy'. A number or an array, like odds."""
+    return (1 - np.asarray(p_push, dtype=float)) / (alpha(profile) * np.asarray(odds, dtype=float))
+
+
+def expected_return_100(p_win, odds, profile: str = ACTIVE_PROFILE, p_push=0.0):
+    """What 100 staked brings back on average, minus the 100: 100 × (p_win × alpha × odds + p_push − 1). A push
+    returns the stake (neither a win nor a loss), so p_win + p_loss + p_push = 1."""
+    return 100 * (np.asarray(p_win, dtype=float) * alpha(profile) * np.asarray(odds, dtype=float)
+                  + np.asarray(p_push, dtype=float) - 1)
+
+
+def best_by_ev(candidates, profile: str = ACTIVE_PROFILE) -> Optional[Dict]:
+    """The candidate ({'p_win', 'odds', 'p_push'?, ...}) with the highest expected_return_100, or None: the side or
+    offer to evaluate. Ranking by the edge in pp instead would prefer a short price whose expected return is
+    lower."""
+    best, best_ev = None, -np.inf
+    for c in candidates:
+        if pd.isna(c.get('p_win')) or pd.isna(c.get('odds')):
+            continue
+        ev = float(expected_return_100(c['p_win'], c['odds'], profile, c.get('p_push', 0.0)))
+        if ev > best_ev:
+            best, best_ev = c, ev
+    return best
+
 def side_result(margin: pd.Series, decided: Optional[pd.Series] = None) -> pd.Series:
     """'win' / 'loss' / 'push' from how far a bet cleared its line in its own direction (actual − line for an Over,
     line − actual for an Under, the handicapped margin for a spread...); NaN where the margin is unknown or
@@ -351,11 +391,11 @@ def side_result(margin: pd.Series, decided: Optional[pd.Series] = None) -> pd.Se
     return out.where(keep)
 
 
-def side_profit(result: pd.Series, odds) -> pd.Series:
-    """Profit per unit staked: odds − 1 for a win, −1 for a loss, 0 for a push or void (the stake comes back);
-    NaN where there's no result."""
-    profit = pd.Series(np.select([result == 'win', result == 'loss'], [np.asarray(odds) - 1, -1.0], 0.0),
-                       index=result.index)
+def side_profit(result: pd.Series, odds, profile: str = LEGACY) -> pd.Series:
+    """Profit per unit staked under the cost profile: alpha × odds − 1 for a win (odds − 1 in 'legacy'), −1 for a
+    loss, 0 for a push or void in every profile (the stake comes back); NaN where there's no result."""
+    win = alpha(profile) * np.asarray(odds, dtype=float) - 1
+    profit = pd.Series(np.select([result == 'win', result == 'loss'], [win, -1.0], 0.0), index=result.index)
     return profit.where(result.notna())
 
 
@@ -379,20 +419,26 @@ def score_check(games: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
                  | (check['away pts (players)'] != check['away_score'])]
 
 
-def roi(is_hit: pd.Series, odds: pd.Series) -> float:
-    """Return per unit staked, betting 1 unit on every bet: +0.05 means +5%."""
+def roi(is_hit: pd.Series, odds: pd.Series, profile: str = LEGACY) -> float:
+    """Return per unit staked, betting 1 unit on every (won or lost) bet under the cost profile: +0.05 means +5%."""
     if len(is_hit) == 0:
         return np.nan
-    return float((np.where(is_hit, odds, 0.0) - 1).mean())
+    return float((np.where(is_hit, alpha(profile) * np.asarray(odds, dtype=float), 0.0) - 1).mean())
 
 
 def _rate_row(part: pd.DataFrame) -> Dict:
+    """Hit rate, its 95% range and the ROI of won / lost bets, in both cost profiles side by side: 'ROI %' and
+    'break-even %' plain (legacy), 'ROI % std' and 'break-even % std' with Superbet's 12% stake tax."""
     hits, n = int(part['is_hit'].sum()), len(part)
     low, high = wilson_interval(hits, n)
     # the model's own expectation next to the hit rate: an accurate signal wins about as often as it said
     expected = {'expected %': part['model_pct'].mean()} if 'model_pct' in part else {}
     return {'bets': n, **expected, 'hit %': 100 * hits / n if n else np.nan, 'ci low %': 100 * low,
-            'ci high %': 100 * high, 'ROI %': 100 * roi(part['is_hit'], part['odds']), 'avg odds': part['odds'].mean()}
+            'ci high %': 100 * high, 'ROI %': 100 * roi(part['is_hit'], part['odds']),
+            'ROI % std': 100 * roi(part['is_hit'], part['odds'], SUPERBET_STANDARD),
+            'break-even %': 100 * float(np.mean(break_even(part['odds'], LEGACY))) if n else np.nan,
+            'break-even % std': 100 * float(np.mean(break_even(part['odds'], SUPERBET_STANDARD))) if n else np.nan,
+            'avg odds': part['odds'].mean()}
 
 
 def rule_stats(bets: pd.DataFrame) -> pd.DataFrame:
@@ -473,14 +519,17 @@ def matchup_verdict(diff: float, average: float):
 
 def matchup(allowed: pd.DataFrame, defense: str, group: str) -> Dict:
     """What `defense` allows to a position group vs the league average, from an allowed_by_position table:
-    value, average, diff, ratio, rank (1 = allows the most), word and colour. Empty when unknown."""
+    value, average, diff, ratio, rank (1 = allows the most), word, colour and games (the defense's games behind
+    it). Empty when unknown."""
     if defense not in allowed.index or group not in ('G', 'F', 'C') or pd.isna(allowed.loc[defense, group]):
         return {}
     value, average = allowed.loc[defense, group], allowed[group].mean()
     word, colour = matchup_verdict(value - average, average)
     rank = int(allowed[group].rank(ascending=False, method='min')[defense])
+    games = allowed.loc[defense, 'games'] if 'games' in allowed else np.nan
     return {'value': value, 'average': average, 'diff': value - average, 'ratio': value / average if average else 1.0,
-            'rank': rank, 'teams': int(allowed[group].notna().sum()), 'word': word, 'colour': colour}
+            'rank': rank, 'teams': int(allowed[group].notna().sum()), 'word': word, 'colour': colour,
+            'games': int(games) if pd.notna(games) else None}
 
 
 # a game's expected points and its opponent's defense move a player's numbers, but much less than one to one
@@ -602,13 +651,32 @@ def model_probability(projection: Dict, market: str, side: str, line: Optional[f
     return over if side == 'over' else 1 - over
 
 
-def market_edges(projection: Dict, odds: pd.DataFrame) -> pd.DataFrame:
-    """Superbet outcomes (market, side, line, odds) with the model's chance, the chance implied by the odds,
-    the edge in percentage points and the model's fair odds."""
+def no_vig_pairs(odds: pd.DataFrame, by=('event_id',)) -> pd.Series:
+    """Each game outcome's margin-free chance (0–1): 1 / odds over the sum of both sides of the same market and line
+    (a handicap's sides are −x and +x; the rest share the line), within each group of `by` (e.g. one fetch's
+    event). NaN where the other side isn't offered."""
+    pair = np.where(odds['market'] == 'SPREAD', odds['line'].abs(), odds['line'])
+    implied = 1 / odds['odds']
+    keys = [odds[c] for c in by if c in odds] + [odds['market'], pd.Series(pair, index=odds.index).fillna(-1)]
+    total = implied.groupby(keys).transform('sum')
+    sides = implied.groupby(keys).transform('size')
+    return (implied / total).where(sides == 2)
+
+
+def market_edges(projection: Dict, odds: pd.DataFrame, profile: str = ACTIVE_PROFILE) -> pd.DataFrame:
+    """Superbet outcomes (market, side, line, odds) with the model's chance and fair odds. Two contracts side by
+    side: 'implied %' (100 / odds) and 'edge pp' = model % − implied % are the legacy ones the snapshots save;
+    'market %' is the margin-free chance of the pair, and 'break-even net %', 'edge net pp' and 'ev net 100' price
+    the outcome under `profile` (metrics.break_even / expected_return_100: the same contract as the props)."""
     out = odds.copy()
     out['model %'] = [100 * model_probability(projection, m, s, l)
                       for m, s, l in zip(out['market'], out['side'], out['line'])]
     out['implied %'] = 100 / out['odds']
     out['edge pp'] = out['model %'] - out['implied %']
     out['fair odds'] = 100 / out['model %']
+    out['market %'] = 100 * no_vig_pairs(out)
+    out['cost profile'] = profile
+    out['break-even net %'] = 100 * break_even(out['odds'], profile)
+    out['edge net pp'] = out['model %'] - out['break-even net %']
+    out['ev net 100'] = expected_return_100(out['model %'] / 100, out['odds'], profile)
     return out

@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from metrics import game_lines, grouped_rates, prop_signal, score_check, side_profit, side_result
+from metrics import SUPERBET_STANDARD, game_lines, grouped_rates, prop_signal, score_check, side_profit, side_result
 from superbet_fetcher import main_lines
 
 PROP_KEY = ['event_id', 'name_ESPN', 'bet_type']
@@ -58,10 +58,12 @@ def opening_game_lines(snapshots: pd.DataFrame) -> pd.DataFrame:
 # 'last line' / 'last odds': the last quote the snapshots saw before tip-off (two or three snapshots a day, so
 # not the true closing line); 'h before tip': how long before tip-off the bet's quote / that last quote was taken
 PROP_RESULT_COLUMNS = ['game_date', 'name', 'game', 'bet_type', 'line', 'pick', 'odds', 'model_pct', 'edge_pp',
-                       'edge_low', 'signal', 'actual', 'status', 'result', 'profit', 'h before tip', 'last line',
+                       'edge_low', 'signal', 'actual', 'status', 'result', 'profit', 'profit std', 'h before tip',
+                       'last line',
                        'last odds', 'last h before tip', 'line vs last', 'odds vs last %']
 GAME_RESULT_COLUMNS = ['game_date', 'game', 'market', 'side', 'team', 'line', 'odds', 'model_pct', 'edge_pp',
-                       'main', 'score', 'status', 'result', 'profit', 'h before tip', 'last odds', 'last h before tip',
+                       'main', 'score', 'status', 'result', 'profit', 'profit std', 'h before tip', 'last odds',
+                       'last h before tip',
                        'odds vs last %']
 # columns of a bet-slip row (bets.py) that settling keeps
 BET_COLUMNS = ['bet_id', 'placed_at', 'stake']
@@ -178,6 +180,8 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     bets.loc[bets['status'] == 'void', 'result'] = 'void'
     bets['result'] = bets['result'].where(bets['pick'].notna())
     bets['profit'] = side_profit(bets['result'], bets['odds'])
+    # the same with Superbet's 12% stake tax (metrics.COST_PROFILES), next to the plain-odds profit
+    bets['profit std'] = side_profit(bets['result'], bets['odds'], SUPERBET_STANDARD)
     bets['h before tip'] = _hours_before_tip(bets['fetched_at'], bets['start_time']) if 'fetched_at' in bets \
         else np.nan
     bets['last odds'] = np.where(over, bets['last over'], bets['last under'])
@@ -235,6 +239,8 @@ def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd
                                ['settled', 'unresolved'], 'pending')
     bets['result'] = side_result(margin, bets['status'] == 'settled')
     bets['profit'] = side_profit(bets['result'], bets['odds'])
+    # the same with Superbet's 12% stake tax (metrics.COST_PROFILES), next to the plain-odds profit
+    bets['profit std'] = side_profit(bets['result'], bets['odds'], SUPERBET_STANDARD)
     bets['score'] = [f"{x:.0f} – {y:.0f}" if pd.notna(y) else '' for x, y in zip(a, h)]
     bets['h before tip'] = _hours_before_tip(bets['fetched_at'], bets['start_time']) if 'fetched_at' in bets \
         else np.nan

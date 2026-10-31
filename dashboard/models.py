@@ -9,10 +9,11 @@ import numpy as np
 import pandas as pd
 
 from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS
-from metrics import (IDENTITY_CALIBRATION, POSITION_GROUPS, STATS, absence_adjustments, absence_impact,
-                     add_combined_stats, allowed_by_position, blended_ratings, calibrate, context_factor, game_lines,
-                     game_projection, hit_rates, line_percentile, market_edges, matchup, no_vig, percentile_band,
-                     prop_probability, prop_signal, rotowire_team, team_ratings)
+from metrics import (ACTIVE_PROFILE, IDENTITY_CALIBRATION, LEGACY, POSITION_GROUPS, STATS, absence_adjustments,
+                     absence_impact, add_combined_stats, allowed_by_position, best_by_ev, blended_ratings, break_even,
+                     calibrate, context_factor, expected_return_100, game_lines, game_projection, hit_rates,
+                     line_percentile, market_edges, matchup, no_vig, percentile_band, prop_probability, prop_signal,
+                     rotowire_team, team_ratings)
 from superbet_fetcher import main_lines
 
 # fitted by backtest/calibrate.py on Unibet's 2022/23 lines and the settled Superbet ones, with the 🟢 threshold;
@@ -164,7 +165,7 @@ def bet_side(best_side: pd.Series, signal: pd.Series) -> pd.Series:
 
 def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, game_odds: pd.DataFrame,
                 games: pd.DataFrame, adjust: Optional[Callable] = None,
-                calibration: Optional[Dict] = None, green_edge=FROM_FILE) -> pd.DataFrame:
+                calibration: Optional[Dict] = None, green_edge=FROM_FILE, profile: str = ACTIVE_PROFILE) -> pd.DataFrame:
     """Every Superbet line (props with player_id_ESPN) compared with the player's game logs and priced.
 
     logs: prepare_logs output in the seasons and game types to use, optionally top_up_logs output (the topped-up
@@ -180,6 +181,13 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     coefficients in CALIBRATION_FILE); raw model %, raw over/under % (and their low ends) and market over % are
     the model's own chances before that, which backtest/calibrate.py fits on. calibration: calibration_status, or
     GIVEN for coefficients passed in; unless FITTED or GIVEN no line gets 🟢 / 🟡 or a bet (research only).
+
+    Two cost contracts side by side. The legacy columns (best side, break-even %, edge pp, edge low, ev 100,
+    signal, bet) are priced at the plain odds and choose the side by edge pp, as every saved snapshot and the
+    2022/23 backtest did, so they stay reproducible. The net columns price the line under `profile`
+    (metrics.COST_PROFILES; default the pages' ACTIVE_PROFILE): side (the side with the higher expected return:
+    the one decisions.py evaluates), side odds, p win %, p push % (on a whole-number line, 1 − the calibrated
+    Over and Under chances; else 0), break-even net %, edge net pp and ev net 100.
     """
     adjust = adjust or absence_adjustments
     # last season's games of a few players would distort opponents' defense and teammates' absence effects
@@ -223,7 +231,8 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     # the game: Superbet's main handicap and total, and the opponent's defense against the player's position
     lines = game_lines(pd.DataFrame(main_lines(game_odds.to_dict('records')))) if len(game_odds) else pd.DataFrame()
     played = nba_games(games)
-    usual = team_ratings(played)['pts'] if len(played) else pd.Series(dtype=float)
+    rated = team_ratings(played) if len(played) else pd.DataFrame(columns=['pts', 'games'])
+    usual, team_games = rated['pts'], rated['games']
     allowed = {}
     context = []
     for _, row in table.iterrows():
@@ -245,7 +254,8 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
         team_pts = usual.get(team, np.nan)
         context.append({'is_home': is_home, 'opp': opp, 'spread': spread,
                         'game total': g['total'] if g is not None else np.nan, 'implied': implied,
-                        'team_pts': team_pts, 'matchup_info': m, 'matchup': m.get('word', ''),
+                        'team_pts': team_pts, 'team_games': team_games.get(team, np.nan),
+                        'matchup_info': m, 'matchup': m.get('word', ''),
                         'pace factor': context_factor(implied / team_pts if team_pts else np.nan),
                         'matchup factor': context_factor(m.get('ratio', np.nan))})
     table = table.join(pd.DataFrame(context, index=table.index))
@@ -258,26 +268,44 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
         games_ = by_player.get(row['player_id'], empty)
         values = games_[row['bet_type']] if len(games_) else pd.Series(dtype=float)
         market = dict(zip(['Over', 'Under'], no_vig(row['over_odds'], row['under_odds'])))
-        best, raw = None, {'market over %': 100 * market['Over']}
+        raw, sides = {'market over %': 100 * market['Over']}, {}
         for side, odds in (('Over', row['over_odds']), ('Under', row['under_odds'])):
             if pd.isna(odds):
                 continue
             chance = prop_probability(values, row['line'], side, market[side], mean=row['proj avg'])
             raw.update({f'raw {side.lower()} %': 100 * chance['p'], f'raw {side.lower()} low %': 100 * chance['low']})
             p, low = (calibrate(chance[k], market[side], side, coef) for k in ('p', 'low'))
-            cand = {'best side': side, 'model %': 100 * p, 'raw model %': 100 * chance['p'],
-                    'market %': 100 * market[side], 'break-even %': 100 / odds, 'edge pp': 100 * p - 100 / odds,
-                    'edge low': 100 * low - 100 / odds, 'pick odds': odds}
+            sides[side] = {'side': side, 'p_win': p, 'low': low, 'raw': chance['p'], 'odds': odds,
+                           'market': market[side]}
+        # a whole-number line can land on the line itself: the stake comes back
+        push = max(0.0, 1 - sum(v['p_win'] for v in sides.values()))             if len(sides) == 2 and float(row['line']).is_integer() else 0.0
+        best = None
+        for side, v in sides.items():
+            cand = {'best side': side, 'model %': 100 * v['p_win'], 'raw model %': 100 * v['raw'],
+                    'market %': 100 * v['market'], 'break-even %': 100 / v['odds'],
+                    'edge pp': 100 * v['p_win'] - 100 / v['odds'], 'edge low': 100 * v['low'] - 100 / v['odds'],
+                    'pick odds': v['odds']}
             if best is None or cand['edge pp'] > best['edge pp']:
                 best = cand
         best = best or dict.fromkeys(['best side', 'model %', 'raw model %', 'market %', 'break-even %', 'edge pp',
                                       'edge low', 'pick odds'], np.nan)
-        return pd.Series(best | raw)
+        net = best_by_ev([v | {'p_push': push} for v in sides.values()], profile)
+        if net is None:
+            priced = dict.fromkeys(['side odds', 'p win %', 'break-even net %', 'edge net pp', 'ev net 100'], np.nan)
+            priced['side'] = ''
+        else:
+            be = 100 * float(break_even(net['odds'], profile, push))
+            priced = {'side': net['side'], 'side odds': net['odds'], 'p win %': 100 * net['p_win'],
+                      'break-even net %': be, 'edge net pp': 100 * net['p_win'] - be,
+                      'ev net 100': float(expected_return_100(net['p_win'], net['odds'], profile, push))}
+        return pd.Series(best | raw | priced | {'p push %': 100 * push, 'cost profile': profile})
 
     table = pd.concat([table, table.apply(price, axis=1)], axis=1)
-    # what 100 staked on the better side returns on average by our chance: 0 = break-even, + = a value bet. Unlike
-    # model %, which is mostly the odds (a 1.30 favourite always looks likely), it ranks bets by their price
-    table['ev 100'] = table['model %'] * table['pick odds'] - 100
+    # what 100 staked on the better side returns on average by our chance at the plain odds (legacy): 0 =
+    # break-even. Unlike model %, which is mostly the odds (a 1.30 favourite always looks likely), it ranks bets
+    # by their price; ev net 100 is the same under the cost profile
+    table['ev 100'] = expected_return_100(table['model %'] / 100, table['pick odds'], LEGACY,
+                                          table['p push %'] / 100)
     table['in band'] = (table['p30'] <= table['line']) & (table['line'] <= table['p70'])
     table['calibration'] = status
     table['signal'] = prop_signal(table['edge pp'], load_green_edge() if green_edge is FROM_FILE else green_edge)

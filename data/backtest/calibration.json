@@ -1,24 +1,24 @@
 {
   "coefficients": {
-    "a": 1.1347005551952127,
-    "b": 0.12739374637004583,
+    "a": 1.1626942374379476,
+    "b": 0.13563887805746894,
     "c": 0.0,
     "d": 0.0
   },
   "green_edge_pp": null,
-  "superbet_through": "2026-10-26",
+  "superbet_through": "2026-10-30",
   "model_version": "2026-10-26-count",
-  "fitted_on": "2026-10-27",
+  "fitted_on": "2026-10-31",
   "source": "Unibet 2022/23 main lines (players with 5+ games, backtest variant 'none') and every settled Superbet line (last fetch before tip-off)",
   "lines": {
     "Unibet 2022/23": 29331,
-    "Superbet 2026/27": 9768
+    "Superbet 2026/27": 14737
   },
-  "rows": 78198,
+  "rows": 88136,
   "held_out": {
     "coefficients": {
-      "a": 1.219118254857769,
-      "b": 0.06751861482690279,
+      "a": 1.224245079227472,
+      "b": 0.09200368158667308,
       "c": 0.0,
       "d": 0.0
     },
@@ -36,26 +36,26 @@
             "Brier": 0.2549622133963469
           },
           "Calibrated model": {
-            "log loss": 0.6893502365019895,
-            "Brier": 0.2481071481745783
+            "log loss": 0.6892724331488599,
+            "Brier": 0.24806889217109246
           }
         }
       },
       "superbet": {
-        "fit on": "Oct 20 2026 \u2013 Oct 24 2026",
-        "scored on": "Oct 25 2026 \u2013 Oct 26 2026",
+        "fit on": "Oct 20 2026 \u2013 Oct 27 2026",
+        "scored on": "Oct 28 2026 \u2013 Oct 30 2026",
         "scores": {
           "Market (margin-free price)": {
-            "log loss": 0.6839021018996052,
-            "Brier": 0.24544446526620792
+            "log loss": 0.6828139766737684,
+            "Brier": 0.24491283535118633
           },
           "Uncalibrated model": {
-            "log loss": 0.6875005579895411,
-            "Brier": 0.24712788420862006
+            "log loss": 0.6877599679439963,
+            "Brier": 0.2471998502043693
           },
           "Calibrated model": {
-            "log loss": 0.6827808201758176,
-            "Brier": 0.24491232386315173
+            "log loss": 0.6814967223538805,
+            "Brier": 0.2442869043117235
           }
         }
       }

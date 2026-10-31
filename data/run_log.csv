@@ -41,3 +41,37 @@ started_at,job,command,exit_code,seconds,summary
 2026-10-27T11:42:55Z,lineups,RotoWire lineups (dashboard),0,1.7,saved 55 players for Oct 27 (first fetch of the day)
 2026-10-27T11:43:08Z,stats,python -m espn_scraper,0,16.4,"2026/27: added 9 games, 212 player lines. 4 games not final yet."
 2026-10-27T11:43:25Z,snapshot,python daily_snapshot.py,0,14.3,"rotowire_lineups: 55 rows, superbet_props: 682 rows, superbet_game_odds: 574 rows"
+2026-10-27T16:55:28Z,fetch,Fetch from Superbet (dashboard),0,10.9,saved 689 player lines and 574 game odds (5 games)
+2026-10-27T20:40:02Z,lineups,RotoWire lineups (dashboard),0,1.2,saved 55 players for Oct 27: 2 changes – Derrick White (BOS): starter → starter; no longer listed: Branden Carlson (POR)
+2026-10-27T20:40:10Z,snapshot,python daily_snapshot.py,0,14.8,"rotowire_lineups: 55 rows, superbet_props: 711 rows, superbet_game_odds: 568 rows"
+2026-10-27T21:25:57Z,snapshot,python daily_snapshot.py,0,13.5,"rotowire_lineups: 55 rows, superbet_props: 711 rows, superbet_game_odds: 572 rows"
+2026-10-27T22:43:26Z,snapshot,python daily_snapshot.py,0,14.6,"rotowire_lineups: 55 rows, superbet_props: 984 rows, superbet_game_odds: 570 rows"
+2026-10-28T07:16:56Z,lineups,RotoWire lineups (dashboard),0,0.9,saved 202 players for Oct 28 (first fetch of the day)
+2026-10-28T07:17:24Z,stats,python -m espn_scraper,0,8.6,"2026/27: added 4 games, 94 player lines. 12 games not final yet."
+2026-10-28T07:17:33Z,snapshot,python daily_snapshot.py,0,25.4,"rotowire_lineups: 202 rows, superbet_props: 1460 rows, superbet_game_odds: 1704 rows"
+2026-10-28T13:53:16Z,lineups,RotoWire lineups (dashboard),0,1.4,saved 202 players for Oct 28: 3 changes – Tobias Harris (SA): Ques 25% → Doubt 25%; Cameron Carr (LAL): Out 0% → Doubt 25%; Adou Thiero (LAL): Out 0% → Doubt 25%
+2026-10-28T13:53:31Z,snapshot,python daily_snapshot.py,0,33.3,"rotowire_lineups: 202 rows, superbet_props: 1840 rows, superbet_game_odds: 1702 rows"
+2026-10-28T20:34:17Z,lineups,RotoWire lineups (dashboard),0,1.4,saved 202 players for Oct 28: 26 changes – Simone Fontecchio (MIA): Doubt 25% → Out 0%; Aaron Wiggins (ATL): Ques 50% → Prob 75%; AJ Dybantsa (WSH): starter → starter; …and 23 more
+2026-10-28T20:34:29Z,snapshot,python daily_snapshot.py,0,33.8,"rotowire_lineups: 202 rows, superbet_props: 1880 rows, superbet_game_odds: 1694 rows"
+2026-10-29T06:29:00Z,lineups,RotoWire lineups (dashboard),0,1.4,saved 194 players for Oct 28: 73 changes – MIA lineup confirmed; ATL lineup confirmed; WSH lineup confirmed; …and 70 more
+2026-10-29T06:29:06Z,stats,python -m espn_scraper,0,17.0,"2026/27: added 12 games, 256 player lines. 3 games not final yet."
+2026-10-29T06:29:23Z,snapshot,python daily_snapshot.py,0,12.9,"rotowire_lineups: 194 rows, superbet_props: 467 rows, superbet_game_odds: 426 rows"
+2026-10-29T14:58:37Z,lineups,RotoWire lineups (dashboard),0,0.8,saved 40 players for Oct 29 (first fetch of the day)
+2026-10-29T14:58:51Z,snapshot,python daily_snapshot.py,0,14.7,"rotowire_lineups: 40 rows, superbet_props: 495 rows, superbet_game_odds: 426 rows"
+2026-10-29T19:42:54Z,lineups,RotoWire lineups (dashboard),0,1.1,"saved 43 players for Oct 29: 4 changes – new: Meleek Thomas (CLE, Ques 100%); new: Jaylon Tyson (CLE, Ques 50%); Jordan Poole (NO): Ques 50% → Doubt 25%; …and 1 more"
+2026-10-29T19:43:10Z,fetch,Fetch from Superbet (dashboard),0,10.6,saved 522 player lines and 426 game odds (3 games)
+2026-10-30T00:04:26Z,lineups,RotoWire lineups (dashboard),0,1.2,saved 43 players for Oct 29: 13 changes – CLE lineup confirmed; ATL lineup confirmed; SAC lineup confirmed; …and 10 more
+2026-10-30T00:04:36Z,snapshot,python daily_snapshot.py,0,14.6,"rotowire_lineups: 43 rows, superbet_props: 839 rows, superbet_game_odds: 1562 rows"
+2026-10-30T07:16:44Z,lineups,RotoWire lineups (dashboard),0,1.0,saved 167 players for Oct 30 (first fetch of the day)
+2026-10-30T07:16:47Z,stats,python -m espn_scraper,0,12.0,"2026/27: added 3 games, 66 player lines. 10 games not final yet."
+2026-10-30T07:16:59Z,snapshot,python daily_snapshot.py,0,35.0,"rotowire_lineups: 167 rows, superbet_props: 1266 rows, superbet_game_odds: 1420 rows"
+2026-10-30T12:30:50Z,fetch,Fetch from Superbet (dashboard),1,21.6,"failed: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+2026-10-30T13:39:59Z,snapshot,python daily_snapshot.py,0,29.5,"rotowire_lineups: 167 rows, superbet_props: 1821 rows, superbet_game_odds: 1420 rows"
+2026-10-30T21:23:14Z,lineups,RotoWire lineups (dashboard),0,1.2,"saved 169 players for Oct 30: 18 changes – Dennis Schroder (CHA): starter → starter; new: Dailyn Swain (CHI, Ques 50%); Isaiah Joe (DET): Ques 50% → Out 0%; …and 15 more"
+2026-10-30T21:23:22Z,snapshot,python daily_snapshot.py,0,26.8,"rotowire_lineups: 169 rows, superbet_props: 1842 rows, superbet_game_odds: 1418 rows"
+2026-10-31T00:04:03Z,lineups,RotoWire lineups (dashboard),0,1.4,saved 157 players for Oct 30: 39 changes – CHA lineup confirmed; WSH lineup confirmed; CHI lineup confirmed; …and 36 more
+2026-10-31T07:14:30Z,lineups,RotoWire lineups (dashboard),0,1.2,saved 112 players for Oct 31 (first fetch of the day)
+2026-10-31T07:14:35Z,stats,python -m espn_scraper,0,16.0,"2026/27: added 10 games, 232 player lines. 7 games not final yet."
+2026-10-31T07:14:51Z,snapshot,python daily_snapshot.py,0,21.6,"rotowire_lineups: 112 rows, superbet_props: 1034 rows, superbet_game_odds: 994 rows"
+2026-10-31T17:06:39Z,lineups,RotoWire lineups (dashboard),0,0.6,"saved 115 players for Oct 31: 8 changes – LeBron James (PHI): starter → starter; new: Dean Wade (PHI, starter); Tacko Fall (PHI): Out 0% → Ques 100%; …and 5 more"
+2026-10-31T17:07:07Z,snapshot,python daily_snapshot.py,0,23.1,"rotowire_lineups: 115 rows, superbet_props: 1152 rows, superbet_game_odds: 994 rows"

@@ -50,7 +50,7 @@ fetch time. Before the step 1 fix, neither of them records the model version or 
 | F3 | Without `calibration.json`, the raw model's chances are used silently (identity coefficients). Their overconfident edges then become 🟡 picks and Kelly stakes. | Confirmed defect | `models.load_calibration` | fixed: `models.calibration_status` (fitted / missing / version mismatch) is a column of `price_props`; unless fitted no 🟢/🟡, no bet, verdict Pass, no Kelly stake for props; warning on Props, Overview, Today's props and the slip |
 | F4 | The 🟢 threshold is chosen on the held-out Superbet nights, and those same nights are its only validation. Today that's 2 nights (30% of 6). It's re-chosen after every settled night, which is repeated selection on the same outcomes. | Methodological limitation (overfitting) | `backtest.calibrate.choose_green_edge`, `refresh` | mitigated: 🟢 needs 50+ bets over 10+ held-out nights, ROI > 0 and the hit rate's 95% low end above the bets' break-even; the report states the selection policy and that the threshold is exploratory. A clean fix needs a later untouched period (P1 harness) |
 | F5 | Game markets are never calibrated. A fixed +5 pp edge gives 🟢, and 23.8% of the saved game outcomes reach it. The bet slip sizes game bets with Kelly on the raw `model %`. | Confirmed defect (unvalidated signal) | `metrics.market_edges`, Games pages, `bets.staking_chance` | fixed: game outcomes get no 🟢/🟡, verdict Pass and no stake; the calibration report tracks the game model against the margin-free price (Oct 21–25, 580 outcomes: log loss 0.7011 vs 0.6719; old 🟢 expected 68.1%, won 55.3%). A game calibration follows at 300+ outcomes on 10+ nights |
-| F6 | The "95% range" is p ± 1.96·√(p(1−p)/(n+11)): the sampling noise of a shrunk hit rate, not a prediction interval, and it leaves out the projection, the market prior and model error. It's then passed through the calibration, where b = 0.079 shrinks it almost to nothing. The docstring calls it a Beta posterior. | Documentation ambiguity + limitation | `metrics.prop_probability`, `models.price_props`, `bets.staking_chance` | open |
+| F6 | The "95% range" is p ± 1.96·√(p(1−p)/(n+11)): the sampling noise of a shrunk hit rate, not a prediction interval, and it leaves out the projection, the market prior and model error. It's then passed through the calibration, where b = 0.079 shrinks it almost to nothing. The docstring calls it a Beta posterior. | Documentation ambiguity + limitation | `metrics.prop_probability`, `models.price_props`, `bets.staking_chance` | partly fixed: the docstring (Oct 26); staking no longer uses it and the UI no longer calls it a model confidence range (Oct 31, phase 1–2). The range itself is unchanged |
 | F7 | There are two settlement implementations: `tracking._result` / `_profit` and `backtest.run.side_result`. When a game is stored but has no row for the player, it settles as `void`, even if the scraper skipped that player's line. A postponed game stays `pending` forever. No props or game lines are integer today, so pushes are rare, but the props model mixes conditional and unconditional chances on integer lines. | Confirmed (duplication), edge cases | `dashboard/tracking.py`, `backtest/run.py`, `metrics.prop_probability` | fixed: one implementation (`metrics.side_result` / `side_profit`) used by tracking, backtest and dashboard v2; the points check is `metrics.score_check` (both Data pages); missing row in an incomplete box score and a game still missing after later ones are stored → `unresolved`, counted on the pages. No settled line of the record changed. The props model's integer-line chances remain a limitation (no integer lines offered so far) |
 | F8 | Settling by name (`name_ESPN` → id) takes the last match, with no check for two players sharing a name. | Limitation | `tracking.settle_props` | fixed: a name fallback is used only when it belongs to exactly one player; otherwise `unresolved` |
 | F9 | CSV writes from both dashboards and the scheduled jobs have no lock and no atomic write. `_append` rewrites the whole file whenever a new column appears. | Confirmed defect (reproduced) | `daily_snapshot._append`, `bets.save_bets` | fixed: `safe_io.py` (lock file + atomic replace) for every data writer: snapshot appends and the column-adding rewrite, the RotoWire save-on-change, `my_bets.csv`, the run log, the scraper's game logs (`_drop_game` rewrote them in place), `checked_through`, the calibration, the backtest and ablation outputs. The Superbet cooldown was per process; it's now `data/superbet_contact.txt`, claimed under a lock. Reproduced with the old code: 4 processes × 40 appends → rows lost and stray header lines; 3 dashboards → one RotoWire change saved 3 times. Run log wording reconciled in the README |
@@ -64,7 +64,7 @@ fetch time. Before the step 1 fix, neither of them records the model version or 
 | Calibration state (F3) | `test_load_calibration`, `test_calibration_status_and_warning`, `dashboard/test_models.py::test_no_valid_calibration_means_no_pick`, `dashboard/test_bets.py::test_no_stake_on_an_uncalibrated_prop`, `dashboard/test_reasons.py::test_verdict_is_pass_for_a_prop_without_valid_calibration` | – |
 | 🟢 threshold (F4) | `backtest/test_backtest.py::test_choose_green_edge_needs_many_nights_and_a_clear_margin_over_break_even` | – |
 | Game signal (F5) | `test_settle_games`, `dashboard/test_reasons.py::test_game_outcomes_red_only_for_flags`, `test_game_reasons_for_a_total`, `dashboard/test_bets.py::test_staking_chance_uses_the_low_end_for_props`, `backtest/test_backtest.py::test_game_lines_margin_free_chance_and_report` | – |
-| Staking (F6) | `dashboard/test_bets.py::test_kelly_stake`, `test_staking_chance_uses_the_low_end_for_props` | (covered by F3/F5 tests) |
+| Staking (F6) | `dashboard/test_bets.py::test_kelly_stake`, `test_staking_chance_needs_an_obstaw_decision_and_ignores_edge_low` | – |
 | Settlement (F7, F8) | `test_settle_props`, `test_side_result_push_and_profit`, `test_save_and_settle_my_bets`, `dashboard/test_tracking.py::test_side_result_and_profit`, `test_settle_props_statuses`, `test_settle_games_postponed_is_unresolved` | – |
 | Persistence (F9) | `tests/test_safe_io.py` (4 concurrent writer processes, byte-exact appends, interrupted write, exclusive / reentrant / stale lock, shared Superbet cooldown, one RotoWire change saved once) | – |
 
@@ -108,3 +108,40 @@ Adopted (Oct 26) as model `2026-10-26-count` (`metrics.count_over` in `metrics.p
 7. Ablation harness on identical lines, then model changes only where it shows a gain
 8. Persistence (F9)
 9. README / UI wording (F6 and the P2 items)
+
+## Phase 1–2: cost contract and decisions (Oct 31)
+
+**Phase 1, the settlement contract** (`dashboard/metrics.py`, `models.py`, `bets.py`):
+- Cost profiles `legacy` (alpha = 1, plain odds) and `superbet_standard` (alpha = 0.88: Superbet keeps 12% of the
+  stake). For one offer without a push: p_be = 1 / (alpha × odds), EV_100 = 100 × (p_win × alpha × odds − 1); with a
+  push, EV_100 = 100 × (p_win × alpha × odds + p_push − 1) and p_win + p_loss + p_push = 1. A push returns the stake
+  in both profiles. The 10% tax on large wins isn't deducted.
+- Fixed: the props break-even was 100 / odds with no stake tax; the EV ignored the push; the game edge was model %
+  − 100 / odds with the margin in (`market_edges` now adds the pair's margin-free `market %` and the net columns);
+  the side was chosen by edge pp while the table ranked by EV (the net `side` is chosen by EV, `metrics.best_by_ev`);
+  Kelly used `edge low` (it now sizes on the calibrated chance at the net price, and only an OBSTAW offer gets a
+  stake, so every stake is 0 today).
+- Legacy fields keep their meaning and stay reproducible: `best side`, `edge pp`, `edge low`, `ev 100`, `signal`,
+  `bet` in `price_props`, `implied %` / `edge pp` for games, the saved snapshot columns, the backtest, the
+  calibration (fit and 🟢 threshold) and the ablation. Snapshots add `cost_profile`, `eval_side`, `ev_net_100` and
+  `decision`. Settlement adds `profit std`; rate tables show `ROI %` and `ROI % std` side by side. `MODEL_VERSION` is
+  unchanged (the chances are the same), so the calibration stays fitted.
+
+**Phase 2, decisions** (`dashboard/decisions.py`, `reasons.py`, `i18n.py`, both dashboards):
+- One decision per game for the team markets (always NIEDOSTEPNE; nothing admits them automatically) and one for its
+  players: OBSTAW only for an offer meeting a threshold recorded on an independent period (`ADMITTED_THRESHOLD`,
+  None: unreachable), NIE_OBSTAWIAJ, CZEKAJ (no or stale odds, no lineup for a team, the best offer's player
+  questionable, a tie) or NIEDOSTEPNE (no valid props calibration). The reasons don't vote; `reasons.verdict`
+  (Bet / Lean / Pass) is gone.
+- Every reason carries direction, value, reference, observations, time and source; one without its data isn't
+  made (the back-to-back reason without back-to-back games, which used to count against an Over, is gone). The line
+  move is context. The home-court reason is gone (a model constant, not an observation).
+- The UI: no "least loss" or "biggest game edges" lists, no Graj / Rozważ / Odpuść, one side column, the time of the
+  odds and of the lineup, the factor from the implied team total isn't called pace, the with/without change is
+  descriptive, the previous night is "model evaluation", not anyone's profit. An open offer stays open across
+  refreshes and a changed line or odds is announced (`decisions.offer_changed`).
+- Tests: `dashboard/test_decisions.py`, the phase 1 tests in `test_metrics.py`, `test_models.py`, `test_bets.py`;
+  the verdict tests in `test_reasons.py` and `tests/test_i18n.py` were replaced.
+
+Not done here (after review): time leakage, minutes and lineup experiments, denser odds snapshots; constants,
+calibration and the 🟢 threshold are unchanged.

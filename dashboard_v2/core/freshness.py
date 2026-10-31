@@ -6,14 +6,16 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from decisions import MAX_ODDS_AGE
 from espn_scraper import CURRENT_SEASON
 from i18n import t
 from espn_scraper.storage import checked_through, snapshot_file
 
 ET = ZoneInfo('US/Eastern')
 PL = ZoneInfo('Europe/Warsaw')
-# odds and lineups change through the day; older than this, the page is reading yesterday's picture
-MAX_LIVE_AGE = timedelta(hours=3)
+# odds and lineups change through the day; older than this, the page is reading yesterday's picture (the same limit
+# makes a decision wait for fresh odds: decisions.MAX_ODDS_AGE)
+MAX_LIVE_AGE = MAX_ODDS_AGE
 LEVEL_ICONS = {'ok': '🟢', 'stale': '🟠', 'missing': '🔴'}
 
 

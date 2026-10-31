@@ -5,7 +5,8 @@ from typing import Iterable, Optional
 import numpy as np
 import pandas as pd
 
-from metrics import side_profit as metrics_side_profit, side_result, team_rotation, with_without_matrix
+from metrics import (LEGACY, SUPERBET_STANDARD, side_profit as metrics_side_profit, side_result, team_rotation,
+                     with_without_matrix)
 from tracking import PROP_KEY, settle_props
 
 GAP_LABELS = ['line 15%+ under avg', '5–15% under', 'within 5%', '5–15% over', 'line 15%+ over avg']
@@ -54,10 +55,11 @@ def toward(df: pd.DataFrame, reference: str) -> pd.DataFrame:
     return df.assign(**{f'{reference} side': side, f'{reference} result': result})
 
 
-def side_profit(df: pd.DataFrame, reference: str) -> pd.Series:
-    """Profit per unit of betting the side `reference` points to, at that side's opening odds."""
+def side_profit(df: pd.DataFrame, reference: str, profile: str = LEGACY) -> pd.Series:
+    """Profit per unit of betting the side `reference` points to, at that side's opening odds (metrics.side_profit
+    under the cost profile)."""
     odds = np.where(df[f'{reference} side'] == 'Over', df['over_odds'], df['under_odds'])
-    return metrics_side_profit(df[f'{reference} result'], odds)
+    return metrics_side_profit(df[f'{reference} result'], odds, profile)
 
 
 def gap_bucket(line: pd.Series, average: pd.Series) -> pd.Series:
@@ -87,8 +89,9 @@ def settle_lines(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
         settled['proj_avg'] = np.nan
     settled = pregame_average(average_logs if average_logs is not None else logs, settled)
     settled = toward(toward(settled, 'pre avg'), 'proj_avg')
-    settled['pre avg profit'] = side_profit(settled, 'pre avg')
-    settled['proj_avg profit'] = side_profit(settled, 'proj_avg')
+    for reference in ('pre avg', 'proj_avg'):
+        settled[f'{reference} profit'] = side_profit(settled, reference)
+        settled[f'{reference} profit std'] = side_profit(settled, reference, SUPERBET_STANDARD)
     settled['line error'] = (settled['actual'] - settled['line']).where(settled['status'] == 'settled')
     settled['gap'] = gap_bucket(settled['line'], settled['pre avg'])
     return settled
@@ -98,11 +101,14 @@ def side_rates(settled: pd.DataFrame, by, reference: str) -> pd.DataFrame:
     """Per group: lines decided, how often the side toward `reference` won (pushes left out) and its ROI."""
     decided = settled[settled[f'{reference} result'].isin(['win', 'loss'])]
     if decided.empty:
-        return pd.DataFrame(columns=[by, 'lines', 'hit %', 'ROI %'])
+        return pd.DataFrame(columns=[by, 'lines', 'hit %', 'ROI %', 'ROI % std'])
     grouped = decided.groupby(by, observed=True)
-    return pd.DataFrame({'lines': grouped.size(),
-                         'hit %': 100 * grouped[f'{reference} result'].apply(lambda r: (r == 'win').mean()),
-                         'ROI %': 100 * grouped[f'{reference} profit'].mean()}).reset_index()
+    out = {'lines': grouped.size(),
+           'hit %': 100 * grouped[f'{reference} result'].apply(lambda r: (r == 'win').mean()),
+           'ROI %': 100 * grouped[f'{reference} profit'].mean()}
+    if f'{reference} profit std' in decided:
+        out['ROI % std'] = 100 * grouped[f'{reference} profit std'].mean()
+    return pd.DataFrame(out).reset_index()
 
 
 # --- a player's with/without row ---

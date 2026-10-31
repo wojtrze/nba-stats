@@ -67,11 +67,13 @@ def test_cell_values():
 
 
 def test_reasons_and_warnings_in_polish():
-    from reasons import flag_texts, prop_flag_items, prop_reasons, verdict
+    from reasons import flag_texts, prop_flag_items, prop_reasons
     games = pd.DataFrame({'PTS': [20.0, 25, 22, 30, 18, 26, 24, 21, 27, 23, 25, 19], 'MIN': [34.0] * 12,
-                          'type': ['home', 'away'] * 6, 'season_type': 'regular'})
+                          'type': ['home', 'away'] * 6, 'season_type': 'regular',
+                          'Date': pd.date_range('2026-10-01', periods=12)})
     bet = {'name': 'A Player', 'stat': 'PTS', 'side': 'Over', 'line': 20.5, 'odds': 1.9, 'model %': 55.0,
-           'break-even %': 52.6, 'edge pp': 2.4, 'edge low': -1.0, 'avg': 23.3, 'proj avg': 24.0, 'home': True}
+           'break-even %': 59.8, 'edge pp': -4.8, 'avg': 23.3, 'proj avg': 24.0, 'home': True,
+           'odds_at': '2026-10-30T21:23:24Z'}
     en = [r['text'] for r in prop_reasons(bet, games, games.iloc[0:0])]
     pl = [r['text'] for r in prop_reasons(bet, games, games.iloc[0:0], 'pl')]
     assert len(en) == len(pl)
@@ -84,9 +86,8 @@ def test_reasons_and_warnings_in_polish():
     assert flag_texts([('flag.few_games', {'n': 5})], 'pl')[0].startswith("Tylko 5 meczów")
     assert flag_texts([('flag.few_games', {'n': 1})])[0].startswith("Only 1 game in")
     assert [i18n.plural(n, 'mecz', 'mecze', 'meczów', 'pl') for n in (1, 2, 4, 5, 12, 22, 25)] ==         ['mecz', 'mecze', 'mecze', 'meczów', 'meczów', 'mecze', 'meczów']
-    word, _, why = verdict([{'supports': False, 'text': 'x', 'flag': False}], 2.4, np.nan, 'pl')
-    assert word == 'Pass' and why.startswith("Model meczów")                     # a game outcome: never past Pass
-    assert i18n.t('verdict.Pass', 'pl') == "Odpuść"
+    assert i18n.t('decision.NIE_OBSTAWIAJ', 'pl') == "Nie obstawiaj" and i18n.t('decision.CZEKAJ', 'pl') == "Czekaj"
+    assert i18n.t('decision.reason.game_model', 'pl').startswith("Model meczów nie jest dopuszczony")
 
 
 def test_every_results_and_games_column_has_a_term_in_its_context():
