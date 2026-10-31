@@ -43,18 +43,23 @@ HELP = STAT_HELP | {
                   "80 = the player beat it only 20% of the time)",
     'in band': "Line is between the player's 30th and 70th percentile. Outside the band = the line looks unusually "
                "low or high for this player.",
-    'best side': "The side (Over/Under) with the bigger edge, even when both edges are negative: the less bad "
-                 "side, not a recommendation (see pick)",
-    'bet': "The pick: Over or Under when the model sees a positive edge (🟢/🟡), otherwise pass. The model's "
-           "opinion beyond Superbet's price has proven worth little, so most lines are a pass",
-    'lean': "Which way the projection points when it's at least 10% away from the line (proj avg vs line). For "
-            "information only: on its own it hasn't beaten Superbet's prices",
+    'best side': "Legacy: the side with the bigger edge at the plain odds, as the snapshots saved it",
+    'decision': "The decision for the line's game (decisions.py): Bet = one offer meets a threshold recorded on "
+                "an independent period (none exists yet, so no offer gets it); Don't bet = current, nothing "
+                "qualifies; Wait = odds, lineup or a tie missing; Unavailable = the model isn't admitted",
+    'side odds': "Superbet's odds for the evaluated side, before the stake tax",
+    'p win %': "Calibrated chance the evaluated side wins (a push on a whole-number line is neither)",
+    'break-even net %': "Chance the side must win to break even after the 12% stake tax: 100 / (0.88 × odds)",
+    'edge net pp': "p win % minus break-even net %, in percentage points",
+    'ev net 100': "What 100 staked returns on average, minus the 100, after the 12% stake tax: "
+                  "100 × (p win × 0.88 × odds + push − 1)",
+    'players': "The one decision for this game's player lines",
     'pick odds': "Superbet's odds for the picked side",
     'source': "Where the name comes from", 
     'edge pp': "model % minus break-even %, in percentage points: how much more often the pick should win than "
                "the price needs. +5 = wins 5 pp more often than needed to break even.",
-    'edge low': "The edge at the low end of the model's 95% range. Above 0 = positive even if the player's "
-                "results so far were on the lucky side; few games make the range wide.",
+    'edge low': "Legacy: the edge at the low end of the hit rate's sampling noise (not a confidence range of "
+                "the model: it leaves out the projection's and the model's own errors).",
     'break-even %': "Chance the pick must win to break even at Superbet's odds: 100 / odds (margin included)",
     'market %': "Superbet's chance for the pick with the bookmaker's margin removed, so Over + Under = 100%",
     'signal': "🟢 an edge at least as big as the threshold whose picks beat break-even on 10+ unseen Superbet "
@@ -179,7 +184,9 @@ COLUMN_SOURCE = {
     'line move': 'superbet', 'spread': 'superbet', 'game total': 'superbet', 'odds move': 'superbet',
     'line moves': 'superbet', 'proj avg': 'stats', 'matchup': 'stats',
     'RotoWire': 'rotowire', 'out': 'rotowire',
-    'best side': 'stats', 'bet': 'stats', 'lean': 'stats', 'signal': 'stats', 'edge pp': 'stats', 'games': 'stats', 'avg': 'stats',
+    'best side': 'stats', 'bet': 'stats', 'lean': 'stats', 'signal': 'stats', 'decision': 'stats', 'side': 'stats',
+    'side odds': 'superbet', 'p win %': 'stats', 'break-even net %': 'superbet', 'edge net pp': 'stats',
+    'ev net 100': 'stats', 'players': 'stats', 'edge pp': 'stats', 'games': 'stats', 'avg': 'stats',
     'adj avg': 'stats', 'avg L5': 'stats', 'over %': 'stats', 'under %': 'stats', 'over % L10': 'stats',
     'under % L10': 'stats', 'percentile': 'stats', 'in band': 'stats', 'min L5': 'stats',
     'proj score': 'stats', 'proj winner': 'stats', 'proj total': 'stats', 'best bet': 'stats',

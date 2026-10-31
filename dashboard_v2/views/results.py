@@ -19,6 +19,7 @@ lang = language()
 seasons, season_types = page_header(t('results.title', lang), t('results.purpose', lang), with_scope=True)
 
 RATE_FORMATS = {'lines': '%d', 'bets': '%d', 'expected %': '%.0f', 'hit %': '%.0f', 'ROI %': '%+.1f',
+                'ROI % std': '%+.1f', 'break-even %': '%.1f', 'break-even % std': '%.1f',
                 'ci low %': '%.0f', 'ci high %': '%.0f', 'avg odds': '%.2f', 'avg odds vs last %': '%+.1f', 'edge ≥ pp': '%d'}
 
 
@@ -159,7 +160,8 @@ with saved_tab:
                   {'label': t('results.kpi.hit', lang),
                    'value': f"{100 * (picks_done['result'] == 'win').mean():.0f}%"},
                   {'label': t('results.kpi.profit', lang), 'value': f"{picks['profit'].sum():+.2f}"},
-                  {'label': t('results.kpi.roi', lang), 'value': f"{100 * picks_done['profit'].mean():+.1f}"},
+                  {'label': t('results.kpi.roi', lang), 'value': f"{100 * picks_done['profit'].mean():+.1f} / "
+                                                                   f"{100 * picks_done['profit std'].mean():+.1f}"},
                   {'label': t('results.kpi.vs_last', lang), 'value': f"{picks_done['odds vs last %'].mean():+.1f}%"
                    if picks_done['odds vs last %'].notna().any() else "–",
                    'help': t('results.kpi.vs_last_help', lang)}])
@@ -212,7 +214,8 @@ with saved_tab:
         else:
             kpis([{'label': t('results.kpi.games', lang), 'value': len(decided)},
                   {'label': t('results.kpi.hit', lang), 'value': f"{100 * (decided['result'] == 'win').mean():.0f}%"},
-                  {'label': t('results.kpi.roi', lang), 'value': f"{100 * decided['profit'].mean():+.1f}"}])
+                  {'label': t('results.kpi.roi', lang), 'value': f"{100 * decided['profit'].mean():+.1f} / "
+                                                                   f"{100 * decided['profit std'].mean():+.1f}"}])
             g = g.assign(**{'edge bucket': edge_bucket(g['edge_pp']),
                             'market': g['market'].map(lambda m: t(f'market.{m}', lang))})
             for title, by in (('results.by_edge', 'edge bucket'), ('results.by_market', 'market')):

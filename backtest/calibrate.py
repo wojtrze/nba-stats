@@ -33,7 +33,7 @@ import pandas as pd
 
 import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.run import MIN_GAMES, OUT_DIR, markdown, rate_row
-from metrics import IDENTITY_CALIBRATION, prop_signal, wilson_interval
+from metrics import IDENTITY_CALIBRATION, no_vig_pairs, prop_signal, wilson_interval
 from models import CALIBRATION_FILE
 from nightly import MODEL_VERSION
 from safe_io import atomic_write_text, locked
@@ -144,11 +144,7 @@ def game_lines(snapshots: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
     s = snapshots.copy()
     # the two sides of one market in one fetch: a handicap's are -x and +x, the rest share the line
-    s['pair'] = np.where(s['market'] == 'SPREAD', s['line'].abs(), s['line'])
-    implied = 1 / s['odds']
-    group = [s['fetched_at'], s['event_id'], s['market'], s['pair'].fillna(-1)]
-    total, sides = implied.groupby(group).transform('sum'), implied.groupby(group).transform('size')
-    s['market %'] = (100 * implied / total).where(sides == 2)
+    s['market %'] = 100 * no_vig_pairs(s, by=('fetched_at', 'event_id'))
     fetched = pd.to_datetime(s['fetched_at'], utc=True)
     last = s[fetched < pd.to_datetime(s['start_time'], utc=True)].sort_values('fetched_at', kind='stable')         .drop_duplicates(GAME_KEY, keep='last').reset_index(drop=True)
     if last.empty:

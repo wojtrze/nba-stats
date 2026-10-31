@@ -20,6 +20,7 @@ from nightly import (GROUP_AXES, pre_tip, group_outcomes, lineups_before_tip, ni
 WIN, LOSS, PUSH, OVER, UNDER = '#16a34a', '#dc2626', '#9aa5b1', '#2563eb', '#f59e0b'
 # Superbet's two prices on a line usually sum to about 105%, so a side needs about 52.5% to break even
 BREAK_EVEN = 52.5
+BREAK_EVEN_STD = round(BREAK_EVEN / 0.88, 1)   # the same odds after Superbet's 12% stake tax (metrics.COST_PROFILES)
 LINE_COLUMNS = ['night', 'name', 'game', 'bet_type', 'line', 'proj_avg', 'actual', 'pick', 'model_pct', 'signal',
                 'result', 'proj error', 'closer than line', 'open line', 'pick at open', 'red_flag', 'recomputed']
 LINE_FORMATS = {'line': '%g', 'proj_avg': '%.1f', 'actual': '%g', 'model_pct': '%.0f', 'proj error': '%+.1f',
@@ -36,25 +37,29 @@ LINE_TIPS = {'proj_avg': "Our projected average at the last fetch before tip-off
                            "recomputed from the games before that night", 'night': "Game date (US)"}
 GROUP_FORMATS = {'lines': '%d', 'over %': '%.0f', 'over ROI %': '%+.1f', 'under %': '%.0f', 'under ROI %': '%+.1f',
                  'best side %': '%.1f', 'ci low %': '%.0f', 'ci high %': '%.0f', 'best side ROI %': '%+.1f',
-                 'our picks': '%d', 'our hit %': '%.0f', 'our ROI %': '%+.1f'}
+                 'best side ROI % std': '%+.1f', 'our picks': '%d', 'our hit %': '%.0f', 'our ROI %': '%+.1f',
+                 'our ROI % std': '%+.1f'}
 GROUP_TIPS = {'lines': "Settled lines in the group (pushes left out)",
-              'over %': "How often betting Over won", 'over ROI %': "Profit per 100 staked betting every Over",
-              'under %': "How often betting Under won", 'under ROI %': "Profit per 100 staked betting every Under",
+              'over %': "How often betting Over won", 'over ROI %': "Return per 100 staked betting every Over, plain odds",
+              'under %': "How often betting Under won", 'under ROI %': "Return per 100 staked betting every Under, plain odds",
               'side to bet': "The side that won more often in this group",
               'best side %': "How often that side won: the chance a bet on it succeeded",
               'ci low %': "Low end of that hit rate's 95% range: few lines make it wide",
               'ci high %': "High end of that hit rate's 95% range",
-              'best side ROI %': "Profit per 100 staked on that side, at the lines' odds",
+              'best side ROI %': "Return per 100 staked on that side, at the lines' plain odds",
+              'best side ROI % std': "The same after Superbet's 12% stake tax",
+              'our ROI % std': "The model's picks after Superbet's 12% stake tax",
               'our picks': "Our picks in the group", 'our hit %': "How often our picks won",
-              'our ROI %': "Profit per 100 staked on our picks", 'venue': "The player's team at home or away",
+              'our ROI %': "Return per 100 staked on the model's picks, plain odds", 'venue': "The player's team at home or away",
               'position': "G = guards, F = forwards, C = centers (ESPN's listing)", 'pick': "Our pick's side"}
 # the group table's columns after the chosen axes (nightly.GROUP_AXES)
-GROUP_COLUMNS = ['lines', 'side to bet', 'best side %', 'ci low %', 'ci high %', 'best side ROI %', 'over %',
-                 'over ROI %', 'under %', 'under ROI %', 'our picks', 'our hit %', 'our ROI %']
+GROUP_COLUMNS = ['lines', 'side to bet', 'best side %', 'ci low %', 'ci high %', 'best side ROI %',
+                 'best side ROI % std', 'over %', 'over ROI %', 'under %', 'under ROI %', 'our picks', 'our hit %',
+                 'our ROI %', 'our ROI % std']
 GAME_COLUMNS = ['night', 'game', 'proj score', 'score', 'proj winner', 'winner', 'called', 'total error', 'best bet',
                 'best result']
 RATE_FORMATS = {'bets': '%d', 'hit %': '%.0f', 'ci low %': '%.0f', 'ci high %': '%.0f', 'ROI %': '%+.1f',
-                'avg odds': '%.2f'}
+                'ROI % std': '%+.1f', 'break-even %': '%.1f', 'break-even % std': '%.1f', 'avg odds': '%.2f'}
 
 
 @st.cache_data(ttl=600, show_spinner="Settling the night...")
@@ -117,6 +122,7 @@ def render(update_stats: Optional[Callable] = None, key: str = 'night', lang: st
     if available.empty:
         st.info(t('night.none', lang))
         return
+    st.caption(t('night.about', lang))
     labels = {str(r['night'].date()): t('night.label', lang, night=f"{r['night']:%a %b %d}", games=r['games'],
                                         lines=r['lines'])
                                       + ("" if r['settled'] else t('night.pending_label', lang))
@@ -147,7 +153,8 @@ def render(update_stats: Optional[Callable] = None, key: str = 'night', lang: st
              t('night.kpi.settled_note', lang, lines=f"{s['lines']:,}", void=s['void'])
              + (t('night.kpi.unresolved_note', lang, n=s['unresolved']) if s['unresolved'] else ""))
         _kpi(c[1], t('night.kpi.picks', lang), _rate(s['picks']), t('night.kpi.picks_help', lang),
-             t('night.kpi.roi', lang, roi=s['picks']['ROI %']) if s['picks']['picks'] else None)
+             t('night.kpi.roi', lang, roi=s['picks']['ROI %'], std=s['picks'].get('ROI % std', np.nan))
+             if s['picks']['picks'] else None)
         _kpi(c[2], t('night.kpi.edge', lang), _rate(s['edge picks']), t('night.kpi.edge_help', lang),
              t('night.kpi.n_picks', lang, n=s['edge picks']['picks']))
         _kpi(c[3], t('night.kpi.red', lang), _rate(s['red picks']), t('night.kpi.red_help', lang),
@@ -235,7 +242,7 @@ def _groups(props: pd.DataFrame, key: str, lang: str = 'en', v1: bool = True):
     if props.empty:
         st.caption(t('night.no_props', lang))
         return
-    st.caption(t('night.groups_caption', lang, be=BREAK_EVEN))
+    st.caption(t('night.groups_caption', lang, be=BREAK_EVEN, be_std=BREAK_EVEN_STD))
     c = st.columns([4, 1])
     axes = c[0].multiselect(t('night.group_by', lang), list(GROUP_AXES), default=['bet_type'],
                             format_func=lambda a: t(f'night.axis.{a}', lang), key=f'{key}_axes',

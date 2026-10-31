@@ -163,7 +163,10 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
     from models import (DEFAULT_SEASON_TYPES, GAME_DEFAULTS, GAME_TYPES, game_ratings, prepare_logs, price_games,
                         price_props, top_up_logs)
     from name_resolver import NameResolver
-    from nightly import MODEL_VERSION, RECORDED_LIVE, lineage, model_columns
+    from decisions import game_decisions, team_decision
+    from metrics import ACTIVE_PROFILE
+    from models import calibration_status
+    from nightly import DECISION_COLUMN, MODEL_VERSION, RECORDED_LIVE, lineage, model_columns
     from reasons import flag_props
 
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
@@ -181,16 +184,22 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
         played = games[(games['season_id'] == CURRENT_SEASON) & games['season_type'].isin(DEFAULT_SEASON_TYPES)]
         # the red flags known at fetch time (the line hasn't moved yet)
         table = flag_props(price_props(props, current, lineups, game_odds, played), current, lineups)
-        props = props.assign(**model_columns(table), **lineage(RECORDED_LIVE))
+        # the decision for each game's players as of this fetch (decisions.py): what the pages show now
+        now = pd.Timestamp.now(tz='UTC')
+        decided = game_decisions(table, calibration_status(), lineups, now, now)
+        props = props.assign(**model_columns(table), **lineage(RECORDED_LIVE),
+                             **{DECISION_COLUMN: table['event_id'].map(lambda e: decided[e]['status'])})
     if not game_odds.empty:
         model = game_ratings(games, CURRENT_SEASON, GAME_DEFAULTS['prior_games'], GAME_DEFAULTS['regress'])
         recent = logs[logs['season_id'].isin([CURRENT_SEASON - 1, CURRENT_SEASON]) & logs['season_type'].isin(GAME_TYPES)]
         priced = price_games(game_odds, model['ratings'], lineups, model['games'], recent, GAME_DEFAULTS['home_court'],
                              GAME_DEFAULTS['shrink'], GAME_DEFAULTS['out_max'], all_lines=True)
         if priced:
-            edges = pd.concat([g['edges'] for g in priced])[['event_id', 'market', 'side', 'line', 'model %', 'edge pp']]
-            game_odds = game_odds.merge(edges.rename(columns={'model %': 'model_pct', 'edge pp': 'edge_pp'}).round(1),
-                                        on=['event_id', 'market', 'side', 'line'], how='left')
+            edges = pd.concat([g['edges'] for g in priced])[['event_id', 'market', 'side', 'line', 'model %', 'edge pp',
+                                                             'ev net 100']]
+            game_odds = game_odds.merge(edges.rename(columns={'model %': 'model_pct', 'edge pp': 'edge_pp',
+                                                              'ev net 100': 'ev_net_100'}).round(1),
+                                        on=['event_id', 'market', 'side', 'line'], how='left')                 .assign(cost_profile=ACTIVE_PROFILE, decision=team_decision()['status'])
             projected = pd.DataFrame([{'event_id': g['event_id'],
                                        'proj_home_pts': round(g['projection']['home_pts'], 1),
                                        'proj_away_pts': round(g['projection']['away_pts'], 1)} for g in priced])
@@ -251,11 +260,11 @@ def reprice_snapshots() -> int:
     the rows of the current version."""
     from models import prepare_logs
     from name_resolver import NameResolver
-    from nightly import (HISTORICAL_REPLAY, LINEAGE_COLUMNS, MODEL_COLUMNS, MODEL_VERSION, et_night, lineage,
-                         lineups_before_tip, recompute_props)
+    from nightly import (DECISION_COLUMN, HISTORICAL_REPLAY, LINEAGE_COLUMNS, MODEL_COLUMNS, MODEL_VERSION, et_night,
+                         lineage, lineups_before_tip, recompute_props)
 
     path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    model_cols = ['player_id_ESPN', *MODEL_COLUMNS, *LINEAGE_COLUMNS]
+    model_cols = ['player_id_ESPN', *MODEL_COLUMNS, DECISION_COLUMN, *LINEAGE_COLUMNS]
     saved = pd.read_csv(path, dtype=str, keep_default_na=False).drop(columns=model_cols, errors='ignore')
     props = pd.read_csv(path).drop(columns=model_cols, errors='ignore')
     odds = pd.read_csv(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))

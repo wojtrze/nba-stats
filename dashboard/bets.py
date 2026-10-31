@@ -10,6 +10,8 @@ import pandas as pd
 
 from espn_scraper import CURRENT_SEASON
 from espn_scraper.storage import snapshot_file
+from decisions import OBSTAW
+from metrics import ACTIVE_PROFILE, alpha
 from safe_io import append_csv
 
 BET_FIELDS = ['bet_id', 'placed_at', 'kind', 'event_id', 'start_time', 'home', 'away', 'name', 'name_ESPN',
@@ -17,24 +19,26 @@ BET_FIELDS = ['bet_id', 'placed_at', 'kind', 'event_id', 'start_time', 'home', '
               'edge_low']
 
 
-def kelly_stake(chance: float, odds: float, bankroll: float, fraction: float = 0.25, cap: float = 0.05) -> float:
-    """Fractional Kelly: fraction × (chance × odds − 1) / (odds − 1) of the bankroll, at most `cap` of it, 0 without
-    an edge. A quarter Kelly gives up a little growth for far smaller swings when the model is too optimistic."""
-    if pd.isna(chance) or pd.isna(odds) or odds <= 1:
+def kelly_stake(chance: float, odds: float, bankroll: float, fraction: float = 0.25, cap: float = 0.05,
+                profile: str = ACTIVE_PROFILE) -> float:
+    """Fractional Kelly on the net price (metrics.COST_PROFILES: a win pays alpha × odds): fraction × (chance ×
+    alpha × odds − 1) / (alpha × odds − 1) of the bankroll, at most `cap` of it, 0 without a positive expected
+    return. A quarter Kelly gives up a little growth for far smaller swings when the model is too optimistic."""
+    net = alpha(profile) * odds if pd.notna(odds) else np.nan
+    if pd.isna(chance) or pd.isna(net) or net <= 1:
         return 0.0
-    full = (chance * odds - 1) / (odds - 1)
+    full = (chance * net - 1) / (net - 1)
     return round(bankroll * float(np.clip(full * fraction, 0, cap)), 2)
 
 
-def staking_chance(bet: Dict, calibrated: bool = True) -> float:
-    """The chance to size a bet on: for a prop the low end of the model's range (model % minus the gap between
-    edge pp and edge low), so a pick whose edge is thin or rests on few games gets less. NaN (no stake) for a prop
-    when calibrated is False (models.calibration_status isn't FITTED: the chance is the raw model's), and for a
-    game outcome (no range; its model isn't calibrated)."""
-    low = bet.get('edge_low')
-    if low is None or pd.isna(low) or not calibrated:
+def staking_chance(bet: Dict) -> float:
+    """The chance to size a bet on: the model's chance to win (model_pct), only for an offer whose decision is
+    OBSTAW (decisions.py; bet['decision']). NaN (no stake) for every other bet: game outcomes (never admitted),
+    props whose decision is NIE_OBSTAWIAJ / CZEKAJ / NIEDOSTEPNE, and bets saved without a decision. The 'edge low'
+    range isn't used: it's only the sampling noise of the player's hit rate, not the model's uncertainty."""
+    if bet.get('kind') != 'prop' or bet.get('decision') != OBSTAW or pd.isna(bet.get('model_pct')):
         return np.nan
-    return (bet['model_pct'] - (bet['edge_pp'] - low)) / 100
+    return bet['model_pct'] / 100
 
 
 def describe(bet: Dict) -> str:

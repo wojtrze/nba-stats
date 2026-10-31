@@ -62,7 +62,8 @@ def test_reprice_writes_a_replay_and_leaves_the_record_alone(data_dir, monkeypat
         calls.append((rows['fetched_at'].iloc[0], len(odds_), len(lineups), str(night.date())))
         return pd.DataFrame({'pick': 'Over', 'model_pct': 60.0, 'edge_pp': 7.0, 'edge_low': 1.0, 'proj_avg': 24.0,
                              'signal': '🟢', 'red_flag': '', 'raw_over_pct': 63.5, 'raw_under_pct': 36.5,
-                             'market_over_pct': 49.2}, index=rows.index)
+                             'market_over_pct': 49.2, 'cost_profile': 'superbet_standard', 'eval_side': 'Over',
+                             'ev_net_100': -4.0}, index=rows.index)
 
     monkeypatch.setattr(daily_snapshot, 'load_player_gamelogs', lambda seasons: pd.DataFrame())
     monkeypatch.setattr(daily_snapshot, 'load_games', lambda seasons: pd.DataFrame())

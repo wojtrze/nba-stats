@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
-from core.data import game_odds, lineups as rotowire_lineups, priced_games, priced_props, superbet
+from components import decision_text, decision_times
+from core.data import game_odds, lineups as rotowire_lineups, player_decisions, priced_games, priced_props, superbet
+from decisions import actionable, offers_table, team_decision
 from core.columns import OVERVIEW_PROPS
 from core.state import language
 from core.ui import PAGES, kpis, no_offers, page_header, pl_time, stop, table
@@ -11,7 +13,7 @@ from espn_scraper import NBA_TEAM_NAMES
 from models import calibration_warning
 from schedule import minutes_to, starts_soon
 from superbet_fetcher import main_lines
-from core.labels import describe_outcome, winner
+from core.labels import winner
 from i18n import t, value
 
 lang = language()
@@ -28,14 +30,14 @@ if warning := calibration_warning(props['calibration'].iloc[0] if len(props) els
     st.warning(warning, icon="⚠️")
 games = priced_games()
 by_event = {g['event_id']: g for g in games}
+decided = player_decisions(props)
+odds_at = superbet()['fetched_at']
 main = pd.DataFrame(main_lines(odds.to_dict('records')))
 
 kpis([{'label': t('overview.kpi.games', lang), 'value': odds['event_id'].nunique()},
       {'label': t('overview.kpi.lines', lang), 'value': len(props), 'help': t('overview.kpi.lines_help', lang)},
-      {'label': t('overview.kpi.green', lang), 'value': int((props['signal'] == '🟢').sum()) if len(props) else 0,
-       'help': t('overview.kpi.green_help', lang)},
-      {'label': t('overview.kpi.yellow', lang), 'value': int((props['signal'] == '🟡').sum()) if len(props) else 0,
-       'help': t('overview.kpi.yellow_help', lang)},
+      {'label': t('overview.kpi.obstaw', lang), 'value': len(actionable(decided)),
+       'help': t('overview.kpi.obstaw_help', lang)},
       {'label': t('overview.kpi.lineups', lang),
        'value': t('overview.kpi.lineups_value', lang, n=lineups['team'].nunique() if len(lineups) else 0),
        'help': t('overview.kpi.lineups_help', lang)},
@@ -82,51 +84,36 @@ for start in range(0, len(events), 3):
                 f"{e['home'].upper()} **{spread.iloc[0]:+g}**" if len(spread) else '',
                 f"{t('overview.total', lang)} **{total.iloc[0]:g}**" if len(total) else '']))
             st.markdown(f"💰 {odds_text or t('overview.no_main', lang)}", help=t('overview.odds_help', lang))
+            # one decision for the team markets and one for the players; the projection is context
+            team = team_decision(by_event.get(e['event_id']), odds_at)
+            st.markdown(f"**{t('decision.teams', lang)}:** {decision_text(team, lang)}")
+            players = decided.get(e['event_id'])
+            if players:
+                d = players
+                offer = f" · {d['offer']['name']} {value(d['offer']['side'], lang)} {d['offer']['line']:g} " \
+                        f"{d['offer']['bet_type']} @ {d['offer']['side odds']:.2f}" if d['offer'] is not None else ''
+                st.markdown(f"**{t('decision.players', lang)}:** {decision_text(d, lang)}{offer}")
+                st.caption(decision_times(d, lang))
+            else:
+                st.caption(t('overview.no_props', lang))
             g = by_event.get(e['event_id'])
             if g:
                 p = g['projection']
-                best = g['edges'].loc[g['edges']['edge pp'].idxmax()]
-                projected = t('overview.projected', lang, winner=winner(p, g['home'], g['away'], lang),
-                              total=p['total'])
-                best_price = t('overview.best_price', lang, bet=describe_outcome(best, lang), odds=best['odds'],
-                               edge=best['edge pp'])
-                st.markdown(f"{projected}  \n{best_price}")
+                st.markdown(t('overview.projected', lang, winner=winner(p, g['home'], g['away'], lang),
+                              total=p['total']))
             st.markdown(lineup_line(e['away']) + "  \n" + lineup_line(e['home']))
 
-# --- the best bets ---
-left, right = st.columns([3, 2])
-with left:
-    edge = props[props['signal'].isin(['🟢', '🟡'])] if len(props) else props
-    # with no edge anywhere, the lines that lose least by our numbers (best expected return; warnings left out)
-    least_loss = edge.empty and len(props) > 0
-    st.subheader(t('overview.least_loss' if least_loss else 'overview.best_props', lang))
-    if props.empty:
-        st.caption(t('overview.no_props', lang))
-    else:
-        top = props[props['signal'] != '🔴'] if least_loss else edge
-        top = top.sort_values(['signal', 'ev 100'], ascending=[True, False],
-                              key=lambda c: c.map({'🟢': 0, '🟡': 1, '': 2}) if c.name == 'signal' else c) \
-            .head(10).reset_index(drop=True)
-        shown = top.assign(**{col: top[col].map(lambda v: value(v, lang)) for col in ('bet', 'RotoWire')})
-        picked = table(shown, OVERVIEW_PROPS, {'line': '%g', 'ev 100': '%+.1f', 'model %': '%.0f',
-                                               'edge pp': '%+.1f', 'pick odds': '%.2f'},
-                       key='top_props', select=True)
-        st.caption(t('overview.least_loss_caption' if least_loss else 'overview.best_props_caption', lang))
-        if picked is not None:
-            r = top.iloc[picked]
-            st.session_state['props_focus'] = (r['event_id'], r['name_ESPN'], r['bet_type'])
-            st.switch_page(PAGES['props'])
-with right:
-    st.subheader(t('overview.game_edges', lang))
-    if not games:
-        st.caption(t('overview.no_games', lang))
-    else:
-        edges = pd.concat([g['edges'].assign(game=f"{g['away'].upper()} @ {g['home'].upper()}") for g in games])
-        top = edges.sort_values('edge pp', ascending=False).head(5).reset_index(drop=True)
-        top['bet'] = [describe_outcome(r, lang) for _, r in top.iterrows()]
-        picked = table(top, ['game', 'bet', 'odds', 'edge pp'], {'odds': '%.2f', 'edge pp': '%+.1f'},
-                       sources={'bet': None, 'odds': 'superbet'}, key='top_games', select=True, context='games')
-        st.caption(t('overview.game_edges_caption', lang))
-        if picked is not None:
-            st.session_state['games_focus'] = top.iloc[picked]['event_id']
-            st.switch_page(PAGES['games'])
+# --- the offers to bet: only those of a 'Bet' decision, never a ranking of the rest ---
+st.subheader(t('overview.offers', lang))
+offers = offers_table(decided)
+if offers.empty:
+    st.info(t('decision.none', lang), icon="⚖️")
+else:
+    shown = offers.assign(**{col: offers[col].map(lambda v: value(v, lang)) for col in ('side', 'RotoWire')})
+    picked = table(shown, OVERVIEW_PROPS, {'line': '%g', 'side odds': '%.2f', 'p win %': '%.0f',
+                                           'edge net pp': '%+.1f', 'ev net 100': '%+.1f'},
+                   key='top_props', select=True)
+    if picked is not None:
+        r = offers.iloc[picked]
+        st.session_state['props_focus'] = (r['event_id'], r['name_ESPN'], r['bet_type'])
+        st.switch_page(PAGES['props'])

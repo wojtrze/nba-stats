@@ -266,3 +266,59 @@ def test_absence_impact_uses_games_inside_stint():
     imp = absence_impact(games, logs, 'a', 3, shrink=2)        # 3 missed games 4-5, team scored 10 more
     assert (imp['n_without'], imp['n_with']) == (2, 4)
     assert imp['pts_for'] == pytest.approx(10 * 2 / 4) and imp['pts_against'] == 0
+
+
+# --- the cost contract (phase 1) ---
+
+def test_break_even_in_both_profiles():
+    from metrics import LEGACY, SUPERBET_STANDARD, break_even
+    assert 100 * break_even(1.84, LEGACY) == pytest.approx(54.35, abs=0.01)
+    assert 100 * break_even(1.84, SUPERBET_STANDARD) == pytest.approx(61.76, abs=0.01)
+    # with a push in play, the win chance needed shrinks by the push chance
+    assert break_even(2.0, LEGACY, p_push=0.1) == pytest.approx(0.45)
+
+
+def test_expected_return_counts_a_push_as_neither():
+    from metrics import LEGACY, SUPERBET_STANDARD, expected_return_100
+    # 45% win, 10% push, 45% loss at 2.0: plain odds break even exactly
+    assert expected_return_100(0.45, 2.0, LEGACY, p_push=0.10) == pytest.approx(0.0)
+    assert expected_return_100(0.45, 2.0, SUPERBET_STANDARD, p_push=0.10) == pytest.approx(100 * (0.45 * 1.76 + 0.1 - 1))
+    assert expected_return_100(0.5, 1.84, SUPERBET_STANDARD) == pytest.approx(100 * (0.5 * 0.88 * 1.84 - 1))
+
+
+def test_a_push_settles_the_same_in_both_profiles():
+    from metrics import LEGACY, SUPERBET_STANDARD, side_profit
+    result = pd.Series(['win', 'loss', 'push', 'void', np.nan])
+    legacy, std = side_profit(result, [1.84] * 5, LEGACY), side_profit(result, [1.84] * 5, SUPERBET_STANDARD)
+    assert legacy.tolist()[:4] == pytest.approx([0.84, -1.0, 0.0, 0.0])
+    assert std.tolist()[:4] == pytest.approx([0.88 * 1.84 - 1, -1.0, 0.0, 0.0])
+    assert np.isnan(legacy.iloc[4]) and np.isnan(std.iloc[4])
+    assert side_profit(result, [1.84] * 5).tolist()[:4] == legacy.tolist()[:4]      # the default stays legacy
+
+
+def test_the_higher_expected_return_wins_over_the_bigger_edge_in_pp():
+    from metrics import LEGACY, best_by_ev, break_even, expected_return_100
+    a = {'name': 'A', 'p_win': 0.23, 'odds': 5.0}       # edge +3 pp, expected return +15
+    b = {'name': 'B', 'p_win': 0.72, 'odds': 1.5}       # edge +5.3 pp, expected return +8
+    edge = lambda c: 100 * (c['p_win'] - break_even(c['odds'], LEGACY))
+    assert edge(b) > edge(a)
+    assert expected_return_100(a['p_win'], a['odds'], LEGACY) > expected_return_100(b['p_win'], b['odds'], LEGACY)
+    assert best_by_ev([b, a], LEGACY)['name'] == 'A'
+    assert best_by_ev([{'p_win': np.nan, 'odds': 2.0}]) is None
+
+
+def test_game_markets_and_props_share_the_cost_contract():
+    from metrics import ACTIVE_PROFILE, break_even, market_edges
+    projection = {'home_pts': 112.0, 'away_pts': 108.0, 'margin': 4.0, 'total': 220.0, 'pace': 99.0}
+    odds = pd.DataFrame([{'event_id': 1, 'market': 'TOTAL', 'side': 'over', 'line': 219.5, 'odds': 1.84},
+                         {'event_id': 1, 'market': 'TOTAL', 'side': 'under', 'line': 219.5, 'odds': 1.84},
+                         {'event_id': 1, 'market': 'SPREAD', 'side': 'home', 'line': -3.5, 'odds': 1.70},
+                         {'event_id': 1, 'market': 'SPREAD', 'side': 'away', 'line': 3.5, 'odds': 2.10}])
+    edges = market_edges(projection, odds)
+    assert (edges['cost profile'] == ACTIVE_PROFILE).all()
+    assert edges['break-even net %'].tolist() == pytest.approx((100 * break_even(odds['odds'])).tolist())
+    # the legacy edge keeps the margin; market % takes it out pair by pair
+    assert edges.loc[0, 'implied %'] == pytest.approx(100 / 1.84)
+    assert edges.loc[0, 'market %'] == pytest.approx(50.0)
+    assert edges.loc[2, 'market %'] == pytest.approx(100 * (1 / 1.7) / (1 / 1.7 + 1 / 2.1))
+    assert edges['edge net pp'].tolist() == pytest.approx((edges['model %'] - edges['break-even net %']).tolist())

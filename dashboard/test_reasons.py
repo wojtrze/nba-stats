@@ -4,34 +4,21 @@ import pandas as pd
 import pytest
 
 from metrics import context_factor, game_lines, matchup, matchup_verdict
-from reasons import game_reasons, prop_reasons, verdict
+from reasons import complete, game_reasons, prop_reasons
 
 
 def _games(pts, minutes=None, season_type='regular'):
     n = len(pts)
     return pd.DataFrame({'PTS': pts, 'MIN': minutes or [32.0] * n, 'type': ['home', 'away'] * (n // 2) + ['home'] * (n % 2),
                          'season_type': season_type, 'rest_days': [2.0] * n, 'starter': True,
-                         'game_label': [f"g{i}" for i in range(n)]})
-
-
-@pytest.fixture
-def green_at(tmp_path, monkeypatch):
-    """green_at(x): a calibration file whose 🟢 threshold is x pp (None = no 🟢)."""
-    import json
-    import models
-
-    def set_green(edge):
-        path = tmp_path / 'calibration.json'
-        path.write_text(json.dumps({'coefficients': models.IDENTITY_CALIBRATION, 'green_edge_pp': edge,
-                                    'model_version': models.MODEL_VERSION}))
-        monkeypatch.setattr(models, 'CALIBRATION_FILE', str(path))
-    return set_green
+                         'game_label': [f"g{i}" for i in range(n)],
+                         'Date': pd.date_range('2026-10-01', periods=n, freq='2D')})
 
 
 def _bet(**kw):
     bet = {'name': 'A Player', 'stat': 'PTS', 'side': 'Over', 'line': 20.5, 'odds': 1.9, 'model %': 60.0,
            'break-even %': 52.6, 'edge pp': 7.4, 'edge low': 1.0, 'avg': 24.0, 'proj avg': 24.0, 'opp': 'bos',
-           'team': 'nyk'}
+           'team': 'nyk', 'odds_at': '2026-10-30T21:23:24Z', 'stats_through': pd.Timestamp('2026-10-29')}
     return bet | kw
 
 
@@ -45,12 +32,36 @@ def test_supports_are_plain_bools():
     assert all(r['supports'] in (True, False, None) and not isinstance(r['supports'], np.bool_) for r in reasons)
 
 
-def test_strong_over_is_a_bet(green_at):
-    green_at(3.0)
+def test_every_reason_says_its_value_reference_observations_time_and_source():
     reasons = prop_reasons(_bet(), _games([22.0, 25, 27, 24, 21, 26, 23, 28, 25, 24, 22, 26]), _games([]))
     assert any('in 12 of all 12 games' in t for t in texts(reasons, True))
     assert not texts(reasons, flag=True)
-    assert verdict(reasons, 7.4, 1.0)[0] == 'Bet'
+    for r in reasons:
+        assert r['direction'] in ('for', 'against', None)
+        assert all(r[k] is not None for k in ('value', 'reference', 'n', 'as_of', 'source')), r['text']
+        assert r['n'] >= 1
+
+
+def test_no_data_means_no_reason():
+    games = _games([25.0] * 12)
+    # tonight is a back-to-back, but the player has no back-to-back games: nothing to say about it
+    reasons = prop_reasons(_bet(rest_days=1), games, _games([]))
+    assert not any('back-to-back' in t for t in texts(reasons))
+    with_b2b = games.assign(rest_days=[1.0, 2.0] * 6)
+    assert any('back-to-back' in t for t in texts(prop_reasons(_bet(rest_days=1), with_b2b, _games([]))))
+    # odds without a fetch time: the model's reason isn't made
+    assert not any(t.startswith('Model:') for t in texts(prop_reasons(_bet(odds_at=None), games, _games([]))))
+    # teammates out without the games behind the change: no reason
+    out = _bet(**{'lineup adj': 2.0, 'out_names': ['B'], 'lineup_at': '2026-10-30T20:00:00Z'})
+    assert not any('B out' in t for t in texts(prop_reasons(out, games, _games([]))))
+    assert any('B out' in t for t in texts(prop_reasons(out | {'out_n': 4}, games, _games([]))))
+    assert not complete({'flag': False, 'value': 1.0, 'reference': 2.0, 'n': 0, 'as_of': 'x', 'source': 'ESPN'})
+
+
+def test_a_line_move_is_context_not_a_reason_for_the_offer():
+    reasons = prop_reasons(_bet(line_move=1.0, open_line=19.5, snapshots=3), _games([25.0] * 12), _games([]))
+    moved = [r for r in reasons if 'moved' in r['text'] and not r['flag']]
+    assert len(moved) == 1 and moved[0]['supports'] is None and moved[0]['direction'] is None
 
 
 def test_same_numbers_read_the_other_way_for_an_under():
@@ -58,13 +69,12 @@ def test_same_numbers_read_the_other_way_for_an_under():
     assert any('Expected 24.0' in t for t in texts(reasons, False))
 
 
-def test_flags_mean_pass():
+def test_flags_are_warnings():
     reasons = prop_reasons(_bet(play_pct=50, status='Ques 50%'), _games([25.0] * 4, season_type='pre'), _games([]))
     flagged = texts(reasons, flag=True)
     assert any('Only 4 games' in t for t in flagged)
     assert any('preseason' in t for t in flagged)
     assert any('Ques 50%' in t for t in flagged)
-    assert verdict(reasons, 20, 10)[0] == 'Pass'
 
 
 def test_unstable_minutes_and_line_moving_against_are_flags():
@@ -77,35 +87,13 @@ def test_unstable_minutes_and_line_moving_against_are_flags():
 
 def test_context_reasons():
     m = {'value': 60.0, 'average': 54.0, 'diff': 6.0, 'ratio': 60 / 54, 'rank': 2, 'teams': 30, 'word': 'soft',
-         'colour': 'green'}
-    reasons = prop_reasons(_bet(matchup=m, position='G', implied=120, team_pts=110, spread=-12.5, starter=True,
-                                lineup_adj=0), _games([25.0] * 12), _games([24.0, 26.0]))
+         'colour': 'green', 'games': 6}
+    reasons = prop_reasons(_bet(matchup=m, position='G', implied=120, team_pts=110, team_games=6, spread=-12.5,
+                                starter=True, lineup_adj=0), _games([25.0] * 12), _games([24.0, 26.0]))
     assert any('soft matchup' in t for t in texts(reasons, True))
     assert any('higher-scoring' in t for t in texts(reasons, True))
     assert any('blowout' in t for t in texts(reasons, False))
     assert any('Against BOS' in t for t in texts(reasons, True))
-
-
-def test_verdict_levels(green_at):
-    green_at(3.0)
-    pro = {'supports': True, 'text': '', 'flag': False}
-    con = {'supports': False, 'text': '', 'flag': False}
-    assert verdict([pro, pro, con], 5, 1)[0] == 'Bet'
-    assert verdict([pro, pro, con], 5, -3)[0] == 'Bet'           # the 🟢 threshold decides, not edge low
-    assert verdict([pro, pro, con], 2, 1)[0] == 'Lean'            # positive but below the threshold: 🟡
-    assert verdict([pro, con, con], 5, 1)[0] == 'Pass'
-    assert verdict([pro, pro], -1, -5)[0] == 'Pass'
-    assert verdict([pro, pro], 6)[0] == 'Pass'         # no range (a game outcome): never past Pass
-    green_at(None)
-    assert verdict([pro, pro, con], 9, 4)[0] == 'Lean'            # no 🟢 threshold: never a Bet for a prop
-
-
-def test_verdict_is_pass_for_a_prop_without_valid_calibration(tmp_path, monkeypatch):
-    import models
-    pro = {'supports': True, 'text': '', 'flag': False}
-    monkeypatch.setattr(models, 'CALIBRATION_FILE', str(tmp_path / 'missing.json'))
-    level, _, why = verdict([pro, pro], 9, 4)
-    assert level == 'Pass' and 'calibration' in why
 
 
 def test_game_reasons_for_a_total():
@@ -115,12 +103,12 @@ def test_game_reasons_for_a_total():
     outcome = {'market': 'TOTAL', 'side': 'over', 'line': 225.5, 'odds': 1.9, 'model %': 64.0, 'implied %': 52.6,
                'edge pp': 11.4}
     ctx = {'projection': projection, 'ratings': ratings, 'home': 'a', 'away': 'b', 'home_court': 1.5,
-           'absences': {'a': [], 'b': []}, 'games_played': {'a': 20, 'b': 20}, 'rotowire': True}
+           'absences': {'a': [], 'b': []}, 'games_played': {'a': 20, 'b': 20}, 'rotowire': True,
+           'odds_at': '2026-10-30T21:23:24Z', 'stats_through': pd.Timestamp('2026-10-29')}
     reasons = game_reasons(outcome, ctx)
     assert any('Projected 232.0' in t for t in texts(reasons, True))
     assert not texts(reasons, flag=True)
-    level, _, why = verdict(reasons, 11.4)
-    assert level == 'Pass' and "isn't calibrated" in why          # a game edge is an estimate, never a bet
+    assert all(complete(r) for r in reasons)
     spread = game_reasons({**outcome, 'market': 'SPREAD', 'side': 'away', 'line': 5.5}, ctx)
     assert any('missing +5.5 by 2.5' in t for t in texts(spread, False))
 

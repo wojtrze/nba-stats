@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
-from components import no_offers, reasons_panel, slip_button
+from components import decision_text, no_offers, reasons_panel, slip_button
+from decisions import team_decision
 from espn_scraper import CURRENT_SEASON
-from glossary import GAME_SIGNAL_TIP, column_config, source_legend, tinted
+from glossary import column_config, source_legend, tinted
 from loaders import (games, player_logs, rotowire_lineups, season_label, snapshot_history, superbet_fetch_controls,
                      superbet_offers, today_game_odds)
 from metrics import absence_impact, game_lines
@@ -104,13 +105,11 @@ for game in sorted(priced, key=lambda g: pd.Timestamp(g['start_time'])):   # ear
     projection, absences = game['projection'], game['absences']
     played = min(ratings['games'].get(home, 0), ratings['games'].get(away, 0))
     edges = flag_game_outcomes(game_odds_movement(history, game['edges']), played, home in set(lineups['team']))
-    best = edges.loc[edges['edge pp'].idxmax()]
     start = pd.to_datetime(game['start_time']).tz_convert('Europe/Warsaw')
     label = f"{away.upper()} @ {home.upper()}"
-    # the decision first, then the projection behind it, then where the inputs stand
+    # the decision first (one per game: team markets are never admitted), then the projection behind it
     summary.append({'game': label, 'start (PL)': tip_label(game['start_time'], now),
-                    'best bet': describe(best), 'signal': best['signal'], 'best edge pp': best['edge pp'],
-                    'best odds': best['odds'],
+                    'decision': "Unavailable",
                     'proj score': f"{projection['away_pts']:.0f} – {projection['home_pts']:.0f}",
                     'proj winner': winner(projection, home, away), 'proj total': projection['total'],
                     'RotoWire': '✔' if home in set(lineups['team']) else '', 'line moves': moves(event_id)})
@@ -118,17 +117,17 @@ for game in sorted(priced, key=lambda g: pd.Timestamp(g['start_time'])):   # ear
 
 st.subheader("Overview")
 overview = pd.DataFrame(summary)
-overview_formats = {'proj total': '%.1f', 'best edge pp': '%+.1f', 'best odds': '%.2f'}
+overview_formats = {'proj total': '%.1f'}
 st.caption(source_legend())
-st.dataframe(tinted(overview, overview_formats, sources={'best odds': 'superbet'}), hide_index=True, width='stretch',
+st.dataframe(tinted(overview, overview_formats), hide_index=True, width='stretch',
              column_config=column_config(overview.columns, overview_formats,
                                          tips={'RotoWire': "✔ = RotoWire already lists this game's lineups and "
                                                            "injuries, so absences are in the projection",
-                                               'best odds': "Superbet's odds for the best bet",
-                                               'signal': "The best bet's signal: " + GAME_SIGNAL_TIP},
-                                         sources={'best odds': 'superbet'}))
-st.caption("Hover a column header for what it means; expand a game below for every market. Superbet's margin is "
-           "about 2–3 pp per side, so small edges are noise.")
+                                               'decision': "The decision for this game's team markets: always "
+                                                           "Unavailable, the game model isn't admitted (it predicted "
+                                                           "worse than the margin-free price on the settled nights)"}))
+st.caption("Hover a column header for what it means; expand a game below for every market (research only). Every "
+           "price includes Superbet's 12% stake tax.")
 
 for label, start, home, away, projection, edges, absences, event_id, start_time in details:
     with st.expander(f"{label} · {tip_label(start_time, now)} · projected {away.upper()} {projection['away_pts']:.0f} – "
@@ -176,31 +175,38 @@ for label, start, home, away, projection, edges, absences, event_id, start_time 
         table['line'] = [('–' if pd.isna(v) else f"{v:+g}" if m == 'Handicap' else f"{v:g}")
                          for v, m in zip(table['line'], table['market'])]
         # outcome -> verdict -> Superbet's price -> the model's price
-        market_cols = ['market', 'team', 'side', 'line', 'signal', 'edge pp', 'odds', 'odds move', 'implied %',
-                       'model %', 'fair odds', 'red flag']
-        market_formats = {'implied %': '%.0f', 'model %': '%.0f', 'fair odds': '%.2f', 'odds': '%.2f', 'odds move': '%+.2f',
-                          'edge pp': '%+.1f'}
+        market_cols = ['market', 'team', 'side', 'line', 'odds', 'odds move', 'market %', 'model %', 'fair odds',
+                       'break-even net %', 'edge net pp', 'ev net 100', 'red flag']
+        market_formats = {'market %': '%.0f', 'model %': '%.0f', 'fair odds': '%.2f', 'odds': '%.2f',
+                          'odds move': '%+.2f', 'break-even net %': '%.1f', 'edge net pp': '%+.1f',
+                          'ev net 100': '%+.1f'}
         event = st.dataframe(tinted(table[market_cols], market_formats), hide_index=True, width='stretch',
                      on_select='rerun', selection_mode='single-row', key=f"markets_{label}",
                      column_config=column_config(
                          market_cols, formats=market_formats,
                          tips={'line': "Handicap: the team's handicap (+1.5 = still wins the bet if it loses by 1). "
                                        "Totals: the points line. Empty for the moneyline.",
-                               'signal': GAME_SIGNAL_TIP,
-                               'edge pp': "model % − implied %, in percentage points"}))
-        # the selected outcome, or the game's best bet
-        picked = table.iloc[event.selection.rows[0]] if event.selection.rows else table.loc[edges['edge pp'].idxmax()]
-        outcome = edges.loc[picked.name]
-        ctx = {'projection': projection, 'ratings': ratings, 'home': home, 'away': away, 'home_court': home_court,
-               'absences': {t: [(str(names.get(p, p)), imp) for p, imp in absences[t]] for t in (home, away)},
-               'games_played': ratings['games'].to_dict(), 'rotowire': home in set(lineups['team'])}
-        reasons_panel(f"{describe(outcome)} @ {outcome['odds']:.2f}", game_reasons(outcome.to_dict(), ctx),
-                      outcome['edge pp'])
-        slip_button({'kind': 'game', 'event_id': event_id, 'start_time': start_time, 'home': home, 'away': away,
-                     'market': outcome['market'], 'side': outcome['side'], 'team': outcome['team'],
-                     'line': outcome['line'], 'odds': outcome['odds'], 'model_pct': outcome['model %'],
-                     'edge_pp': outcome['edge pp']}, key=f"slip_{label}")
-        st.caption("Click a market row to see the reasons for that outcome instead.")
+                               'market %': "The chance the odds give the outcome with the margin taken out of "
+                                           "its pair",
+                               'edge net pp': "model % − the chance needed after the 12% stake tax: an estimate "
+                                              "for research, the game model isn't admitted"}))
+        team = team_decision(game, superbet_offers()['fetched_at'])
+        st.markdown(f"**Team markets:** {decision_text(team)}")
+        # no outcome is picked for you: the reasons open for the row you choose
+        if event.selection.rows:
+            outcome = edges.loc[table.iloc[event.selection.rows[0]].name]
+            ctx = {'projection': projection, 'ratings': ratings, 'home': home, 'away': away,
+                   'home_court': home_court,
+                   'absences': {t: [(str(names.get(p, p)), imp) for p, imp in absences[t]] for t in (home, away)},
+                   'games_played': ratings['games'].to_dict(), 'rotowire': home in set(lineups['team']),
+                   'odds_at': superbet_offers()['fetched_at'], 'stats_through': all_games['date'].max()}
+            reasons_panel(f"{describe(outcome)} @ {outcome['odds']:.2f}", team, game_reasons(outcome.to_dict(), ctx))
+            slip_button({'kind': 'game', 'event_id': event_id, 'start_time': start_time, 'home': home, 'away': away,
+                         'market': outcome['market'], 'side': outcome['side'], 'team': outcome['team'],
+                         'line': outcome['line'], 'odds': outcome['odds'], 'model_pct': outcome['model %'],
+                         'edge_pp': outcome['edge pp'], 'decision': team['status']}, key=f"slip_{label}")
+        else:
+            st.caption("Click a market row to see the reasons for that outcome (research only).")
         b = st.columns(2)
         for i, team in enumerate((away, home)):
             if b[i].button(f"Open {team.upper()} in Lineup lab", key=f"lab_{label}_{team}"):

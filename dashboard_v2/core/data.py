@@ -8,16 +8,18 @@ RotoWire comes from loaders.fetch_rotowire too (live at most every 30 minutes, s
 import logging
 from typing import Dict, List
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
+from decisions import game_decisions
 from espn_scraper import CURRENT_SEASON
 from loaders import (clear_rotowire, fetch_rotowire, filtered_logs, games, name_resolver, player_logs,
                      reload_superbet_snapshot, snapshot_history, superbet_offers)
 from metrics import absence_adjustments, absence_impact
-from models import GAME_DEFAULTS, GAME_TYPES, game_ratings, price_games, price_props, top_up_logs
+from models import GAME_DEFAULTS, GAME_TYPES, calibration_status, game_ratings, price_games, price_props, top_up_logs
 from reasons import flag_props
-from tracking import game_odds_movement, prop_movement
+from tracking import PROP_KEY, game_odds_movement, prop_movement
 
 log = logging.getLogger(__name__)
 
@@ -88,10 +90,14 @@ def _priced_props(seasons, season_types, props_, lineups_, odds) -> pd.DataFrame
     # ESPN's "Bam Adebayo" reads better than Superbet's "Adebayo, Bam"; unmatched names stay as Superbet has them
     display = player_logs().groupby('player_id_ESPN')['player_display_name'].last()
     table['name'] = table['player_id'].map(display).fillna(table['name'])
-    # the hit rate of the picked side, so one column answers "how often did this pick win lately"
-    over = table['best side'] == 'Over'
+    # the hit rate of the evaluated side, so one column answers "how often did this side win lately"
+    over = table['side'] == 'Over'
     table['pick % L10'] = table['over % L10'].where(over, table['under % L10'])
     table['pick %'] = table['over %'].where(over, table['under %'])
+    # how many saved fetches saw each line (a line move rests on them)
+    history = snapshot_history('superbet_props')
+    seen = history.groupby(PROP_KEY).size().rename('snapshots').reset_index() if len(history) else None
+    table['snapshots'] = table.merge(seen, on=PROP_KEY, how='left')['snapshots'].values if seen is not None         else np.nan
     return table
 
 
@@ -100,6 +106,17 @@ def priced_props(seasons: List[int], season_types: List[str]) -> pd.DataFrame:
     if props().empty:
         return pd.DataFrame()
     return _priced_props(tuple(seasons), tuple(season_types), props(), lineups(), game_odds())
+
+
+def player_decisions(table: pd.DataFrame) -> Dict:
+    """decisions.game_decisions of the priced lines: one decision for the players of each game ({event_id:
+    decision}), judged now, with the newest Superbet fetch and RotoWire's lineups and their times."""
+    if table.empty:
+        return {}
+    fetched = rotowire()
+    lineups_ = fetched['lineups'].assign(fetched_at=fetched['fetched_at']) if len(fetched['lineups'])         else fetched['lineups']
+    status = table['calibration'].iloc[0] if 'calibration' in table else calibration_status()
+    return game_decisions(table, status, lineups_, superbet()['fetched_at'], pd.Timestamp.now(tz='UTC'))
 
 
 def game_model(prior_games=GAME_DEFAULTS['prior_games'], regress=GAME_DEFAULTS['regress']) -> Dict:

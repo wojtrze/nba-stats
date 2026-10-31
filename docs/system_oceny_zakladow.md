@@ -1,6 +1,7 @@
 # System oceny zakładów NBA (Superbet): interfejs, współczynniki i zasady decyzji
 
-*Stan na 30 października 2026 r. (model `2026-10-26-count`, kalibracja z 30.10, linie Superbet rozliczone do 29.10).*
+*Stan na 30 października 2026 r. (model `2026-10-26-count`, kalibracja z 30.10, linie Superbet rozliczone do 29.10);
+sekcje 0, 2.1, 3.6, 4–7 zaktualizowane 31.10 o kontrakt kosztowy i decyzje (fazy 1–2).*
 *Dokument opisuje to, co jest w kodzie i w danych, bez upiększeń. Ma służyć jako wspólna podstawa do planowania
 rozwoju: poprawek modelu, przejrzystości interfejsu i nowych funkcji.*
 
@@ -11,20 +12,23 @@ rozwoju: poprawek modelu, przejrzystości interfejsu i nowych funkcji.*
 1. Aplikacja wycenia **każdą linię zawodnika z Superbet** (Over/Under: punkty, zbiórki, asysty, trójki, sumy łączone
    i statystyki poboczne) oraz **rynki meczowe** (zwycięzca, handicap, suma punktów, sumy drużyn). Do wyceny używa
    statystyk ESPN, składów i nieobecności z RotoWire oraz samych kursów Superbet.
-2. Dla każdej linii podaje **naszą szansę**, **przewagę nad kursem**, **oczekiwany zwrot na 100 zł**, sygnał
-   (🟢/🟡/🔴), listę **powodów za i przeciw** oraz werdykt **Graj / Rozważ / Odpuść**.
+2. Dla każdego meczu podaje **jedną decyzję dla rynków drużynowych** i **jedną dla zawodników**: *Obstaw*,
+   *Nie obstawiaj*, *Czekaj* albo *Niedostępne*. Dla każdej linii pokazuje **naszą szansę**, **przewagę po
+   podatku**, **oczekiwany zwrot na 100 zł po podatku** i **powody za i przeciw**, które objaśniają decyzję, ale
+   jej nie zmieniają.
 3. **Uczciwie: na dziś system nie znalazł ani jednej linii z dodatnią przewagą.** Po kalibracji na wynikach
    historycznych model zostawia tylko ok. 13% swojej opinii, o ile różni się od kursu. Marża Superbet na propsach
-   wynosi średnio **8,4%**, a tego ten ułamek nie odrabia. We wszystkich 46 932 zapisanych wycenach najwyższa przewaga
+   wynosi średnio **8,4%**, a do tego Superbet zatrzymuje **12% stawki** jako podatek (od 31.10 wliczony w każdą
+   cenę: przy kursie 1,84 trzeba trafiać 61,8%, nie 54,3%); tego ten ułamek nie odrabia. We wszystkich 46 932 zapisanych wycenach najwyższa przewaga
    to **−0,2 pp**. Na 12 901 rozliczonych liniach (10 nocy) lepsza strona według modelu wygrała 52,4% razy, z ROI
    **−4,8%**.
 4. Model przewiduje wyniki **odrobinę lepiej niż sam kurs bez marży** (log loss 0,6842 wobec 0,6849 na nocach, których
    kalibracja nie widziała). To jednak trafność, a nie zysk. Model meczowy przewiduje **gorzej** niż kurs i dlatego
    nie daje żadnych sygnałów do gry.
-5. System jest zbudowany tak, żeby **nie udawał przewagi**: brak ważnej kalibracji oznacza brak typów, brak
-   potwierdzonego progu oznacza brak 🟢, a każda czerwona flaga oznacza „Odpuść”. Jego realna wartość to dziś
-   **filtr i narzędzie analizy**: pokazuje, czego nie grać i dlaczego, oraz które linie tracą najmniej. Nie jest
-   generatorem pewnych zakładów.
+5. System jest zbudowany tak, żeby **nie udawał przewagi**: *Obstaw* wymaga progu zapisanego na niezależnym okresie,
+   a takiego progu nie ma, więc żadna oferta go nie dostaje; rynki drużynowe są zawsze *Niedostępne*; brak kursu lub
+   składu daje *Czekaj*. Jego realna wartość to dziś **filtr i narzędzie analizy**: pokazuje, czego nie grać i
+   dlaczego. Nie jest generatorem pewnych zakładów.
 
 ---
 
@@ -60,15 +64,16 @@ pokazuje świeżość danych 🟢/🟠/🔴 (ESPN, Superbet, RotoWire) i odsyła
 
 | Strona | Co pokazuje |
 |---|---|
-| **Przegląd** | Karty dzisiejszych meczów (start czasu polskiego, kursy na zwycięzcę, handicap i sumę, prognozowany zwycięzca, status składów z RotoWire, kto nie zagra), 10 najlepszych linii zawodników i 5 największych przewag meczowych (te są tylko szacunkiem). Gdy żadna linia nie ma przewagi, lista nazywa się **„Najmniejsza strata”**. |
-| **Zakłady na zawodników** | Wszystkie linie z wyceną, posortowane domyślnie po oczekiwanym zwrocie (🔴 zawsze na końcu). Tabela ma 12 kolumn decyzyjnych; reszta jest pod *Więcej → Pokaż każdą kolumnę*. Zaznaczona linia ma cztery zakładki: **Werdykt** (powody za i przeciw oraz jak zbudowano liczbę oczekiwaną: średnia → nieobecni koledzy → mecz i rywal), **Koledzy z drużyny** (macierz „z nim / bez niego”), **Historia** (20 ostatnich meczów wobec linii, rozkład, podziały, mecze z tym rywalem) i **Ruch linii** (każdy zapis). Na dole jest sprawdzarka dowolnej linii. |
-| **Mecze** | Wiersz na mecz, potem rynki wybranego meczu z powodami za i przeciw najlepszemu wynikowi, ratingi drużyn, składy i nieobecności. |
-| **Jak to czytać** | Słowniczek: kurs, marża, nasza szansa, przewaga, sygnały, ostrzeżenia, werdykt i 5 kroków wyboru zakładu. |
+| **Przegląd** | Karty dzisiejszych meczów (start czasu polskiego, kursy na zwycięzcę, handicap i sumę, **decyzja dla rynków drużynowych i decyzja dla zawodników** z czasem kursu i składu, prognozowany zwycięzca, status składów z RotoWire, kto nie zagra). Pod kartami *Oferty do gry*: tylko oferty z decyzją *Obstaw*; dopóki ich nie ma, strona mówi, że dziś nie ma na co grać, i nie pokazuje żadnego rankingu pozostałych linii. |
+| **Zakłady na zawodników** | Nad tabelą decyzja dla zawodników każdego meczu z czasem kursu i składu. Tabela (16 kolumn, domyślnie według startu meczu, ostrzeżenia na końcu) służy do analizy; reszta kolumn jest pod *Więcej → Pokaż każdą kolumnę*. Zaznaczona linia zostaje otwarta po odświeżeniu, a gdy zmieniła się jej linia lub kurs, strona to mówi. Zakładki: **Werdykt** (decyzja meczu i „Dlaczego”: powody za i przeciw z wartością, punktem odniesienia, liczbą obserwacji, czasem i źródłem, oraz jak zbudowano liczbę oczekiwaną: średnia → nieobecni koledzy → mecz i rywal), **Koledzy z drużyny** (macierz „z nim / bez niego”), **Historia** (20 ostatnich meczów wobec linii, rozkład, podziały, mecze z tym rywalem) i **Ruch linii** (każdy zapis). Na dole jest sprawdzarka dowolnej linii. |
+| **Mecze** | Wiersz na mecz z jego dwiema decyzjami (rynki drużynowe: *Niedostępne*; zawodnicy), potem rynki wybranego meczu do analizy; powody otwierają się dla wiersza, który wybierzesz (żaden „najlepszy” wynik nie jest wybierany za użytkownika). Ratingi drużyn, składy i nieobecności. |
+| **Jak to czytać** | Słowniczek: kurs, podatek i marża, nasza szansa, przewaga, decyzja, ostrzeżenia, powody i 4 kroki czytania wieczoru. |
 
-**Kolumny decyzyjne w tabeli propsów** (kolejność z `dashboard_v2/core/columns.py`):
-zawodnik · mecz · start · statystyka · linia · **nasz typ** · **sygnał** · projekcja wskazuje · **przewaga (pp)** ·
-**oczekiwany zwrot na 100 zł** · lepsza strona · kurs · nasza szansa % · oczekiwane dziś · trafione w ost. 10 % ·
-rola dziś · ostrzeżenie.
+**Kolumny tabeli propsów** (kolejność z `dashboard_v2/core/columns.py`, 16):
+zawodnik · mecz · start · statystyka · linia · **decyzja** · **oceniana strona** · kurs · nasza szansa wygranej % ·
+potrzebna skuteczność po podatku % · **przewaga po podatku (pp)** · **oczekiwany zwrot na 100 zł po podatku** ·
+oczekiwane dziś · trafione w ost. 10 % · rola dziś · ostrzeżenie. Kolumny legacy „nasz typ”, „lepsza strona” i
+„projekcja wskazuje” nie są już pokazywane obok siebie (zostają w danych).
 
 Kolorowanie źródeł: 💰 pomarańczowy = Superbet, 📋 niebieski = RotoWire, 📊 zielony = wyliczone ze statystyk ESPN.
 
@@ -180,78 +185,79 @@ Po kalibracji wychodzi 51,3%, a próg rentowności kursu 1,84 to 54,3%, więc pr
 takim rynku wyjść na plus, surowy model musiałby dać ok. **79%**. To się praktycznie nie zdarza, i słusznie, bo takim
 skrajnościom modelu nie można ufać.
 
-### 3.6 Współczynniki decyzyjne
+### 3.6 Współczynniki: dwa kontrakty kosztowe
+
+Od 31.10 każda cena jest liczona w profilu kosztowym (`metrics.COST_PROFILES`). Panele używają profilu
+`superbet_standard` (alpha = 0,88: Superbet zatrzymuje 12% stawki, więc wygrana to 0,88 × stawka × kurs). Profil
+`legacy` (alpha = 1, kurs bez podatku) to sposób, w jaki liczone były i są wszystkie zapisane pola, backtest 2022/23,
+kalibracja i ablacja, więc dawne wyniki dają się odtworzyć. Podatku 10% od dużych wygranych domyślnie nie odejmujemy.
+Zwrot (wynik równy linii całkowitej) nie jest ani wygraną, ani przegraną: P(wygrana) + P(przegrana) + P(zwrot) = 1,
+a zwrot oddaje stawkę w obu profilach.
 
 | Kolumna (PL w panelu) | Wzór | Jak czytać |
 |---|---|---|
-| **szansa wg bukmachera %** (`market %`) | `(1/kurs_strony) / (1/kurs_over + 1/kurs_under)` | kurs bez marży |
-| **potrzebna skuteczność %** (`break-even %`) | `100 / kurs` | ile trzeba trafiać, żeby wyjść na zero |
-| **nasza szansa %** (`model %`) | skalibrowana szansa z 3.5 | |
-| **przewaga (pp)** (`edge pp`) | `model % − break-even %` | > 0 oznacza, że kurs płaci więcej niż ryzyko |
-| **przewaga ostrożnie (pp)** (`edge low`) | to samo dla dolnego końca zakresu | ile zostaje, jeśli dotychczasowe wyniki gracza były po części szczęściem |
-| **oczekiwany zwrot na 100 zł** (`ev 100`) | `model % × kurs − 100` | ranking wartości; szansa sama w sobie głównie odzwierciedla kurs |
-| **lepsza strona** (`best side`) | strona z większą przewagą, nawet ujemną | to jeszcze nie jest typ |
-| **nasz typ** (`bet`) | lepsza strona tylko przy 🟢/🟡, w przeciwnym razie „odpuść” | |
-| **projekcja wskazuje** (`lean`) | Over/Under, gdy `proj avg` odbiega od linii o ≥ ok. 10% (log) | **wyłącznie informacja**: sama projekcja nie pobiła kursów Superbet |
+| **szansa wg bukmachera %** (`market %`) | `(1/kurs_strony) / (1/kurs_over + 1/kurs_under)` | kurs bez marży; dla meczów liczony w parze stron jednego rynku |
+| **oceniana strona** (`side`) | strona z wyższym `ev net 100` | strona, którą ocenia decyzja; to nie typ |
+| **nasza szansa wygranej %** (`p win %`) | skalibrowana szansa z 3.5 dla ocenianej strony | |
+| **szansa zwrotu %** (`p push %`) | na linii całkowitej `1 − P(Over) − P(Under)`, inaczej 0 | |
+| **potrzebna skuteczność po podatku %** (`break-even net %`) | `(1 − p_push) / (alpha × kurs)` | przy 1,84: 61,8% (legacy 54,3%) |
+| **przewaga po podatku (pp)** (`edge net pp`) | `p win % − break-even net %` | |
+| **oczekiwany zwrot na 100 zł po podatku** (`ev net 100`) | `100 × (p_win × alpha × kurs + p_push − 1)` | |
+| legacy: `best side`, `break-even %`, `edge pp`, `edge low`, `ev 100`, `signal`, `bet`, `lean` | jak dotąd: kurs bez podatku, strona według pp | zapisywane w snapshotach bez zmian znaczenia; w UI tylko w danych |
+
+`edge low` to dolny koniec szumu losowego hit rate (`p − 1,96·√(p(1−p)/(n+11))`), a nie przedział pewności modelu.
+Nie wpływa już na stawkę ani na decyzję.
 
 ---
 
-## 4. Sygnały i werdykt
+## 4. Decyzja: jedna na mecz dla drużyn i jedna dla zawodników
 
-### 4.1 Sygnał w tabeli
+Kod: `dashboard/decisions.py`. Decyzja wynika **wyłącznie z ceny, modelu, aktualności i dopuszczenia modelu**.
+Powody (sekcja 5) powstają po decyzji i ją objaśniają; ich liczba nie jest wejściem funkcji, więc nie może jej
+zmienić. Słowa „Graj / Rozważ / Odpuść”, „pewniak” i „rekomendacja” zniknęły z interfejsu.
 
-| Sygnał | Warunek | Stan dziś |
-|---|---|---|
-| 🟢 | przewaga ≥ próg, którego typy na **co najmniej 10 nocach niewidzianych przez kalibrację** (50+ zakładów) dały zysk i wygrywały częściej niż próg rentowności **nawet na dolnym końcu 95% przedziału** | **brak progu, więc brak 🟢** |
-| 🟡 | dowolna dodatnia **szacowana** przewaga (niepotwierdzona) | 0 linii |
-| 🔴 | czerwona flaga (sekcja 5.2), niezależnie od liczb | ok. 18% linii |
-| (puste) | przewaga ≤ 0, czyli „odpuść” | pozostałe |
+| Status | Kiedy |
+|---|---|
+| **Obstaw** (OBSTAW) | oferta bez ostrzeżenia, `ev net 100 > 0` i `edge net pp ≥` próg zapisany na niezależnym okresie (`ADMITTED_THRESHOLD`). **Takiego progu nie ma (None), więc żadna oferta nie dostaje tego statusu.** Próg 🟢 z kalibracji się nie liczy: jest wybierany na tych samych nocach, na których jest oceniany |
+| **Nie obstawiaj** (NIE_OBSTAWIAJ) | ocena aktualna, żadna oferta nie spełnia warunku |
+| **Czekaj** (CZEKAJ) | brak kursu albo kurs starszy niż 3 h; RotoWire nie podaje składu któregoś zespołu; gracz z najlepszą ofertą jest niepewny (szansa gry 1–99%); dwie najlepsze oferty mają ten sam oczekiwany zwrot (remisu nie rozstrzygamy arbitralnie) |
+| **Niedostępne** (NIEDOSTEPNE) | model rodziny nie jest dopuszczony: **każdy rynek drużynowy zawsze**; propsy bez kalibracji dla bieżącej wersji modelu |
 
-Bez kalibracji dopasowanej do bieżącej wersji modelu **żadna linia nie dostaje 🟢/🟡, typu ani stawki**, a panel
-pokazuje ostrzeżenie. To zabezpieczenie przed cichym użyciem przesadnie pewnego surowego modelu.
+Kolejność dla zawodników: niedopuszczony model → brak/stary kurs → brak składu lub niepewny gracz → brak progu lub
+żadnej kwalifikującej się oferty → remis → Obstaw z jedną ofertą. Gracze wpisani przez RotoWire jako „out” (0%) nie
+tworzą ofert (ich zakłady są zwracane). Przy *Obstaw* każda inna linia tego meczu ma status *Nie obstawiaj*.
 
-### 4.2 Werdykt Graj / Rozważ / Odpuść (`reasons.verdict`)
-
-Decyzja przechodzi po kolei przez warunki; pierwszy spełniony rozstrzyga:
-
-1. Jest **czerwona flaga** → **Odpuść** (podajemy pierwszą flagę).
-2. To **rynek meczowy** → **Odpuść** („model meczów nie jest skalibrowany, przewaga to szacunek”).
-3. Brak ważnej kalibracji → **Odpuść**.
-4. Przewaga ≤ 0 → **Odpuść** („kurs nie płaci wystarczająco za tę szansę”).
-5. Przewaga ≥ próg 🟢 **i** więcej powodów za niż przeciw → **Graj**.
-6. Powodów za co najmniej tyle, co przeciw → **Rozważ** (z dopiskiem „niepotwierdzona 🟡”, jeśli nie ma 🟢).
-7. W przeciwnym razie → **Odpuść** („dodatnia przewaga, ale więcej powodów przeciw”).
-
-**Ważne dla oceny metody:** powody za i przeciw liczy się **jednym głosem każdy, bez wag**, a sam powód „Model”
-(dodatnia przewaga) też jest jednym z głosów za. Liczenie głosów **nie było walidowane na wynikach**. To heurystyka
-porządkująca argumenty, a nie część wyliczonej szansy. Szansa i przewaga pochodzą wyłącznie z sekcji 3.
+Sygnały 🟢/🟡 (legacy, liczone przy kursie bez podatku) zostają w zapisach, ale nie są już filtrem ani kolumną
+decyzyjną w panelach. 🔴 i kolumna „ostrzeżenie” zostają: ostrzeżenie blokuje *Obstaw*.
 
 ---
 
 ## 5. Powody za i przeciw: zakłady na zawodników
 
-Kod: `dashboard/reasons.py::prop_reasons`. Każdy powód jest **za** wybraną stroną, **przeciw** niej albo
-**neutralny** (kontekst). „Za Over” oznacza, że liczba wskazuje w górę; dla Under ten sam fakt działa odwrotnie.
+Kod: `dashboard/reasons.py::prop_reasons`. Każdy powód jest **za** ocenianą stroną, **przeciw** niej albo
+**kontekstem**. „Za Over” oznacza, że liczba wskazuje w górę; dla Under ten sam fakt działa odwrotnie. Każdy powód
+podaje **kierunek, wartość, punkt odniesienia, liczbę obserwacji, czas i źródło** (ESPN, Superbet, RotoWire, model).
+**Brak danych oznacza brak powodu**: powód bez któregoś z tych pól nie powstaje. Powody nie głosują.
 
 ### 5.1 Powody (z progami)
 
 | # | Powód (tekst w panelu) | Kiedy się pojawia | Za / przeciw |
 |---|---|---|---|
-| 1 | **Model:** „Over wygrywa w X%; kurs K wymaga Y% (przewaga ±Z pp, ±W przy ostrożnym odczycie)” | zawsze, gdy jest wycena | za, gdy przewaga > 0 |
+| 1 | **Model:** „Over wygrywa w X%; kurs K po 12% podatku od stawki wymaga Y% (przewaga ±Z pp)” | gdy jest wycena i znany czas kursu | za, gdy przewaga po podatku > 0 |
 | 2 | **Trafienia, ostatnie 10:** „Over w h z ostatnich 10 meczów (r%; potrzeba Y%)” | ≥ 3 mecze | za, gdy r > próg rentowności |
 | 3 | **Trafienia, cały sezon** | > 10 meczów | jw. |
 | 4 | **Oczekiwane dziś:** „Oczekiwane dziś P wobec linii L (±d); średnia, mediana” | ≥ 1 mecz | neutralny, gdy \|d\| < max(0,5; 3% linii), poza tym za/przeciw zależnie od kierunku |
 | 5 | **Minuty:** „Ostatnio więcej / mniej minut: ost. 5 wobec średniej” | ≥ 6 meczów i różnica ≥ 3 min | więcej minut działa za Over |
-| 6 | **Nieobecni koledzy:** „A, B nie zagra: gracz zwykle ma +x bez nich” | `lineup adj` ≠ 0 | dodatnie działa za Over |
+| 6 | **Nieobecni koledzy:** „A, B nie zagra: w meczach bez nich gracz miał średnio +x (opis, nie ich wpływ)” | `lineup adj` ≠ 0 i znana liczba meczów bez nich | dodatnie działa za Over; porównanie jest opisowe, nie przyczynowe |
 | 7 | **Dom / wyjazd:** średnia w meczach u siebie lub na wyjeździe wobec ogólnej | ≥ 6 meczów, ≥ 3 w danym miejscu | neutralny przy różnicy < 5% |
-| 8 | **Mecz dzień po dniu:** średnia w takich meczach | dziś drugi mecz z rzędu | za Over tylko, gdy w takich meczach gracz miał więcej (≥ 2 mecze); bez danych liczy się przeciw Over |
+| 8 | **Mecz dzień po dniu:** średnia w takich meczach | dziś drugi mecz z rzędu **i ≥ 2 takie mecze w próbce** | za Over, gdy w takich meczach gracz miał więcej; bez takich meczów powodu nie ma (dawniej liczył się przeciw Over) |
 | 9 | **Rywal:** „OPP pozwalają [pozycji] na v na mecz, o d więcej / mniej niż przeciętnie (miejsce r z 30): miękki / twardy rywal” | znana pozycja i rywal | miękki (≥ +5%) działa za Over, twardy (≤ −5%) przeciw, przeciętny jest neutralny |
 | 10 | **Historia z rywalem:** średnia w meczach z tym rywalem (wszystkie sezony) | ≥ 2 mecze | średnia > linii działa za Over |
 | 11 | **Oczekiwane punkty drużyny:** „Superbet oczekuje, że drużyna zdobędzie X (zwykle Y)” | różnica ≥ 3% | więcej punktów działa za Over |
 | 12 | **Ryzyko pogromu:** „faworyt / słabszy o S: przy pogromie podstawowi siedzą w 4. kwarcie” | \|handicap\| ≥ 10 i gracz z pierwszej piątki | **zawsze przeciw Over** (za Under) |
-| 13 | **Ruch linii:** „Linia wzrosła / spadła o m od pierwszego zapisu (rynek poszedł w twoją stronę / przeciw tobie)” | linia się ruszyła | ruch w stronę typu działa za |
+| 13 | **Ruch linii:** „Linia ruszyła o m od pierwszego zapisu (L₀ → L); kontekst rynku, nie powód za aktualną ofertą” | linia się ruszyła | **kontekst** (dawniej liczył się za lub przeciw) |
 
-### 5.2 Czerwone flagi: każda sama oznacza „Odpuść” (🔴)
+### 5.2 Ostrzeżenia (🔴): każde blokuje status *Obstaw*
 
 | Flaga | Warunek |
 |---|---|
@@ -259,9 +265,10 @@ Kod: `dashboard/reasons.py::prop_reasons`. Każdy powód jest **za** wybraną st
 | Tylko przedsezon | wszystkie mecze w próbce to przedsezon |
 | Może nie zagrać | RotoWire: szansa gry między 1% a 99% |
 | Niestabilne minuty | ≥ 5 meczów i współczynnik zmienności minut > **0,35** |
-| Linia przeciw typowi | linia ruszyła się o **≥ 1,5** w stronę przeciwną do typu („rynek może coś wiedzieć”) |
+| Linia przeciw stronie | linia ruszyła się o **≥ 1,5** w stronę przeciwną do ocenianej strony („rynek może coś wiedzieć”) |
 
-Gracze z szansą gry 0% są domyślnie ukryci.
+Domyślnie ukryci są gracze, których rola z RotoWire zaczyna się od „Out” lub „OFS” (filtr `hide_out` działa po tagu
+urazu, nie po szansie gry 0%).
 
 ---
 
@@ -279,12 +286,15 @@ Kod: `metrics.game_projection`, `models.price_games`, `reasons.game_reasons`.
 - **Nieobecni** (RotoWire, szansa gry ≤ 25%): zmiana punktów zdobytych i straconych drużyny w meczach bez tego gracza,
   ściągnięta wagą `n/(n+5)`.
 - **Szanse:** rozkład normalny wokół projekcji, SD 14 pkt dla różnicy, 18 dla sumy, 11,5 dla sumy drużyny.
-- Przewaga meczu to szansa modelu minus `100/kurs` (bez usuwania marży).
+- Legacy przewaga meczu (`edge pp`, zapisywana) to szansa modelu minus `100/kurs` (bez usuwania marży). Od 31.10
+  obok niej: `market %` (kurs bez marży w parze stron), `break-even net %`, `edge net pp` i `ev net 100` w tym samym
+  profilu kosztowym co propsy. To wciąż tylko analiza: rynki drużynowe są *Niedostępne*.
 
 ### 6.2 Powody za i przeciw (mecze)
 
-- **Zwycięzca / handicap:** prognozowana różnica punktów (czy pokrywa handicap), bilans netto obu drużyn, atut
-  własnej hali, każdy nieobecny z efektem ≥ 0,5 pkt na różnicę.
+- **Zwycięzca / handicap:** prognozowana różnica punktów (czy pokrywa handicap), bilans netto obu drużyn, każdy
+  nieobecny z efektem ≥ 0,5 pkt na różnicę. Atut własnej hali nie jest już powodem: to stała modelu (1,5 pkt), a
+  nie obserwacja, więc nie ma liczby obserwacji.
 - **Sumy:** prognoza wobec linii, tempo wobec ligi (neutralne przy < 1 posiadaniu różnicy), atak drużyny wobec obrony
   rywala, nieobecni z efektem ≥ 0,5 pkt.
 
@@ -295,19 +305,20 @@ prawdopodobne, że model czegoś nie wie, niż że rynek tak bardzo się myli).
 
 ### 6.4 Status
 
-**Rynki meczowe nigdy nie dostają 🟢/🟡, werdyktu „Graj/Rozważ” ani stawki.** Na 988 rozliczonych wynikach
+**Rynki meczowe zawsze dostają decyzję *Niedostępne* i nigdy stawki.** Na 988 rozliczonych wynikach
 (9 nocy) model meczowy przewiduje **gorzej niż kurs** (log loss 0,7248 wobec 0,6730). Jego typy z przewagą > 0
 oczekiwały 65,8% trafień, a trafiły **50,6%** (ROI −4,2%). Najgorzej wypada handicap (0,884 wobec 0,681).
-Kalibracja meczów powstanie automatycznie przy 300+ wynikach z 10+ nocy, czyli niedługo. Same dane jednak już
-pokazują, że model wymaga przebudowy, a nie tylko kalibracji.
+**Nic nie dopuszcza ich automatycznie**: w kodzie nie ma dopasowania kalibracji meczów (`GAME_CALIBRATION_MIN` w
+`backtest/calibrate.py` występuje tylko w tekście raportu; wcześniejsza wersja tego dokumentu błędnie mówiła, że
+kalibracja „powstanie automatycznie”). Dane pokazują, że model wymaga przebudowy, a nie tylko kalibracji.
 
 ---
 
 ## 7. Stawki i kupon (stary dashboard)
 
-- **Ćwierć Kelly'ego**, maksymalnie 5% bankrolla: `0,25 × (p·kurs − 1)/(kurs − 1)`. Przy propsach `p` to **dolny
-  koniec zakresu** szansy, więc cienka przewaga dostaje mniej. Rynki meczowe i linie bez ważnej kalibracji
-  dostają stawkę 0.
+- **Ćwierć Kelly'ego**, maksymalnie 5% bankrolla, na cenie netto: `0,25 × (p·α·kurs − 1)/(α·kurs − 1)`, gdzie `p` to
+  skalibrowana szansa wygranej (od 31.10 bez `edge low`, który opisuje tylko szum hit rate). Stawkę dostaje tylko
+  oferta z decyzją *Obstaw*, więc dziś **każda stawka wynosi 0**. Rynki meczowe nigdy jej nie dostają.
 - Ostrzeżenia na kuponie: kilka zakładów na jednego gracza, obie strony jednej linii, kilka Overów (lub Underów)
   w jednym meczu, zbyt duża część bankrolla na jedną noc.
 - Postawione zakłady trafiają do `my_bets.csv` i są rozliczane tymi samymi regułami co reszta (kurs postawiony
@@ -392,8 +403,9 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
    ma charakter eksploracyjny. Czysta walidacja wymaga osobnego, nietkniętego okresu.
 3. **Historia testowa to inny bukmacher** (Unibet 2022/23, bez kursów meczowych, bez RotoWire, pozycje dopisane
    z lat 2024–26).
-4. **„Zakres 95%” nie jest przedziałem predykcji** (F6), a po kalibracji (b ≈ 0,13) prawie znika.
-5. **Powody i werdykt nie są walidowane** jako osobny sygnał, a wszystkie głosy mają tę samą wagę.
+4. **„Zakres 95%” nie jest przedziałem predykcji** (F6), a po kalibracji (b ≈ 0,13) prawie znika. Od 31.10 nie
+   wpływa na stawkę ani decyzję, a interfejs nie nazywa go przedziałem pewności modelu.
+5. **Powody nie są walidowane** jako osobny sygnał. Od 31.10 nie głosują: decyzja od nich nie zależy.
 6. **Model meczowy jest słaby** (wczesny sezon to głównie zeszły sezon, nie zna letnich transferów, nieobecni liczą
    się tylko wtedy, gdy drużyna już grała bez danego gracza).
 7. **Brak prawdziwego kursu zamknięcia** (2–3 zapisy dziennie), więc nie mierzymy rzetelnie CLV.
@@ -408,14 +420,14 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 
 ### 10.1 Przejrzystość interfejsu
 
-- **Jasny komunikat na górze strony**, gdy nie ma przewagi: „Dziś żadna linia nie pokonuje marży. Najmniejsza strata
-  to −X zł na 100 zł”. Sortowanie po stracie jest już zrobione, ale przekaz można wzmocnić.
+- ~~Jasny komunikat, gdy nie ma przewagi~~ (zrobione 31.10: jedna decyzja na mecz, komunikat „dziś nie ma na co
+  grać”; lista „Najmniejsza strata” i 5 największych przewag meczowych usunięte z roli decyzyjnej).
 - **Rozdzielić „trafność” od „opłacalności”**: wysoka nasza szansa przy kursie 1,30 to nie wartość. Rozważyć ukrycie
   „naszej szansy” na rzecz „przewagi” i „zwrotu na 100 zł”.
-- **Wagi powodów:** pokazywać, które powody są uwzględnione w szansie (oczekiwane dziś, nieobecni, tempo, rywal), a
-  które są tylko kontekstem (dom/wyjazd, mecz dzień po dniu, historia z rywalem, minuty, pogrom). Obecnie wyglądają
-  na równoważne.
-- **Kupon i stawki w v2** (dziś tylko w v1).
+- **Wagi powodów:** od 31.10 powody nie głosują; dalej warto pokazać, które są uwzględnione w szansie (oczekiwane
+  dziś, nieobecni, punkty drużyny z kursu, rywal), a które są tylko kontekstem (dom/wyjazd, mecz dzień po dniu,
+  historia z rywalem, minuty, pogrom).
+- **Kupon i stawki w v2** (dziś tylko w v1; świadomie poza fazami 1–2).
 - Tablica wyników „na żywo”: skuteczność systemu do dziś na jednej karcie (ROI, liczba nocy, przedział), widoczna od
   razu na Przeglądzie.
 
@@ -451,8 +463,10 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 | Element | Plik |
 |---|---|
 | Wycena propsów i meczów, kalibracja w użyciu, sygnały | `dashboard/models.py` |
+| Decyzje (Obstaw / Nie obstawiaj / Czekaj / Niedostępne), zachowanie otwartej oferty | `dashboard/decisions.py` |
+| Kontrakt kosztowy (profile, próg, EV, zysk z rozliczenia) | `dashboard/metrics.py` (`COST_PROFILES`, `break_even`, `expected_return_100`, `side_profit`) |
 | Wzory (hit rate, rozkład, kalibracja, rywal, tempo, nieobecni, model meczu) | `dashboard/metrics.py` |
-| Powody, flagi, werdykt | `dashboard/reasons.py` |
+| Powody i ostrzeżenia | `dashboard/reasons.py` |
 | Teksty PL/EN, podpowiedzi kolumn | `dashboard/i18n.py` |
 | Stawki i kupon | `dashboard/bets.py` |
 | Rozliczanie | `dashboard/tracking.py`, `dashboard/nightly.py` |
@@ -478,5 +492,8 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 | Ryzyko pogromu | handicap ≥ 10 | |
 | Kalibracja | a = 1,140, b = 0,132 | |
 | Próg 🟢 | brak | 10+ nocy, 50+ zakładów, dolny koniec 95% powyżej progu rentowności |
-| Kelly | 0,25, max 5% | dolny koniec szansy |
+| Kelly | 0,25, max 5% | szansa wygranej na cenie netto, tylko przy *Obstaw* |
+| Profil kosztowy | `superbet_standard`: alpha = 0,88; `legacy`: alpha = 1 | 12% podatku od stawki |
+| Próg dla *Obstaw* | brak (`ADMITTED_THRESHOLD = None`) | musi pochodzić z niezależnego okresu |
+| Wiek kursu dla *Czekaj* | 3 h | |
 | Model meczu | hala 1,5; SD 14 / 18 / 11,5; regresja 30%; prior 10 meczów | |

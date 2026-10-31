@@ -47,8 +47,13 @@ def nights(prop_snapshots: pd.DataFrame, games: pd.DataFrame, now) -> pd.DataFra
 
 # the model's numbers saved with each line (daily_snapshot.py); the raw chances let backtest/calibrate.py refit
 # the calibration from the settled lines without pricing them again
+# the net contract (metrics.ACTIVE_PROFILE) next to the legacy fields above, which keep their meaning: the profile,
+# the side with the higher expected return and that return per 100 (rows saved before Oct 31 leave them empty)
+NET_COLUMNS = ['cost_profile', 'eval_side', 'ev_net_100']
 MODEL_COLUMNS = ['pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag',
-                 'raw_over_pct', 'raw_under_pct', 'market_over_pct']
+                 'raw_over_pct', 'raw_under_pct', 'market_over_pct', *NET_COLUMNS]
+# the decision (decisions.py) for the players of the line's game, as the fetch saved it; live fetches only
+DECISION_COLUMN = 'decision'
 
 # which model priced a saved line: models.MODEL_VERSION. calibration_id: models.calibration_id at pricing time. prediction_origin: recorded_live = saved by the fetch itself, historical_replay = priced later
 # as of the fetch (daily_snapshot.py --reprice, kept in its own file). Rows saved before Oct 26 leave them empty.
@@ -164,7 +169,9 @@ def model_columns(table: pd.DataFrame) -> pd.DataFrame:
                          'proj_avg': table['proj avg'].round(2), 'signal': table['signal'],
                          'red_flag': table['red flag'], 'raw_over_pct': table['raw over %'].round(2),
                          'raw_under_pct': table['raw under %'].round(2),
-                         'market_over_pct': table['market over %'].round(2)}, index=table.index)[MODEL_COLUMNS]
+                         'market_over_pct': table['market over %'].round(2), 'cost_profile': table['cost profile'],
+                         'eval_side': table['side'], 'ev_net_100': table['ev net 100'].round(1)},
+                        index=table.index)[MODEL_COLUMNS]
 
 
 # what the group analysis can split the lines by
@@ -176,25 +183,32 @@ def group_outcomes(props: pd.DataFrame, by, min_lines: int = 1) -> pd.DataFrame:
     """For each group of settled lines: how often betting Over and betting Under won and paid (1 unit at the
     line's odds; pushes left out), how our picks did, and the better side with its hit rate's 95% range. Sorted by
     the better side's hit rate, so the groups where a bet was most likely to win come first."""
-    from metrics import wilson_interval
+    from metrics import SUPERBET_STANDARD, alpha, wilson_interval
+    std = alpha(SUPERBET_STANDARD)
     by = [by] if isinstance(by, str) else list(by)
     settled = props[(props['status'] == 'settled') & (props['actual'] != props['line'])]
     rows = []
     for key, part in settled.groupby(by, dropna=False):
         over_won = part['actual'] > part['line']
         n, wins = len(part), int(over_won.sum())
-        sides = {'Over': (wins, 100 * np.mean(np.where(over_won, part['over_odds'] - 1, -1.0))),
-                 'Under': (n - wins, 100 * np.mean(np.where(~over_won, part['under_odds'] - 1, -1.0)))}
+        sides = {'Over': (wins, 100 * np.mean(np.where(over_won, part['over_odds'] - 1, -1.0)),
+                          100 * np.mean(np.where(over_won, std * part['over_odds'] - 1, -1.0))),
+                 'Under': (n - wins, 100 * np.mean(np.where(~over_won, part['under_odds'] - 1, -1.0)),
+                           100 * np.mean(np.where(~over_won, std * part['under_odds'] - 1, -1.0)))}
         best = 'Over' if wins >= n - wins else 'Under'
         low, high = wilson_interval(sides[best][0], n)
         picks = part[part['result'].isin(['win', 'loss'])]
         row = dict(zip(by, key if isinstance(key, tuple) else (key,)))
         row.update({'lines': n, 'over %': 100 * wins / n, 'over ROI %': sides['Over'][1],
-                    'under %': 100 * (n - wins) / n, 'under ROI %': sides['Under'][1], 'best side': best,
+                    'over ROI % std': sides['Over'][2], 'under %': 100 * (n - wins) / n,
+                    'under ROI %': sides['Under'][1], 'under ROI % std': sides['Under'][2], 'best side': best,
                     'best side %': 100 * sides[best][0] / n, 'ci low %': 100 * low, 'ci high %': 100 * high,
-                    'best side ROI %': sides[best][1], 'our picks': len(picks),
+                    'best side ROI %': sides[best][1], 'best side ROI % std': sides[best][2],
+                    'our picks': len(picks),
                     'our hit %': 100 * (picks['result'] == 'win').mean() if len(picks) else np.nan,
-                    'our ROI %': 100 * picks['profit'].mean() if len(picks) else np.nan})
+                    'our ROI %': 100 * picks['profit'].mean() if len(picks) else np.nan,
+                    'our ROI % std': 100 * picks['profit std'].mean() if len(picks) and 'profit std' in picks
+                    else np.nan})
         rows.append(row)
     out = pd.DataFrame(rows)
     if out.empty:
@@ -292,8 +306,11 @@ def _outcome_text(o) -> str:
 def _rate(part: pd.DataFrame) -> Dict:
     decided = part[part['result'].isin(['win', 'loss'])]
     n = len(decided)
-    return {'picks': n, 'hit %': 100 * (decided['result'] == 'win').mean() if n else np.nan,
-            'ROI %': 100 * decided['profit'].mean() if n else np.nan}
+    out = {'picks': n, 'hit %': 100 * (decided['result'] == 'win').mean() if n else np.nan,
+           'ROI %': 100 * decided['profit'].mean() if n else np.nan}
+    if 'profit std' in decided:      # settled by tracking: the profit with the stake tax too
+        out['ROI % std'] = 100 * decided['profit std'].mean() if n else np.nan
+    return out
 
 
 def night_summary(props: pd.DataFrame, games: Dict[str, pd.DataFrame]) -> Dict:

@@ -2,18 +2,19 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from components import reasons_panel
+from components import decision_text, decision_times, reasons_panel
 from core import charts
 from core.analysis import teammate_impact
-from core.data import lineups as rotowire_lineups, priced_props, superbet
+from core.data import lineups as rotowire_lineups, player_decisions, priced_props, rotowire, superbet
+from decisions import OBSTAW, offer_changed, offer_decision, offer_key
 from core.columns import PROPS_MAIN as MAIN_COLUMNS, PROPS_MORE as MORE_COLUMNS
 from core.state import language, persist, remember
 from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, stop, table
-from glossary import column_config, signal_legend
+from glossary import column_config
 from i18n import t, value
 from reasons import flag_texts
 from loaders import filtered_logs, player_logs, snapshot_history
-from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits
+from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits, stint_games
 from models import calibration_warning
 from reasons import prop_reasons
 from tracking import PROP_KEY
@@ -23,43 +24,60 @@ seasons, season_types = page_header(t('props.title', lang), t('props.purpose', l
 logs = filtered_logs(seasons, season_types)
 lineups = rotowire_lineups()
 table_all = priced_props(seasons, season_types)
+decided = player_decisions(table_all)
 if warning := calibration_warning(table_all['calibration'].iloc[0] if len(table_all) else None, lang):
     st.warning(warning, icon="⚠️")
 
 DEFAULT_TYPES = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP']
-SIGNALS = {key: t(f'props.signal.{key}', lang) for key in ('all', 'positive', 'sure')}
-FORMATS = {'raw model %': '%.0f',
-           'line': '%g', 'edge pp': '%+.1f', 'ev 100': '%+.1f', 'edge low': '%+.1f', 'pick odds': '%.2f', 'model %': '%.0f',
-           'proj avg': '%.1f', 'pick % L10': '%.0f', 'pick %': '%.0f', 'break-even %': '%.0f', 'market %': '%.0f',
+FORMATS = {'raw model %': '%.0f', 'line': '%g', 'side odds': '%.2f', 'p win %': '%.0f', 'p push %': '%.0f',
+           'break-even net %': '%.1f', 'edge net pp': '%+.1f', 'ev net 100': '%+.1f',
+           'proj avg': '%.1f', 'pick % L10': '%.0f', 'pick %': '%.0f',
            'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'percentile': '%.0f',
            'over_odds': '%.2f', 'under_odds': '%.2f', 'games': '%d', 'line move': '%+g', 'open line': '%g',
            'spread': '%+g', 'game total': '%g'}
 
 
-# how the table can be ordered (i18n 'props.sort.*'); the expected return ranks bets by their price
-SORTS = ['return', 'chance', 'tip']
+# how the table can be ordered (i18n 'props.sort.*'): by tip-off by default; none of them says what to bet
+SORTS = ['tip', 'return', 'chance']
 
 
 def sort_lines(rows: pd.DataFrame, how: str) -> pd.DataFrame:
-    """The lines in the chosen order, 🔴 always last. return: 🟢, 🟡, then the best expected return per 100; chance:
-    the highest chance to win (mostly low odds); tip: the earliest game first, then the best expected return."""
-    rank = {'🟢': 0, '🟡': 1, '': 2, '🔴': 3} if how != 'chance' else {'🟢': 0, '🟡': 0, '': 0, '🔴': 1}
-    by = {'return': ['signal', 'ev 100'], 'chance': ['signal', 'model %'],
-          'tip': ['tip_at', 'game', 'signal', 'ev 100']}[how]
-    return rows.sort_values(by, ascending=[True] * (len(by) - 1) + [False], kind='stable',
-                            key=lambda c: c.map(rank) if c.name == 'signal' else c)
+    """The lines in the chosen order, warnings always last. tip: the earliest game first; return: the highest
+    expected return after the tax; chance: the highest chance to win (mostly low odds)."""
+    rows = rows.assign(warned=rows['red flag'].fillna('') != '')
+    by = {'return': ['warned', 'ev net 100'], 'chance': ['warned', 'p win %'],
+          'tip': ['warned', 'tip_at', 'game', 'ev net 100']}[how]
+    ascending = {'return': [True, False], 'chance': [True, False], 'tip': [True, True, True, False]}[how]
+    return rows.sort_values(by, ascending=ascending, kind='stable').drop(columns='warned')
+
+
+def line_decision(row) -> dict:
+    """The decision of the line's game as it applies to this line (decisions.offer_decision)."""
+    return offer_decision(decided[row['event_id']], row)
 
 
 def display_values(rows: pd.DataFrame) -> pd.DataFrame:
-    """The rows as shown: pick, sides, lean and role in the chosen language, a line without an edge as 'pass',
-    warnings worded in the chosen language (the table keeps the English originals for sorting and filtering)."""
-    out = rows.assign(bet=rows['bet'].replace('', 'pass'))
-    for col in ('bet', 'best side', 'lean', 'RotoWire'):
+    """The rows as shown: the decision, the evaluated side and the role in the chosen language, warnings worded in
+    the chosen language (the table keeps the English originals for sorting and filtering)."""
+    out = rows.assign(decision=[t(f"decision.{line_decision(r)['status']}", lang) for _, r in rows.iterrows()])
+    for col in ('side', 'RotoWire'):
         out[col] = out[col].map(lambda v: value(v, lang))
     if lang != 'en' and 'flag items' in out:
         out['red flag'] = ['; '.join(flag_texts(items, lang)) if isinstance(items, list) else flag
                            for items, flag in zip(out['flag items'], out['red flag'])]
     return out
+
+
+def decisions_banner(event_ids):
+    """The one decision for the players of each game shown, earliest first, with its odds and lineup times."""
+    with st.container(border=True):
+        st.markdown(f"**{t('decision.title', lang)}** · {t('decision.players', lang)}")
+        for event_id in event_ids:
+            d = decided[event_id]
+            game = table_all.loc[table_all['event_id'] == event_id, 'game'].iloc[0]
+            offer = f" · {d['offer']['name']} {value(d['offer']['side'], lang)} {d['offer']['line']:g} " \
+                    f"{d['offer']['bet_type']} @ {d['offer']['side odds']:.2f}" if d['status'] == OBSTAW else ''
+            st.markdown(f"- **{game}**: {decision_text(d, lang)}{offer}  \n  :gray[{decision_times(d, lang)}]")
 
 
 def lineup_banner():
@@ -79,15 +97,16 @@ def lineup_banner():
         st.caption(t('banner.all', lang, confirmed=confirmed, total=len(games_)))
 
 
-def detail(row: pd.Series):
+def detail(row: pd.Series, changed=None):
     """The selected line: verdict, teammates, history and line movement in tabs."""
     pid = row['player_id']
     games = logs[logs['player_id_ESPN'] == pid].sort_values('Date')
     stat, line = row['bet_type'], row['line']
-    side = f"{value(row['best side'], lang)} {line:g} {stat} @ {row['pick odds']:.2f}"
-    # no positive edge: the side shown is only the less bad one
-    st.markdown("### " + (t('detail.pass_title', lang, name=row['name'], side=side, edge=row['edge pp'])
-                          if row['bet'] in ('', 'pass') else f"{row['name']} · {side}"))
+    side = f"{value(row['side'], lang)} {line:g} {stat} @ {row['side odds']:.2f}"
+    decision = line_decision(row)
+    # only an OBSTAW offer is named as one; any other line shows its evaluated side and what it returns
+    st.markdown("### " + (f"{row['name']} · {side}" if decision['status'] == OBSTAW else
+                          t('detail.pass_title', lang, name=row['name'], side=side, ev=row['ev net 100'])))
     st.caption(f"{row['game']} · {pl_time(row['start_time'])} · "
                f"{value(row['RotoWire'], lang) or t('detail.not_listed', lang)}")
     verdict_tab, mates_tab, history_tab, move_tab = st.tabs(
@@ -101,12 +120,18 @@ def detail(row: pd.Series):
         listed = lineups[lineups['player_id_ESPN'] == pid]
         tip = pd.to_datetime(row['start_time']).tz_convert('US/Eastern').tz_localize(None).normalize()
         names = logs.groupby('player_id_ESPN')['player_display_name'].last()
-        bet = {'name': row['name'], 'stat': stat, 'side': row['best side'], 'line': line, 'odds': row['pick odds'],
-               'model %': row['model %'], 'break-even %': row['break-even %'], 'edge pp': row['edge pp'],
-               'edge low': row['edge low'], 'avg': row['avg'], 'proj avg': row['proj avg'],
+        out_ids = rotowire_team(lineups, row['team'])['out']
+        # the fewest games the player played without one of tonight's out teammates (the change rests on them)
+        missed = [int((~stint_games(logs, pid, o)['teammate_played']).sum()) for o in out_ids if o != pid]
+        bet = {'name': row['name'], 'stat': stat, 'side': row['side'], 'line': line, 'odds': row['side odds'],
+               'model %': row['p win %'], 'break-even %': row['break-even net %'], 'edge pp': row['edge net pp'],
+               'avg': row['avg'], 'proj avg': row['proj avg'],
                'lineup adj': row['lineup adj'], 'status': row['RotoWire'],
                'play_pct': listed['play_pct'].iloc[0] if len(listed) else np.nan,
-               'out_names': [str(names.get(p, p)) for p in rotowire_team(lineups, row['team'])['out']],
+               'out_names': [str(names.get(p, p)) for p in out_ids], 'out_n': min(missed) if missed else None,
+               'team_games': row.get('team_games'), 'odds_at': superbet()['fetched_at'],
+               'lineup_at': rotowire()['fetched_at'], 'stats_through': logs['Date'].max(),
+               'open_line': row.get('open line', np.nan), 'snapshots': row.get('snapshots', np.nan),
                'home': row['is_home'], 'rest_days': (tip - games['Date'].iloc[-1]).days if len(games) else np.nan,
                'opp': row['opp'] or '', 'team': row['team'] or '', 'matchup': row['matchup_info'],
                'position': games['position_group'].iloc[-1] if len(games) else None, 'implied': row['implied'],
@@ -114,8 +139,8 @@ def detail(row: pd.Series):
                'starter': row['RotoWire'].startswith('starter') if row['RotoWire'] else
                bool(len(games) and games['starter'].tail(10).mean() > 0.5),
                'line_move': row.get('line move', np.nan)}
-        reasons_panel(f"{value(row['best side'], lang)} {line:g} {stat}", prop_reasons(bet, games, history, lang),
-                      row['edge pp'], row['edge low'], games, stat, line, lang)
+        reasons_panel(f"{value(row['side'], lang)} {line:g} {stat}", decision,
+                      prop_reasons(bet, games, history, lang), games, stat, line, lang, changed)
         st.markdown(t('detail.built', lang))
         kpis([{'label': t('detail.kpi.avg', lang), 'value': f"{row['avg']:.1f}",
                'help': t('detail.kpi.avg_help', lang, games=row['games'])},
@@ -253,13 +278,13 @@ if table_all.empty:
 lineup_banner()
 
 # --- filters ---
-for key, default in (('props_games', []), ('props_types', DEFAULT_TYPES), ('props_signal', 'all'),
+for key, default in (('props_games', []), ('props_types', DEFAULT_TYPES), ('props_hide_red', False),
                      ('props_hide_out', True), ('props_min_games', 5), ('props_more', False),
-                     ('props_sort', 'return')):
+                     ('props_sort', 'tip')):
     persist(key, default)
-if st.session_state['props_sort'] not in SORTS:      # an older choice ('edge') is now the expected return
-    st.session_state['props_sort'] = st.session_state['_props_sort'] = 'return'
-f = st.columns([2, 4, 2, 3, 1], vertical_alignment='bottom')
+if st.session_state['props_sort'] not in SORTS:      # an older choice ('edge') is now the tip-off
+    st.session_state['props_sort'] = st.session_state['_props_sort'] = 'tip'
+f = st.columns([2, 4, 3, 1], vertical_alignment='bottom')
 # tip-off times change their label as the game nears, so they're computed on every run, not cached
 table_all = table_all.assign(**{'tip-off': [pl_time(t) for t in table_all['start_time']],
                                 'tip_at': pd.to_datetime(table_all['start_time'], utc=True)})
@@ -271,13 +296,12 @@ st.session_state['props_types'] = [t for t in st.session_state['props_types'] if
 type_filter = f[1].pills(t('props.filter.types', lang), available, key='props_types', selection_mode='multi',
                          on_change=remember, args=('props_types',), format_func=lambda s: 'PRA' if s == 'ARP' else s,
                          help=t('props.filter.types_help', lang))
-signal = f[2].segmented_control(t('props.filter.signal', lang), list(SIGNALS), format_func=SIGNALS.get,
-                                key='props_signal', on_change=remember, args=('props_signal',),
-                                help=signal_legend(lang) + " " + t('props.filter.red_only_all', lang))
-sort = f[3].segmented_control(t('props.sort', lang), SORTS, key='props_sort', on_change=remember,
+sort = f[2].segmented_control(t('props.sort', lang), SORTS, key='props_sort', on_change=remember,
                               args=('props_sort',), format_func=lambda k: t(f'props.sort.{k}', lang),
-                              help=t('props.sort_help', lang)) or 'return'
-with f[4].popover(t('props.more', lang), width='stretch'):
+                              help=t('props.sort_help', lang)) or 'tip'
+with f[3].popover(t('props.more', lang), width='stretch'):
+    hide_red = st.toggle(t('props.hide_red', lang), key='props_hide_red', on_change=remember,
+                         args=('props_hide_red',))
     hide_out = st.toggle(t('props.hide_out', lang), key='props_hide_out', on_change=remember,
                          args=('props_hide_out',))
     min_games = st.number_input(t('props.min_games', lang), 0, 100, key='props_min_games', on_change=remember,
@@ -289,54 +313,69 @@ if game_filter:
     shown = shown[shown['game'].isin(game_filter)]
 if type_filter:
     shown = shown[shown['bet_type'].isin(type_filter)]
-if signal == 'positive':
-    shown = shown[shown['signal'].isin(['🟢', '🟡'])]
-elif signal == 'sure':
-    shown = shown[shown['signal'] == '🟢']
+if hide_red:
+    shown = shown[shown['red flag'].fillna('') == '']
 if hide_out:
     shown = shown[~shown['RotoWire'].str.startswith(('Out', 'OFS'))]
 shown = sort_lines(shown, sort).reset_index(drop=True)
 
 kpis([{'label': t('props.kpi.shown', lang), 'value': f"{len(shown)} / {len(table_all)}",
        'help': t('props.kpi.shown_help', lang)},
-      {'label': t('props.kpi.green', lang), 'value': int((shown['signal'] == '🟢').sum()),
-       'help': t('props.kpi.green_help', lang)},
-      {'label': t('props.kpi.yellow', lang), 'value': int((shown['signal'] == '🟡').sum()),
-       'help': t('props.kpi.yellow_help', lang)},
+      {'label': t('props.kpi.obstaw', lang), 'value': sum(d['status'] == OBSTAW for d in decided.values()),
+       'help': t('props.kpi.obstaw_help', lang)},
       {'label': t('props.kpi.games', lang), 'value': shown['event_id'].nunique()},
-      {'label': t('props.kpi.red', lang), 'value': int((shown['signal'] == '🔴').sum()),
+      {'label': t('props.kpi.red', lang), 'value': int((shown['red flag'].fillna('') != '').sum()),
        'help': t('props.kpi.red_help', lang)}])
 
 st.markdown(t('props.how_to_choose', lang))
-priced = table_all[table_all['signal'] != '🔴']
-if len(priced) and not priced['signal'].isin(['🟢', '🟡']).any():
-    st.info(t('props.all_pass', lang, best=priced['ev 100'].max(), typical=priced['ev 100'].median()), icon="⚖️")
+if not any(d['status'] == OBSTAW for d in decided.values()):
+    st.info(t('props.all_pass', lang), icon="⚖️")
+decisions_banner(table_all.sort_values('tip_at').drop_duplicates('event_id')['event_id']
+                 [lambda e: e.isin(shown['event_id']) if len(shown) else e])
 columns = MAIN_COLUMNS + (MORE_COLUMNS if more else [])
 picked = table(display_values(shown), columns, FORMATS, key='props_table', select=True, height=420,
                legend=['superbet', 'rotowire', 'stats'])
+if picked is not None and (st.session_state.get('props_open') or {}).get('index') != picked:
+    st.session_state.pop('props_open', None)          # a new pick: its decision is the one now shown
 st.caption(t(f'props.order.{sort}', lang) + t('props.order.rest', lang))
 
-# a line sent from the Overview opens here until a row is picked
+# the open offer: picked in the table, sent from the Overview, or the one open before this refresh. It stays open
+# when the data refreshes; if its line or odds changed since its decision was shown, the page says so
 focus = st.session_state.get('props_focus')
+opened = st.session_state.get('props_open')
+
+
+def _find(key):
+    match = table_all[(table_all['event_id'] == key[0]) & (table_all['name_ESPN'] == key[1])
+                      & (table_all['bet_type'] == key[2])]
+    return match.iloc[0] if len(match) else None
+
+
+row = None
 if picked is not None:
     st.session_state.pop('props_focus', None)
     row = shown.iloc[picked]
+    if opened and opened.get('index') == picked and opened['key'] != offer_key(row):
+        row = _find(opened['key']) if _find(opened['key']) is not None else row   # the rows moved under the pick
 elif focus:
-    match = table_all[(table_all['event_id'] == focus[0]) & (table_all['name_ESPN'] == focus[1])
-                      & (table_all['bet_type'] == focus[2])]
-    row = match.iloc[0] if len(match) else None
-else:
-    row = None
+    row = _find(focus)
+elif opened:
+    row = _find(opened['key'])
 
 if row is None:
     st.info(t('props.pick_row', lang), icon="👆")
 elif pd.isna(row['player_id']):
     st.warning(t('props.no_logs', lang, name=row['name']))
-elif pd.isna(row['best side']):
+elif not row['side']:
     st.info(t('props.no_odds', lang))
 else:
+    quote = {'line': row['line'], 'odds': row['side odds']}
+    seen = opened if opened and opened['key'] == offer_key(row) else None
+    changed = offer_changed(seen['quote'] if seen else None, quote)
+    if not seen:
+        st.session_state['props_open'] = {'key': offer_key(row), 'quote': quote, 'index': picked}
     with st.container(border=True):
-        detail(row)
+        detail(row, changed)
 
 with st.expander(t('props.checker_any', lang)):
     line_checker()

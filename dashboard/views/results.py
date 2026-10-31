@@ -88,13 +88,13 @@ def kpis(settled: pd.DataFrame, stake_col=None):
                 if decided['odds vs last %'].notna().any() else "–", help=RESULT_TIPS['avg odds vs last %'])
 
 
-NIGHT_TAB = "🌙 Previous night"
+NIGHT_TAB = "🌙 Previous night: model evaluations"
 # "See how the last night's lines resolved" on Today's props / Games opens that night's tab
 night = st.session_state.pop('results_night', None)
 if night:
     st.session_state['results_tab'] = NIGHT_TAB
     st.session_state['night_pick'] = str(night[-1])
-slip_tab, mine_tab, model_tab, night_tab = st.tabs(["🧾 Slip", "📒 My bets", "📈 Dashboard's picks", NIGHT_TAB],
+slip_tab, mine_tab, model_tab, night_tab = st.tabs(["🧾 Slip", "📒 My bets", "📈 Model evaluations", NIGHT_TAB],
                                                     default=st.session_state.get('results_tab'))
 
 # --- the slip ---
@@ -116,9 +116,9 @@ with slip_tab:
     else:
         rows = pd.DataFrame([{'bet': describe(b), 'odds': b['odds'], 'model %': b['model_pct'],
                               'edge pp': b['edge_pp'],
-                              'suggested': kelly_stake(staking_chance(b, calibrated), b['odds'], bankroll, fraction),
+                              'suggested': kelly_stake(staking_chance(b), b['odds'], bankroll, fraction),
                               'stake': b.get('stake') if b.get('stake') is not None else
-                              kelly_stake(staking_chance(b, calibrated), b['odds'], bankroll, fraction),
+                              kelly_stake(staking_chance(b), b['odds'], bankroll, fraction),
                               'remove': False} for b in slip])
         edited = st.data_editor(
             rows, hide_index=True, width='stretch', key='slip_editor',
@@ -129,9 +129,10 @@ with slip_tab:
                            'edge pp': st.column_config.NumberColumn("📊 edge pp", format='%+.1f'),
                            'suggested': st.column_config.NumberColumn(
                                "suggested stake", format='%.2f',
-                               help="Kelly stake at the chosen fraction. Props are sized on the low end of the "
-                                    "model's range, so 0 = the edge isn't sure enough. Game outcomes get 0: "
-                                    "the game model isn't calibrated yet"),
+                               help="Kelly stake at the chosen fraction, on the net price after the 12% stake "
+                                    "tax. Only an offer whose decision is Bet gets one; none can yet (no threshold "
+                                    "has been recorded on an independent period), so it's 0. Game outcomes are "
+                                    "never admitted"),
                            'stake': st.column_config.NumberColumn("stake", min_value=0.0, step=1.0, format='%.2f',
                                                                   help="What you actually bet; edit it"),
                            'remove': st.column_config.CheckboxColumn("remove")})
@@ -188,9 +189,11 @@ with mine_tab:
 
 # --- the dashboard's own picks ---
 with model_tab:
-    st.caption("Every line daily_snapshot.py saved, as first offered before tip-off, with the pick and edge the "
-               "dashboard showed at that moment, settled against the stored stats: is the model any good? Snapshots "
-               "from before picks were saved have results but no pick, so they don't count here.")
+    st.caption("Model evaluation, not your bets (those are under My bets) and not proof that the system makes "
+               "money: every line daily_snapshot.py saved, as first offered before tip-off, with the side and edge "
+               "the dashboard evaluated at that moment, settled against the stored stats. ROI % is at the plain "
+               "odds, ROI % std after Superbet's 12% stake tax. Snapshots from before picks were saved have results "
+               "but no pick, so they don't count here.")
     props_settled = settled_props()
     picks = props_settled[props_settled['pick'].notna()]
     st.subheader("Props")
