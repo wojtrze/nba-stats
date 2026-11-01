@@ -22,6 +22,10 @@ def page_header(title: str, purpose: str, with_scope: bool = False):
     left, right = st.columns([5, 2], vertical_alignment='bottom')
     left.title(title)
     left.caption(purpose)
+    from core.state import cost_profile
+    from metrics import ACTIVE_PROFILE
+    if cost_profile() != ACTIVE_PROFILE:
+        st.warning(t('no_tax.banner', language()), icon="🎟️")
     if with_scope:
         with right.popover(t('scope.button', language(), label=scope_label()), width='stretch',
                            help=t('scope.help', language())):

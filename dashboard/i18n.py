@@ -168,6 +168,27 @@ TERMS: Dict[str, Term] = {
                        _w("Loses more on average.", "Średnio traci więcej."),
                        _w("55% at 1.90 → 100 × (0.55 × 0.88 × 1.90 − 1) = −8.0.",
                           "55% po 1.90 → 100 × (0.55 × 0.88 × 1.90 − 1) = −8.0.")),
+    'tier': Term(_w("tonight's rank", "ranking dziś"),
+                 _w("★ = one of the night's best lines (the best line of up to 5 games), · = also in the night's "
+                    "best quarter. It ranks lines by expected return; it isn't an edge: these lines still lose on "
+                    "average after the tax. Their record: Results → Best of tonight.",
+                    "★ = jedna z najlepszych linii wieczoru (najlepsza linia maksymalnie 5 meczów), · = też w "
+                    "najlepszej ćwiartce wieczoru. To ranking według oczekiwanego zwrotu, a nie przewaga: te linie "
+                    "po podatku dalej średnio tracą. Ich wyniki: Wyniki → Najlepsze dziś.")),
+    'side market %': Term(_w("bookmaker's chance %", "szansa wg bukmachera %"),
+                          _w("The chance Superbet's odds give the evaluated side, with the margin taken out.",
+                             "Szansa, jaką kursy Superbetu dają ocenianej stronie, po odjęciu marży.")),
+    'above price pp': Term(_w("above the price (pp)", "ponad kurs (pp)"),
+                           _w("Our chance to win minus the bookmaker's margin-free chance: how much the model "
+                              "disagrees with the price. Before margin and tax, so it's no edge on its own.",
+                              "Nasza szansa wygranej minus szansa bukmachera bez marży: na ile model nie zgadza się "
+                              "z kursem. Przed marżą i podatkiem, więc sama nie jest przewagą."),
+                           _w("The model likes the side more than the price does.",
+                              "Model ocenia stronę lepiej niż kurs."),
+                           _w("The model agrees with the price.", "Model zgadza się z kursem.")),
+    'wait': Term(_w("note", "uwaga"),
+                 _w("Why the game's decision is 'Wait' (old odds, no lineup): check before you bet.",
+                    "Dlaczego decyzja meczu to 'Czekaj' (stare kursy, brak składu): sprawdź przed zakładem.")),
     'odds at': Term(_w("odds from", "kurs z"), _w("When Superbet's odds were fetched (Polish time).",
                                                  "Kiedy pobrano kursy Superbetu (czas polski).")),
     'lineup at': Term(_w("lineup from", "skład z"), _w("When RotoWire's lineups were fetched (Polish time).",
@@ -401,6 +422,33 @@ TERMS: Dict[str, Term] = {
                      "Więcej niż 0: te oceny opłaciłyby się przed podatkiem."),
                   _w("Below 0: they would have lost. Random betting loses about −5 here (the margin).",
                      "Mniej niż 0: traciłyby. Losowe granie traci tu ok. −5 (marża).")),
+    'nights': Term(_w("nights", "wieczory"), _w("How many settled nights the bets come from. Lines of one night share "
+                                               "games and news, so nights count more than bets.",
+                                               "Z ilu rozliczonych wieczorów pochodzą zakłady. Linie jednego wieczoru "
+                                               "dzielą mecze i wiadomości, więc wieczory liczą się bardziej niż "
+                                               "zakłady.")),
+    'price said %': Term(_w("price said %", "kurs mówił %"),
+                         _w("How often the same sides should have won by Superbet's margin-free price.",
+                            "Jak często te same strony powinny wygrywać według kursu Superbetu bez marży.")),
+    'won − price pp': Term(_w("won − price (pp)", "wygrane − kurs (pp)"),
+                           _w("How much more often the bets won than the margin-free price said. 0 = the ranking knew "
+                              "nothing the price didn't; it takes several points above 0 to beat margin and tax.",
+                              "O ile częściej zakłady wygrywały, niż mówił kurs bez marży. 0 = ranking nie wiedział "
+                              "nic ponad kurs; żeby pobić marżę i podatek, trzeba kilku punktów ponad 0."),
+                           _w("Won more often than the price said.", "Wygrywały częściej, niż mówił kurs."),
+                           _w("Won less often than the price said.", "Wygrywały rzadziej, niż mówił kurs.")),
+    'legs': Term(_w("legs", "zdarzenia"), _w("The coupon's bets, with how each one ended.",
+                                             "Zakłady na kuponie i jak skończył się każdy z nich.")),
+    'profit': Term(_w("return per 1", "wynik na 1 zł"), _w("What a unit staked would have returned, minus the unit, "
+                                                           "at the plain odds.",
+                                                           "Ile zwróciłaby jednostka stawki, minus ta jednostka, "
+                                                           "przy samym kursie.")),
+    'profit std': Term(_w("return per 1, after tax", "wynik na 1 zł po podatku"),
+                       _w("The same after Superbet's 12% tax, taken once from the coupon's stake.",
+                          "To samo po 12% podatku Superbetu, pobieranym raz od stawki kuponu.")),
+    'cumulative std': Term(_w("running total after tax", "suma narastająco po podatku"),
+                           _w("The return after tax added up night by night, 1 unit a coupon.",
+                              "Wynik po podatku sumowany wieczór po wieczorze, 1 jednostka na kupon.")),
     'ROI % std': Term(_w("return per 100, after tax %", "zwrot na 100, po podatku %"),
                       _w("The same after Superbet's 12% stake tax: what Superbet would actually have paid back.",
                          "To samo po 12% podatku od stawki: ile faktycznie oddałby Superbet."),
@@ -1031,10 +1079,18 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'props.sort.return': _w("Expected return", "Oczekiwany zwrot"),
     'props.sort.chance': _w("Chance to win", "Szansa na wygraną"),
     'props.sort.tip': _w("Tip-off", "Start meczu"),
-    'props.sort_help': _w("Tip-off keeps the games in order; expected return (after the tax) and chance to win order "
-                          "the lines for research. No order says what to bet: the decision is above the table.",
-                          "Start meczu trzyma kolejność meczów; oczekiwany zwrot (po podatku) i szansa układają "
-                          "linie do analizy. Żadna kolejność nie mówi, co grać: decyzja jest nad tabelą."),
+    'props.sort.shortlist': _w("Best of tonight", "Najlepsze dziś"),
+    'props.sort_help': _w("Tip-off keeps the games in order; best of tonight puts the ranked lines (★, ·) first; "
+                          "expected return (after the tax) and chance to win order every line. A ranking isn't an "
+                          "edge: the decision is above the table.",
+                          "Start meczu trzyma kolejność meczów; najlepsze dziś stawia na początku linie z rankingu "
+                          "(★, ·); oczekiwany zwrot (po podatku) i szansa układają wszystkie linie. Ranking to nie "
+                          "przewaga: decyzja jest nad tabelą."),
+    'props.only_best': _w("Only the best of tonight (★, ·)", "Tylko najlepsze dziś (★, ·)"),
+    'props.only_best_help': _w("The night's best lines by expected return, one per player, no warnings or doubtful "
+                               "players. They still lose on average after the tax.",
+                               "Najlepsze linie wieczoru według oczekiwanego zwrotu, jedna na gracza, bez ostrzeżeń "
+                               "i niepewnych graczy. Po podatku dalej średnio tracą."),
     'props.kpi.shown': _w("Lines shown", "Pokazane linie"),
     'props.kpi.shown_help': _w("Lines that pass the filters, of every line Superbet offers",
                                "Linie spełniające filtry, spośród wszystkich linii Superbetu"),
@@ -1054,6 +1110,8 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'props.order.chance': _w("The highest chance to win first (mostly low odds)",
                              "Najpierw najwyższa szansa na wygraną (głównie niskie kursy)"),
     'props.order.tip': _w("Earliest tip-off first", "Najpierw najwcześniejszy start"),
+    'props.order.shortlist': _w("Tonight's ★ lines first, then ·, then the rest by expected return",
+                                "Najpierw linie ★ z dziś, potem ·, potem reszta według oczekiwanego zwrotu"),
     'props.all_pass': _w("**No offer meets the condition for 'Bet'.** No threshold has been recorded on an independent "
                          "period, so every game's decision is 'Don't bet', 'Wait' or 'Unavailable'. The table is for "
                          "research, not a list of bets.",
@@ -1440,6 +1498,31 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'results.tab.picks': _w("Model's picks", "Typy modelu"),
     'results.tab.games': _w("Game markets (model)", "Rynki meczowe (model)"),
     'results.tab.all': _w("All settled lines", "Wszystkie rozliczone linie"),
+    'results.tab.shortlist': _w("Best of tonight: the record", "Najlepsze dziś: wyniki"),
+    'results.shortlist_intro': _w(
+        "How the Overview's ranked lines did, each judged at its last fetch before tip-off (1 unit, the evaluated "
+        "side). ★ the best line of up to 5 games a night, · the rest of the night's best quarter, then every line "
+        "as the baseline. Nights before Nov 1 are ranked again from what each fetch saved before the game "
+        "(recomputed); later nights use the tier the fetch saved.",
+        "Jak wypadły linie z rankingu na Przeglądzie, każda oceniana przy ostatnim pobraniu przed startem (1 "
+        "jednostka, oceniana strona). ★ najlepsza linia maksymalnie 5 meczów wieczoru, · reszta najlepszej ćwiartki "
+        "wieczoru, potem każda linia jako punkt odniesienia. Wieczory sprzed 1.11 są układane ponownie z tego, co "
+        "każde pobranie zapisało przed meczem (przeliczone); późniejsze używają zapisanego rankingu."),
+    'results.shortlist_origin': _w("Nights: {recorded} recorded, {recomputed} recomputed.",
+                                   "Wieczory: {recorded} zapisane, {recomputed} przeliczone."),
+    'results.every_line': _w("every line", "każda linia"),
+    'results.shortlist_none': _w("No settled night with ranked lines yet.",
+                                 "Nie ma jeszcze rozliczonego wieczoru z rankingiem."),
+    'results.ako': _w("AKO of the 3 best ★ lines, on paper", "AKO z 3 najlepszych linii ★, na papierze"),
+    'results.ako_intro': _w(
+        "A virtual accumulator a night: the 3 best ★ lines (different games), 1 unit. Superbet takes the 12% tax once "
+        "from the coupon's stake, so an AKO pays 0.88 × the product of the odds; it only pays off if each leg beats "
+        "its price before tax by about 4.4%. Tracked to see whether it does; it isn't advice to play it.",
+        "Wirtualny kupon AKO co wieczór: 3 najlepsze linie ★ (różne mecze), 1 jednostka. Superbet pobiera 12% podatku "
+        "raz od stawki kuponu, więc AKO wypłaca 0,88 × iloczyn kursów; opłaca się tylko, gdy każde zdarzenie bije "
+        "swój kurs przed podatkiem o ok. 4,4%. Śledzone, żeby sprawdzić, czy tak jest; to nie zachęta do gry."),
+    'results.ako_summary': _w("{n} coupons, {won} won, after tax {total:+.1f} units in total.",
+                              "{n} kuponów, {won} wygranych, po podatku łącznie {total:+.1f} jednostki."),
     'results.nothing': _w("Nothing settled in this selection yet: update the stats after the games (Data center).",
                           "W tym wyborze nic nie jest jeszcze rozliczone: zaktualizuj statystyki po meczach "
                           "(Centrum danych)."),
@@ -2220,6 +2303,41 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                    "Mecze, w których jedna oferta spełnia próg zapisany na niezależnym okresie. Żadna "
                                    "nie może, dopóki taki próg nie istnieje."),
     'overview.offers': _w("Offers to bet", "Oferty do gry"),
+    'no_tax.switch': _w("No-tax promotion today", "Promocja bez podatku dziś"),
+    'no_tax.help': _w("Turn on only while Superbet runs a promotion that waives the 12% stake tax on your bets. The "
+                      "pages then price every line without it (a win pays stake × odds); saved fetches and results "
+                      "keep the tax. For this session only.",
+                      "Włącz tylko wtedy, gdy Superbet prowadzi promocję znoszącą 12% podatek od stawki na Twoje "
+                      "zakłady. Strony liczą wtedy każdą linię bez niego (wygrana to stawka × kurs); zapisane "
+                      "pobrania i wyniki zostają z podatkiem. Tylko na tę sesję."),
+    'no_tax.banner': _w("No-tax promotion on: every 'after tax' number on these pages is priced without the 12% stake "
+                        "tax. Turn it off in the sidebar when the promotion ends.",
+                        "Promocja bez podatku włączona: każda liczba 'po podatku' na tych stronach jest liczona bez "
+                        "12% podatku od stawki. Wyłącz ją w pasku bocznym, gdy promocja się skończy."),
+    'overview.shortlist': _w("Best of tonight (a ranking, not an edge)", "Najlepsze dziś (ranking, nie przewaga)"),
+    'overview.shortlist_help': _w(
+        "If you bet tonight anyway, these are the lines the model ranks best by expected return: ★ the best line of "
+        "up to 5 games, · the rest of the night's best quarter. No 🔴, no doubtful players, one line per player. "
+        "They still lose on average after Superbet's 12% stake tax. On 2022/23 lines such picks won more often than "
+        "the price said; whether they do on Superbet is tracked in Results → Best of tonight.",
+        "Jeśli i tak grasz dziś, to te linie model stawia najwyżej według oczekiwanego zwrotu: ★ najlepsza linia "
+        "maksymalnie 5 meczów, · reszta najlepszej ćwiartki wieczoru. Bez 🔴, bez niepewnych graczy, jedna linia na "
+        "gracza. Po 12% podatku od stawki dalej średnio tracą. Na liniach 2022/23 takie typy wygrywały częściej, niż "
+        "mówił kurs; czy tak jest na Superbecie, śledzą Wyniki → Najlepsze dziś."),
+    'overview.shortlist_cost': _w("Expected return per 100 after tax: ★ lines {top:+.1f}, every line tonight "
+                                  "{every:+.1f}.",
+                                  "Oczekiwany zwrot na 100 zł po podatku: linie ★ {top:+.1f}, każda linia dziś "
+                                  "{every:+.1f}."),
+    'overview.shortlist_record': _w("So far ({nights} {nights|night|nights|nights}, {bets} ★ bets): ★ won {hit:.0f}% "
+                                    "where the price said {price:.0f}%, after tax {roi:+.1f} per 100; every line "
+                                    "{every:+.1f}.",
+                                    "Dotąd ({nights} {nights|wieczór|wieczory|wieczorów}, {bets} zakładów ★): ★ "
+                                    "wygrywały {hit:.0f}%, kurs mówił {price:.0f}%, po podatku {roi:+.1f} na 100 zł; "
+                                    "każda linia {every:+.1f}."),
+    'overview.shortlist_empty': _w("No line can be ranked yet: no priced line without a warning.",
+                                   "Nie ma jeszcze czego ułożyć: brak wycenionej linii bez ostrzeżenia."),
+    'overview.shortlist_more': _w("Show the rest of the night's best quarter ({n})",
+                                  "Pokaż resztę najlepszej ćwiartki wieczoru ({n})"),
     'overview.kpi.lineups': _w("Lineups listed", "Podane składy"),
     'overview.kpi.lineups_value': _w("{n} {n|team|teams|teams}", "{n} {n|drużyna|drużyny|drużyn}"),
     'overview.kpi.lineups_help': _w("Teams whose expected or confirmed lineup RotoWire lists",

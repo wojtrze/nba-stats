@@ -163,10 +163,11 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
     from models import (DEFAULT_SEASON_TYPES, GAME_DEFAULTS, GAME_TYPES, game_ratings, prepare_logs, price_games,
                         price_props, top_up_logs)
     from name_resolver import NameResolver
-    from decisions import game_decisions, team_decision
+    from decisions import game_decisions, shortlist, team_decision
     from metrics import ACTIVE_PROFILE
     from models import calibration_status
-    from nightly import DECISION_COLUMN, MODEL_VERSION, RECORDED_LIVE, lineage, model_columns
+    from nightly import DECISION_COLUMN, MODEL_VERSION, RECORDED_LIVE, SHORTLIST_COLUMNS, lineage, model_columns
+    from tracking import PROP_KEY
     from reasons import flag_props
 
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
@@ -187,8 +188,14 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
         # the decision for each game's players as of this fetch (decisions.py): what the pages show now
         now = pd.Timestamp.now(tz='UTC')
         decided = game_decisions(table, calibration_status(), lineups, now, now)
+        # where each line stood in the night's shortlist, so it's settled as shown before the game
+        ranked = shortlist(table, decided)[PROP_KEY + ['tier', 'rank']].rename(columns={'rank': 'night_rank'})
+        listed = table[PROP_KEY].merge(ranked, on=PROP_KEY, how='left').set_axis(table.index)
         props = props.assign(**model_columns(table), **lineage(RECORDED_LIVE),
-                             **{DECISION_COLUMN: table['event_id'].map(lambda e: decided[e]['status'])})
+                             **{DECISION_COLUMN: table['event_id'].map(lambda e: decided[e]['status'])},
+                             **{c: listed[c] for c in SHORTLIST_COLUMNS})
+        props['tier'] = props['tier'].fillna('')
+        props['night_rank'] = props['night_rank'].astype('Int64')
     if not game_odds.empty:
         model = game_ratings(games, CURRENT_SEASON, GAME_DEFAULTS['prior_games'], GAME_DEFAULTS['regress'])
         recent = logs[logs['season_id'].isin([CURRENT_SEASON - 1, CURRENT_SEASON]) & logs['season_type'].isin(GAME_TYPES)]
@@ -260,11 +267,11 @@ def reprice_snapshots() -> int:
     the rows of the current version."""
     from models import prepare_logs
     from name_resolver import NameResolver
-    from nightly import (DECISION_COLUMN, HISTORICAL_REPLAY, LINEAGE_COLUMNS, MODEL_COLUMNS, MODEL_VERSION, et_night,
-                         lineage, lineups_before_tip, recompute_props)
+    from nightly import (DECISION_COLUMN, HISTORICAL_REPLAY, LINEAGE_COLUMNS, MODEL_COLUMNS, MODEL_VERSION,
+                         SHORTLIST_COLUMNS, et_night, lineage, lineups_before_tip, recompute_props)
 
     path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    model_cols = ['player_id_ESPN', *MODEL_COLUMNS, DECISION_COLUMN, *LINEAGE_COLUMNS]
+    model_cols = ['player_id_ESPN', *MODEL_COLUMNS, DECISION_COLUMN, *SHORTLIST_COLUMNS, *LINEAGE_COLUMNS]
     saved = pd.read_csv(path, dtype=str, keep_default_na=False).drop(columns=model_cols, errors='ignore')
     props = read_snapshot(path).drop(columns=model_cols, errors='ignore')
     odds = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))

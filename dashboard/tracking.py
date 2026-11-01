@@ -4,7 +4,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from metrics import SUPERBET_STANDARD, game_lines, grouped_rates, prop_signal, score_check, side_profit, side_result
+from metrics import (SUPERBET_STANDARD, alpha, game_lines, grouped_rates, prop_signal, score_check, side_profit,
+                     side_result, wilson_interval)
 from superbet_fetcher import main_lines
 
 PROP_KEY = ['event_id', 'name_ESPN', 'bet_type']
@@ -291,3 +292,124 @@ def calibration(settled: pd.DataFrame, width: float = 10) -> pd.DataFrame:
         .groupby('bin')
     return pd.DataFrame({'bets': grouped.size(), 'model %': grouped['model_pct'].mean(),
                          'actual %': 100 * grouped['won'].mean()}).reset_index()
+
+
+# --- the shortlist's record (decisions.shortlist): what the night's best lines did, as shown before tip-off ---
+
+RECORDED, RECOMPUTED = 'recorded', 'recomputed'
+ACCUMULATOR_LEGS = 3
+
+
+def shortlist_lines(snapshots: pd.DataFrame, every_line: bool = False) -> pd.DataFrame:
+    """Each night's shortlisted lines as of every line's last fetch before tip-off, in the snapshot format with
+    'pick' = the evaluated side, tier ('top' / 'look'), night_rank, 'side market %' and origin. RECORDED: the tier
+    the fetch saved (live fetches from Nov 1); RECOMPUTED: older nights, ranked again by decisions.shortlist from
+    the fields the fetch saved before the game (its side and expected return when saved, else its pick and that
+    pick's model %; no RotoWire chance to play, so only the saved red flag leaves a player out). Nothing is
+    recalibrated. every_line: every line, '' as the tier of those not listed (the baseline to compare with)."""
+    from decisions import shortlist
+    needed = {'fetched_at', 'start_time', 'over_odds', 'under_odds', 'model_pct', 'pick'}
+    if snapshots.empty or not needed <= set(snapshots.columns):
+        return pd.DataFrame()
+    fetched = pd.to_datetime(snapshots['fetched_at'], utc=True)
+    rows = snapshots[fetched < pd.to_datetime(snapshots['start_time'], utc=True)].sort_values('fetched_at',
+                                                                                                kind='stable')
+    last = rows.drop_duplicates(PROP_KEY, keep='last').reset_index(drop=True)
+    for col in ('tier', 'night_rank', 'eval_side', 'ev_net_100', 'market_over_pct', 'red_flag'):
+        if col not in last:
+            last[col] = np.nan
+    has_net = last['eval_side'].isin(['Over', 'Under'])
+    last['pick'] = last['eval_side'].where(has_net, last['pick'])
+    last = last[last['pick'].isin(['Over', 'Under'])].reset_index(drop=True)
+    has_net = last['eval_side'].isin(['Over', 'Under'])
+    night = _et_date(last['start_time'])
+    # a night is recorded once a fetch of it saved the tiers; older nights are ranked again here
+    recorded = night.isin(set(night[last['tier'].fillna('').ne('')]))
+    last['origin'] = np.where(recorded, RECORDED, RECOMPUTED)
+    last['tier'] = last['tier'].where(recorded, '').fillna('')
+    last['night_rank'] = pd.to_numeric(last['night_rank'], errors='coerce').where(recorded)
+
+    older = last[~recorded]
+    if len(older):
+        odds = pd.Series(np.where(older['pick'] == 'Over', older['over_odds'], older['under_odds']), index=older.index)
+        own_ev = 100 * (pd.to_numeric(older['model_pct'], errors='coerce') / 100 * alpha(SUPERBET_STANDARD) * odds - 1)
+        ranked = shortlist(pd.DataFrame({
+            'event_id': older['event_id'], 'name_ESPN': older['name_ESPN'], 'bet_type': older['bet_type'],
+            'start_time': older['start_time'], 'side': older['pick'], 'side odds': odds,
+            'ev net 100': pd.to_numeric(older['ev_net_100'], errors='coerce').where(has_net[older.index], own_ev),
+            'p win %': older['model_pct'], 'market over %': older['market_over_pct'],
+            'red flag': older['red_flag']}))
+        if len(ranked):
+            found = older.reset_index()[['index'] + PROP_KEY].merge(ranked[PROP_KEY + ['tier', 'rank']], on=PROP_KEY)
+            last.loc[found['index'], 'tier'] = found['tier'].values
+            last.loc[found['index'], 'night_rank'] = found['rank'].values
+    market = pd.to_numeric(last['market_over_pct'], errors='coerce')
+    last['side market %'] = market.where(last['pick'] == 'Over', 100 - market)
+    out = last if every_line else last[last['tier'] != '']
+    # night by night, in the shortlist's order (lines not listed last)
+    order = pd.DataFrame({'night': night[out.index], 'rank': out['night_rank']}).sort_values(
+        ['night', 'rank'], na_position='last', kind='stable').index
+    return out.loc[order].reset_index(drop=True)
+
+
+def settle_shortlist(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
+                     every_line: bool = True) -> pd.DataFrame:
+    """settle_props of shortlist_lines (every line by default, tier '' for those not listed), with tier,
+    night_rank, side market % and origin next to each result."""
+    lines = shortlist_lines(snapshots, every_line)
+    if lines.empty:
+        return pd.DataFrame()
+    settled = settle_props(snapshots, logs, games, bets=lines)         # keeps the order of the bets it's given
+    for col in ['tier', 'night_rank', 'side market %', 'origin', 'event_id']:
+        settled[col] = lines[col].values
+    return settled
+
+
+def _tier_row(part: pd.DataFrame) -> dict:
+    decided = part[part['result'].isin(['win', 'loss'])]
+    wins, n = int((decided['result'] == 'win').sum()), len(decided)
+    low, high = wilson_interval(wins, n)
+    price = decided['side market %'].mean() if n else np.nan
+    return {'nights': int(decided['game_date'].nunique()), 'bets': n,
+            'hit %': 100 * wins / n if n else np.nan, 'ci low %': 100 * low, 'ci high %': 100 * high,
+            'price said %': price, 'won − price pp': 100 * wins / n - price if n else np.nan,
+            'ROI %': 100 * decided['profit'].mean() if n else np.nan,
+            'ROI % std': 100 * decided['profit std'].mean() if n else np.nan}
+
+
+def tier_scorecard(settled: pd.DataFrame) -> pd.DataFrame:
+    """Per shortlist tier ('top', 'look', then 'every line' of settle_shortlist, the baseline): nights, decided bets, hit %, its 95% range, the margin-free
+    price's chance of the same sides ('price said %'), how much more often they won than that, and ROI at the
+    plain odds and after the stake tax ('ROI % std'). Pushes and voids are left out."""
+    if settled.empty:
+        return pd.DataFrame()
+    rows = [{'tier': tier, **_tier_row(settled[settled['tier'] == tier])} for tier in ('top', 'look')]
+    return pd.DataFrame(rows + [{'tier': 'every line', **_tier_row(settled)}])
+
+
+def paper_accumulators(settled: pd.DataFrame, legs: int = ACCUMULATOR_LEGS) -> pd.DataFrame:
+    """A virtual accumulator (AKO) a night: the `legs` best 'top' lines (one per game already), 1 unit at the
+    product of their odds. Superbet takes its 12% tax once, from the coupon's stake, so a win pays alpha × Π odds −
+    1: it can only pay if the legs beat their prices before the tax by enough (about 4.4% each for 3 legs). A
+    pushed or void leg counts as odds 1; a night with a leg pending or unresolved, or fewer legs, is left out. A
+    record on paper only: nothing recommends it."""
+    if settled.empty:
+        return pd.DataFrame()
+    top = settled[settled['tier'] == 'top'].sort_values(['game_date', 'night_rank'], kind='stable')
+    rows = []
+    for night, part in top.groupby('game_date'):
+        part = part.head(legs)
+        if len(part) < legs or part['status'].isin(['pending', 'unresolved']).any():
+            continue
+        odds = np.where(part['result'].isin(['push', 'void']), 1.0, part['odds'].astype(float))
+        won = not (part['result'] == 'loss').any()
+        total = float(np.prod(odds))
+        rows.append({'game_date': night,
+                     'legs': " · ".join(f"{r['name']} {r['pick']} {r['line']:g} {r['bet_type']} ({r['result']})"
+                                        for _, r in part.iterrows()),
+                     'odds': total, 'result': 'win' if won else 'loss', 'profit': total - 1 if won else -1.0,
+                     'profit std': alpha(SUPERBET_STANDARD) * total - 1 if won else -1.0})
+    out = pd.DataFrame(rows)
+    if len(out):
+        out['cumulative std'] = out['profit std'].cumsum()
+    return out

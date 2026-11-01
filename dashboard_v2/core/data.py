@@ -16,10 +16,10 @@ from decisions import game_decisions
 from espn_scraper import CURRENT_SEASON
 from loaders import (clear_rotowire, fetch_rotowire, filtered_logs, games, name_resolver, player_logs,
                      reload_superbet_snapshot, snapshot_history, superbet_offers)
-from metrics import absence_adjustments, absence_impact
+from metrics import ACTIVE_PROFILE, absence_adjustments, absence_impact, reprice_net
 from models import GAME_DEFAULTS, GAME_TYPES, calibration_status, game_ratings, price_games, price_props, top_up_logs
 from reasons import flag_props
-from tracking import PROP_KEY, game_odds_movement, prop_movement
+from tracking import PROP_KEY, game_odds_movement, prop_movement, settle_shortlist
 
 log = logging.getLogger(__name__)
 
@@ -102,10 +102,21 @@ def _priced_props(seasons, season_types, props_, lineups_, odds) -> pd.DataFrame
 
 
 def priced_props(seasons: List[int], season_types: List[str]) -> pd.DataFrame:
-    """Every Superbet line priced with models.price_props (empty when Superbet has no props)."""
+    """Every Superbet line priced with models.price_props (empty when Superbet has no props), under the cost
+    profile chosen in the sidebar (core.state.cost_profile: the net columns are priced again, not the lines)."""
+    from core.state import cost_profile
     if props().empty:
         return pd.DataFrame()
-    return _priced_props(tuple(seasons), tuple(season_types), props(), lineups(), game_odds())
+    table = _priced_props(tuple(seasons), tuple(season_types), props(), lineups(), game_odds())
+    profile = cost_profile()
+    return table if profile == ACTIVE_PROFILE else reprice_net(table, profile)
+
+
+@st.cache_data(ttl=600, show_spinner="Settling the ranked lines of past nights...")
+def shortlist_record() -> pd.DataFrame:
+    """tracking.settle_shortlist of every saved fetch: each line's last fetch before tip-off with its shortlist
+    tier ('' when not listed) and result; the Overview's record line and Results → Best of tonight read it."""
+    return settle_shortlist(snapshot_history('superbet_props'), player_logs(), games())
 
 
 def player_decisions(table: pd.DataFrame) -> Dict:

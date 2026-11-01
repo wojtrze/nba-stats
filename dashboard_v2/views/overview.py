@@ -4,9 +4,11 @@ import pandas as pd
 import streamlit as st
 
 from components import decision_text, decision_times
-from core.data import game_odds, lineups as rotowire_lineups, player_decisions, priced_games, priced_props, superbet
-from decisions import actionable, offers_table, team_decision
-from core.columns import OVERVIEW_PROPS
+from core.data import (game_odds, lineups as rotowire_lineups, player_decisions, priced_games, priced_props,
+                       shortlist_record, superbet)
+from decisions import CZEKAJ, LOOK, TOP, actionable, offers_table, shortlist, team_decision
+from tracking import tier_scorecard
+from core.columns import OVERVIEW_PROPS, SHORTLIST
 from core.state import language
 from core.ui import PAGES, kpis, no_offers, page_header, pl_time, stop, table
 from espn_scraper import NBA_TEAM_NAMES
@@ -103,7 +105,7 @@ for start in range(0, len(events), 3):
                               total=p['total']))
             st.markdown(lineup_line(e['away']) + "  \n" + lineup_line(e['home']))
 
-# --- the offers to bet: only those of a 'Bet' decision, never a ranking of the rest ---
+# --- the offers to bet: only those of a 'Bet' decision ---
 st.subheader(t('overview.offers', lang))
 offers = offers_table(decided)
 if offers.empty:
@@ -116,4 +118,42 @@ else:
     if picked is not None:
         r = offers.iloc[picked]
         st.session_state['props_focus'] = (r['event_id'], r['name_ESPN'], r['bet_type'])
+        st.switch_page(PAGES['props'])
+
+# --- the night's best lines: a ranking by expected return, shown with what it costs ---
+st.subheader(t('overview.shortlist', lang), help=t('overview.shortlist_help', lang))
+best = shortlist(props, decided)
+if best.empty:
+    st.caption(t('overview.shortlist_empty', lang))
+else:
+    def wait_text(event_id) -> str:
+        d = decided.get(event_id)
+        return t(d['reason'], lang, **d.get('values', {})) if d and d['status'] == CZEKAJ else ''
+
+    best = best.assign(**{'tier': best['tier'].map({TOP: '★', LOOK: '·'}),
+                          'side': best['side'].map(lambda v: value(v, lang)),
+                          'tip-off': [pl_time(s) for s in best['start_time']],
+                          'wait': best['event_id'].map(wait_text)})
+    top = best[best['tier'] == '★'].reset_index(drop=True)
+    formats = {'line': '%g', 'side odds': '%.2f', 'p win %': '%.0f', 'side market %': '%.0f',
+               'above price pp': '%+.1f', 'ev net 100': '%+.1f'}
+    picked = table(top, SHORTLIST, formats, key='shortlist_top', select=True)
+    st.caption(t('overview.shortlist_cost', lang, top=top['ev net 100'].mean(), every=props['ev net 100'].mean()))
+    record = tier_scorecard(shortlist_record()).set_index('tier') if len(shortlist_record()) else None
+    if record is not None and record.loc['top', 'bets']:
+        top_record = record.loc['top']
+        st.caption(t('overview.shortlist_record', lang, nights=int(top_record['nights']), bets=int(top_record['bets']),
+                     hit=top_record['hit %'], price=top_record['price said %'], roi=top_record['ROI % std'],
+                     every=record.loc['every line', 'ROI % std']))
+    rest = best[best['tier'] == '·'].reset_index(drop=True)
+    if len(rest):
+        with st.expander(t('overview.shortlist_more', lang, n=len(rest))):
+            more = table(rest, SHORTLIST, formats, key='shortlist_look', select=True)
+        picked_row = rest.iloc[more] if more is not None else None
+    else:
+        picked_row = None
+    if picked is not None:
+        picked_row = top.iloc[picked]
+    if picked_row is not None:
+        st.session_state['props_focus'] = (picked_row['event_id'], picked_row['name_ESPN'], picked_row['bet_type'])
         st.switch_page(PAGES['props'])

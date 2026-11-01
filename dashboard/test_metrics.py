@@ -322,3 +322,15 @@ def test_game_markets_and_props_share_the_cost_contract():
     assert edges.loc[0, 'market %'] == pytest.approx(50.0)
     assert edges.loc[2, 'market %'] == pytest.approx(100 * (1 / 1.7) / (1 / 1.7 + 1 / 2.1))
     assert edges['edge net pp'].tolist() == pytest.approx((edges['model %'] - edges['break-even net %']).tolist())
+
+
+def test_reprice_net_under_the_no_tax_promotion():
+    from metrics import SUPERBET_NO_TAX, SUPERBET_STANDARD, reprice_net
+    table = pd.DataFrame({'p win %': [55.0], 'side odds': [1.9], 'p push %': [0.0], 'ev net 100': [-8.0],
+                          'break-even net %': [59.8], 'edge net pp': [-4.8], 'cost profile': [SUPERBET_STANDARD]})
+    out = reprice_net(table, SUPERBET_NO_TAX)
+    assert out['ev net 100'].iloc[0] == pytest.approx(100 * (0.55 * 1.9 - 1))
+    assert out['break-even net %'].iloc[0] == pytest.approx(100 / 1.9)
+    assert out['cost profile'].iloc[0] == SUPERBET_NO_TAX
+    back = reprice_net(out, SUPERBET_STANDARD)
+    assert back['ev net 100'].iloc[0] == pytest.approx(100 * (0.55 * 0.88 * 1.9 - 1))

@@ -25,6 +25,20 @@ def remember(key: str):
     st.session_state[f"_{key}"] = st.session_state[key]
 
 
+def cost_profile() -> str:
+    """The cost profile the pages price with: metrics.ACTIVE_PROFILE, or SUPERBET_NO_TAX while the sidebar's
+    no-tax promotion switch is on (no_tax_switch)."""
+    from metrics import ACTIVE_PROFILE, SUPERBET_NO_TAX
+    return SUPERBET_NO_TAX if st.session_state.get('_no_tax') else ACTIVE_PROFILE
+
+
+def no_tax_switch():
+    """The no-tax promotion switch, drawn where it's called (the sidebar); off by default, for this session."""
+    persist('no_tax', False)
+    st.toggle(i18n.t('no_tax.switch', language()), key='no_tax', on_change=remember, args=('no_tax',),
+              help=i18n.t('no_tax.help', language()))
+
+
 def language() -> str:
     """The language the pages are shown in ('en' / 'pl'), chosen in the sidebar (language_picker)."""
     return st.session_state.get('_language', i18n.DEFAULT)
