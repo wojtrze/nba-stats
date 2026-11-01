@@ -75,3 +75,6 @@ started_at,job,command,exit_code,seconds,summary
 2026-10-31T07:14:51Z,snapshot,python daily_snapshot.py,0,21.6,"rotowire_lineups: 112 rows, superbet_props: 1034 rows, superbet_game_odds: 994 rows"
 2026-10-31T17:06:39Z,lineups,RotoWire lineups (dashboard),0,0.6,"saved 115 players for Oct 31: 8 changes – LeBron James (PHI): starter → starter; new: Dean Wade (PHI, starter); Tacko Fall (PHI): Out 0% → Ques 100%; …and 5 more"
 2026-10-31T17:07:07Z,snapshot,python daily_snapshot.py,0,23.1,"rotowire_lineups: 115 rows, superbet_props: 1152 rows, superbet_game_odds: 994 rows"
+2026-10-31T18:30:00Z,lineups,RotoWire lineups (dashboard),0,0.0,saved 71 players for Nov 01 (first fetch of the day)
+2026-11-01T13:17:57Z,stats,python -m espn_scraper,0,13.6,"2026/27: added 7 games, 161 player lines. 4 games not final yet."
+2026-11-01T13:18:11Z,snapshot,python daily_snapshot.py,0,28.5,"rotowire_lineups: 71 rows, superbet_props: 662 rows, superbet_game_odds: 568 rows"
