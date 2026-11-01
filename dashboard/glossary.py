@@ -44,8 +44,8 @@ HELP = STAT_HELP | {
     'in band': "Line is between the player's 30th and 70th percentile. Outside the band = the line looks unusually "
                "low or high for this player.",
     'best side': "Legacy: the side with the bigger edge at the plain odds, as the snapshots saved it",
-    'decision': "The decision for the line's game (decisions.py): Bet = one offer meets a threshold recorded on "
-                "an independent period (none exists yet, so no offer gets it); Don't bet = current, nothing "
+    'decision': "The decision for the line's game (decisions.py): Bet = one offer's edge clears a threshold "
+                "checked on nights not used to choose it (none exists yet, so no offer gets it); Don't bet = current, nothing "
                 "qualifies; Wait = odds, lineup or a tie missing; Unavailable = the model isn't admitted",
     'side odds': "Superbet's odds for the evaluated side, before the stake tax",
     'p win %': "Calibrated chance the evaluated side wins (a push on a whole-number line is neither)",

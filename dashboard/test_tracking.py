@@ -202,3 +202,34 @@ def test_settle_games_postponed_is_unresolved():
     assert set(settled.loc[settled['game'] == 'MIA @ CHI', 'status']) == {'unresolved'}
     assert settled.loc[settled['game'] == 'MIA @ CHI', 'result'].isna().all()
     assert set(settled.loc[settled['game'] == 'NYK @ BOS', 'status']) == {'settled'}
+
+
+def test_closing_line_and_clv(green_at_5):
+    from tracking import CLOSE_MAX_AGE_MIN, closing_props
+    quotes = pd.DataFrame([
+        # PTS: 20.5 at 1.9/1.9 early, then the Over shortened at the same line (the bet beat the close)
+        {'fetched_at': '2026-10-22T08:00:00Z', 'event_id': 1, 'name_ESPN': 'APlayer', 'bet_type': 'PTS',
+         'line': 20.5, 'over_odds': 1.9, 'under_odds': 1.9},
+        {'fetched_at': '2026-10-22T23:00:00Z', 'event_id': 1, 'name_ESPN': 'APlayer', 'bet_type': 'PTS',
+         'line': 20.5, 'over_odds': 1.7, 'under_odds': 2.1},
+        # REB withdrawn before tip-off: no close
+        {'fetched_at': '2026-10-22T08:00:00Z', 'event_id': 1, 'name_ESPN': 'APlayer', 'bet_type': 'REB',
+         'line': 6.0, 'over_odds': 1.9, 'under_odds': 1.9},
+        {'fetched_at': '2026-10-22T23:00:00Z', 'event_id': 1, 'name_ESPN': 'APlayer', 'bet_type': 'REB',
+         'line': None, 'over_odds': None, 'under_odds': None},
+    ])
+    reads = pd.DataFrame({'fetched_at': ['2026-10-22T08:00:00Z', '2026-10-22T23:00:00Z', '2026-10-22T23:25:00Z'],
+                          'event_id': 1, 'start_time': START})
+    closing = closing_props(quotes, reads)
+    assert list(closing['bet_type']) == ['PTS'] and closing['close age min'].iloc[0] == 5.0
+    first = _props().iloc[[0, 3]]                                       # the early PTS Over and REB Under
+    settled = settle_props(_props(), _logs(), _games(), bets=first, closing=closing).set_index('bet_type')
+    pts = settled.loc['PTS']
+    p_close = (1 / 1.7) / (1 / 1.7 + 1 / 2.1)
+    assert pts['close odds'] == 1.7 and pts['line vs close'] == 0
+    assert pts['clv %'] == pytest.approx(100 * (1.9 * p_close - 1))      # positive: the bet beat the close
+    assert pts['clv % std'] == pytest.approx(100 * (0.88 * 1.9 * p_close - 1))
+    assert pts['clv pp'] == pytest.approx(100 * (p_close - 0.5))
+    assert pd.isna(settled.loc['REB', 'clv %'])
+    stale = closing.assign(**{'close age min': CLOSE_MAX_AGE_MIN + 1})  # last read too early: no CLV
+    assert pd.isna(settle_props(_props(), _logs(), _games(), bets=first, closing=stale)['clv %']).all()

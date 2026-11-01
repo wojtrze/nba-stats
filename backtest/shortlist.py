@@ -97,6 +97,30 @@ def shortlist_table(d: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows + [{'lines bet': "every line (the key's side)", **rates(d)}])
 
 
+def star_table(d: pd.DataFrame) -> pd.DataFrame:
+    """rates() per star level, with decisions.star_levels' rules on the scored lines (🔴 = 0★), then 'every line'
+    and 4★ − 1★: the difference of won − price pp with its 95% range from resampling whole nights."""
+    from decisions import star_levels
+    from backtest.ablation import night_bootstrap
+    signal = 'saved signal' if 'saved signal' in d else 'signal'
+    d = d.sort_values(['game_date', 'score'], ascending=[True, False], kind='stable')
+    pct = 100 * d.groupby('game_date')['score'].rank(ascending=False, pct=True, method='first')
+    eligible = d[signal].fillna('') != '🔴' if signal in d else pd.Series(True, index=d.index)
+    best = ~d[['game_date', 'name_ESPN']].duplicated()
+    event = d['home'].astype(str) + d['away'].astype(str)
+    d = d.assign(stars=star_levels(pct, eligible, best, d['game_date'], event).values)
+    rows = [{'stars': f"{n}★", **rates(d[d['stars'] == n])} for n in (4, 3, 2, 1, 0)]
+    rows.append({'stars': 'every line', **rates(d)})
+    top, bottom = d[d['stars'] == 4], d[d['stars'] == 1]
+    if len(top) and len(bottom):
+        gap = rates(top)['won − price pp'] - rates(bottom)['won − price pp']
+        both = pd.concat([top.assign(sign=1.0 / len(top)), bottom.assign(sign=-1.0 / len(bottom))])
+        excess = 100 * (both['won'] - both['market']) * both['sign'] * len(both)
+        low, high = night_bootstrap(both['game_date'].values, excess.values)
+        rows.append({'stars': '4★ − 1★', 'won − price pp': gap, 'ci low %': low, 'ci high %': high})
+    return pd.DataFrame(rows)
+
+
 def report(sources: Dict[str, pd.DataFrame]) -> str:
     parts = {name: split(t) for name, t in sources.items() if len(t)}
     coef = fit_coefficients(pd.concat([sides(fit_part) for fit_part, _ in parts.values()], ignore_index=True))
@@ -110,7 +134,9 @@ def report(sources: Dict[str, pd.DataFrame]) -> str:
         for key in KEYS:
             d = scored(test, coef, key)
             text += [f"## {label}, key '{key}': {len(d)} unseen lines, {d['game_date'].nunique()} nights", "",
-                     markdown(bucket_table(d)), "", markdown(shortlist_table(d)), ""]
+                     markdown(bucket_table(d)), "", markdown(shortlist_table(d)), "",
+                     "Star levels (decisions.STAR_BANDS; the 4★ − 1★ row's range is of that difference):", "",
+                     markdown(star_table(d)), ""]
     return "\n".join(text)
 
 

@@ -4,17 +4,19 @@ A decision comes only from the price, the model, how fresh the odds and lineups 
 admitted. The reasons for and against (reasons.py) are written after it and explain it; how many there are never
 changes it.
 
-  OBSTAW         an offer that meets a threshold recorded on an independent period. No such threshold exists yet
-                 (ADMITTED_THRESHOLD is None), so no offer can get it.
+  OBSTAW         an offer whose edge clears a threshold checked on nights not used to choose it. No such threshold
+                 exists yet (ADMITTED_THRESHOLD is None), so no offer can get it.
   NIE_OBSTAWIAJ  the evaluation is current and no offer meets the condition.
   CZEKAJ         the evaluation isn't current: no (fresh) odds, no lineup for a team of the game, the player whose
                  offer is best is questionable, or two offers tie for the one slot.
   NIEDOSTEPNE    the model family isn't admitted: every game market, and props without a calibration fitted for
                  the current model.
 
-Next to the decision, shortlist() answers the relative question the decision can't: if one bets tonight anyway,
-which lines are the best of the night? It ranks lines by expected return; it never makes a line OBSTAW, and its
-lines still lose money on average after the stake tax (data/backtest/shortlist.md has the evidence).
+Next to the decision, stars() answers the relative question the decision can't: if one bets tonight anyway,
+which lines are the best of the night? 1–4 stars are a line's place among tonight's lines by expected return
+(4★ = the best of tonight, not: worth betting; they still lose money on average after the stake tax,
+data/backtest/shortlist.md has the evidence). 5★ is the only absolute level: the OBSTAW offer, which needs
+ADMITTED_THRESHOLD.
 """
 import re
 from datetime import timedelta
@@ -33,13 +35,13 @@ ADMITTED_THRESHOLD: Optional[float] = None
 MAX_ODDS_AGE = timedelta(hours=3)
 # two offers whose expected returns (per 100) differ by less than this tie
 TIE_EV = 0.1
-# the shortlist (backtest/shortlist.py): the night's lines ranked by expected return. On 77 unseen 2022/23 nights the
-# best line of up to 5 games a night won 3.8 pp more often than the margin-free price said (about break-even before
-# the tax, −11.9% after it, against −15.5% for every line), and the lines in the night's best quarter beat the
-# price too, while the rest didn't. Relative, not an edge: it's no OBSTAW
-TOP, LOOK = 'top', 'look'
-SHORTLIST_TOP = 5            # TOP: the best line of each of up to this many games a night
-SHORTLIST_LOOK = 0.25        # LOOK: any other line in the night's best quarter by expected return
+# the stars (backtest/shortlist.py): the night's lines ranked by expected return. On 77 unseen 2022/23 nights the
+# night's best lines won more often than the margin-free price said and the bottom half didn't. Relative, not an
+# edge: 4★ is no OBSTAW. A line's level by its place among the night's priced lines (night pct): 4★ in the best
+# STAR_BANDS[0] %, 3★ up to STAR_BANDS[1] %, 2★ up to STAR_BANDS[2] %, 1★ the rest
+STAR_BANDS = (5, 20, 50)
+MAX_STARS = 5                # the OBSTAW offer only
+NO_STARS = 0                 # priced, but a red flag or a player who may not play
 
 
 def _decision(status: str, reason: str, offer=None, odds_at=None, lineup_at=None, **values) -> Dict:
@@ -142,19 +144,32 @@ def offers_table(decisions: Dict) -> pd.DataFrame:
     return pd.DataFrame(offers).reset_index(drop=True) if offers else pd.DataFrame()
 
 
-def shortlist(table: pd.DataFrame, decisions: Optional[Dict] = None) -> pd.DataFrame:
-    """The best lines of each night by expected return: a ranking, not a bet signal. table: price_props +
-    flag_props rows (event_id, name_ESPN, bet_type, side, side odds, p win %, market over %, ev net 100, red flag,
-    RotoWire; start_time sets the night, else it's all one night); decisions: game_decisions of the same lines.
+def star_levels(night_pct: pd.Series, eligible: pd.Series, best_of_player: pd.Series, night: pd.Series,
+                event_id: pd.Series) -> pd.Series:
+    """1–4 stars from each line's place among its night's priced lines (night_pct, 0–100, rows in rank order
+    within each night); NO_STARS where not eligible. 4★ also needs the player's best line and is one per game (the
+    rest of a game's 4★ candidates get 3★), so the top level isn't one game's lines. Shared with the backtest."""
+    level = pd.Series(np.select([night_pct <= STAR_BANDS[0], night_pct <= STAR_BANDS[1], night_pct <= STAR_BANDS[2]],
+                                [4, 3, 2], 1), index=night_pct.index)
+    candidate = (level == 4) & eligible & best_of_player
+    first_of_game = ~pd.DataFrame({'night': night, 'event': event_id})[candidate].duplicated()
+    level[(level == 4) & ~(candidate & first_of_game.reindex(level.index, fill_value=False))] = 3
+    return level.where(eligible, NO_STARS)
 
-    A line is ranked within its night by ev net 100 (ties: event, player, stat). It's left out when its game's
-    model isn't admitted (NIEDOSTEPNE), it has a red flag, or RotoWire doesn't list its player as sure to play;
-    each player keeps his best line. tier TOP is the best line of each of the SHORTLIST_TOP best games, LOOK any
-    other line in the night's best SHORTLIST_LOOK of every priced line. A game whose decision is CZEKAJ (old odds,
-    no lineup) keeps its lines, with the decision's reason in 'wait', so the list isn't empty while lines are
-    priced. Adds tier, rank (1 = best of the night), night pct (100 × rank among the night's priced lines),
-    side market % (the margin-free price of the evaluated side) and above price pp (p win % − side market %)."""
-    columns = ['tier', 'rank', 'night pct', 'side market %', 'above price pp', 'wait']
+
+def stars(table: pd.DataFrame, decisions: Optional[Dict] = None) -> pd.DataFrame:
+    """Every priced line of `table` with its stars: a ranking, not a bet signal. table: price_props + flag_props
+    rows (event_id, name_ESPN, bet_type, side, side odds, p win %, market over %, ev net 100, red flag, RotoWire;
+    start_time sets the night, else it's all one night); decisions: game_decisions of the same lines.
+
+    Lines are ranked within their night by ev net 100 (ties: event, player, stat); night pct = 100 × rank among
+    the night's priced lines. stars: MAX_STARS for the OBSTAW offer; star_levels' 1–4 for the rest; NO_STARS for
+    a red flag or a player RotoWire doesn't list as sure to play; NA (no rating) when the game's model isn't
+    admitted (NIEDOSTEPNE). A game whose decision is CZEKAJ (old odds, no lineup) keeps its stars, with the
+    decision's reason in 'wait'. Adds stars, rank (1 = the night's first by stars, then expected return), night
+    pct, side market % (the margin-free price of the evaluated side) and above price pp (p win % − side market %).
+    Lines without a side, odds or expected return are left out."""
+    columns = ['stars', 'rank', 'night pct', 'side market %', 'above price pp', 'wait']
     if table.empty:
         return pd.DataFrame(columns=list(table.columns) + columns)
     decisions = decisions or {}
@@ -171,12 +186,18 @@ def shortlist(table: pd.DataFrame, decisions: Optional[Dict] = None) -> pd.DataF
     status = priced['event_id'].map(lambda e: decisions.get(e, {}).get('status'))
     chance = [play_chance(str(r or '')) for r in priced['RotoWire']] if 'RotoWire' in priced else [None] * len(priced)
     sure = pd.Series([c is None or c >= 100 for c in chance], index=priced.index)
-    clean = priced['red flag'].fillna('').eq('') if 'red flag' in priced else True
-    eligible = priced[(status != NIEDOSTEPNE) & sure & clean].drop_duplicates(['night', 'name_ESPN'])
-    top = eligible.drop_duplicates(['night', 'event_id']).groupby('night', sort=False).head(SHORTLIST_TOP)
-    look = eligible[~eligible.index.isin(top.index) & (eligible['night pct'] <= 100 * SHORTLIST_LOOK)]
-    out = pd.concat([top.assign(tier=TOP), look.assign(tier=LOOK)])
-    out = out.assign(is_top=out['tier'] == TOP)         .sort_values(['night', 'is_top', 'ev net 100'], ascending=[True, False, False], kind='stable')         .drop(columns='is_top')
+    clean = priced['red flag'].fillna('').eq('') if 'red flag' in priced \
+        else pd.Series(True, index=priced.index)
+    eligible = sure & clean
+    best_of_player = ~priced[['night', 'name_ESPN']].duplicated()
+    level = star_levels(priced['night pct'], eligible, best_of_player, priced['night'], priced['event_id'])
+    offers = {offer_key(d['offer']) for d in decisions.values() if d['status'] == OBSTAW and d['offer'] is not None}
+    if offers:
+        level[[offer_key(r) in offers for _, r in priced.iterrows()]] = MAX_STARS
+    out = priced.assign(stars=level.astype('Int64'))
+    out.loc[(status == NIEDOSTEPNE).values, 'stars'] = pd.NA
+    out = out.sort_values(['night', 'stars', 'ev net 100'], ascending=[True, False, False], na_position='last',
+                          kind='stable')
     out['rank'] = out.groupby('night').cumcount() + 1
     over = out['side'] == 'Over'
     market_over = out['market over %'] if 'market over %' in out else pd.Series(np.nan, index=out.index)
@@ -185,6 +206,11 @@ def shortlist(table: pd.DataFrame, decisions: Optional[Dict] = None) -> pd.DataF
     out['wait'] = [decisions.get(e, {}).get('reason', '') if decisions.get(e, {}).get('status') == CZEKAJ else ''
                    for e in out['event_id']]
     return out.drop(columns='night').reset_index(drop=True)
+
+
+def star_text(n) -> str:
+    """★★★☆☆ for 3, '–' for no rating."""
+    return '–' if n is None or pd.isna(n) else '★' * int(n) + '☆' * (MAX_STARS - int(n))
 
 
 def offer_decision(decision: Dict, row) -> Dict:

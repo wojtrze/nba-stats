@@ -2,15 +2,18 @@
 import logging
 import unicodedata
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 import requests
 
 from bet_fetcher import NORMALIZED_TEAM_NAME
+from http_polite import PoliteClient, RunDeadline
 
 log = logging.getLogger(__name__)
 
 OFFER_API = "https://production-superbet-offer-pl.freetls.fastly.net/v2/pl-PL"
+HOST = 'superbet'          # the key of Superbet's block and budget in http_polite's state file
+RUN_DEADLINE = 240         # seconds one fetch may take, pauses and retries included
 NBA_SPORT_ID = 4
 NBA_TOURNAMENT_ID = 164   # 2176 was used before the 2026/27 season
 
@@ -52,15 +55,20 @@ _session.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/126.0 Safari/537.36",
     "Accept": "application/json",
+    "Accept-Encoding": "gzip, deflate",
     "Origin": "https://superbet.pl",
     "Referer": "https://superbet.pl/",
 })
+_etags: Dict = {}          # url -> (ETag, response), kept for the process so an unchanged event comes back as 304
 
 
-def _get(path: str, **params) -> dict:
-    response = _session.get(f"{OFFER_API}/{path}", params=params, timeout=30)
-    response.raise_for_status()
-    return response.json()
+def client(deadline: Optional[float] = RUN_DEADLINE) -> PoliteClient:
+    """A polite client for one fetch (http_polite): pauses between requests, retries, Superbet's block and budget."""
+    return PoliteClient(HOST, _session, deadline=deadline, etags=_etags)
+
+
+def _get(path: str, http: Optional[PoliteClient] = None, **params) -> dict:
+    return (http or client()).get(f"{OFFER_API}/{path}", params=params).json()
 
 
 def superbet_name_to_ESPN(name: str) -> str:
@@ -74,16 +82,16 @@ def team_abbr(full_name: str) -> Optional[str]:
     return NORMALIZED_TEAM_NAME.get(TEAM_NAME_ALIASES.get(full_name, full_name))
 
 
-def nba_events(hours_ahead: int = 36) -> List[Dict]:
+def nba_events(hours_ahead: int = 36, http: Optional[PoliteClient] = None) -> List[Dict]:
     now = datetime.now(timezone.utc)
-    data = _get("events/by-date", currentStatus="active", offerState="prematch",
+    data = _get("events/by-date", http, currentStatus="active", offerState="prematch",
                 startDate=now.strftime("%Y-%m-%d %H:%M:%S"),
                 endDate=(now + timedelta(hours=hours_ahead)).strftime("%Y-%m-%d %H:%M:%S"))
     return [e for e in data['data'] if e['tournamentId'] == NBA_TOURNAMENT_ID and e.get('sportId') == NBA_SPORT_ID]
 
 
-def fetch_event(event_id: int) -> Dict:
-    return _get(f"events/{event_id}")['data'][0]
+def fetch_event(event_id: int, http: Optional[PoliteClient] = None) -> Dict:
+    return _get(f"events/{event_id}", http)['data'][0]
 
 
 def _teams(event: Dict):
@@ -170,11 +178,31 @@ def main_lines(game_odds: List[Dict]) -> List[Dict]:
     return [row for _, rows in best.values() for row in rows]
 
 
-def todays_offers(hours_ahead: int = 36) -> Dict[str, List[Dict]]:
-    """Player props and game odds of every NBA game starting in the next `hours_ahead` hours."""
-    props, game_odds = [], []
-    for summary in nba_events(hours_ahead):
-        event = fetch_event(summary['eventId'])
+def todays_offers(hours_ahead: int = 36, event_ids: Optional[Iterable[int]] = None,
+                  http: Optional[PoliteClient] = None) -> Dict:
+    """Player props and game odds of every NBA game starting in the next `hours_ahead` hours (only `event_ids`,
+    when given), fetched politely (http_polite). Also 'events' (every listed game: event_id, start_time),
+    'fetched' (the event ids read), 'incomplete' (True when the run's deadline or an event's error cut it short)
+    and 'http' (what the client did, in words). Blocked (403, repeated 429) is raised."""
+    http = http or client()
+    props, game_odds, fetched, incomplete = [], [], [], False
+    # the games starting soonest first, so a run cut short has read the ones that matter most
+    listed = sorted(nba_events(hours_ahead, http), key=lambda e: e.get('utcDate') or '')
+    wanted = None if event_ids is None else set(event_ids)
+    for summary in listed:
+        if wanted is not None and summary['eventId'] not in wanted:
+            continue
+        try:
+            event = fetch_event(summary['eventId'], http)
+        except RunDeadline as e:
+            log.warning("Superbet: %s, %d events left unread", e, len(listed) - len(fetched))
+            incomplete = True
+            break
+        except requests.RequestException as e:
+            log.warning("Superbet: event %s failed after retries: %s", summary['eventId'], e)
+            incomplete = True
+            continue
+        fetched.append(summary['eventId'])
         home, away = _teams(event)
         if home is None or away is None:
             log.warning("Unmapped team name in %r, skipping", event['matchName'])
@@ -183,7 +211,9 @@ def todays_offers(hours_ahead: int = 36) -> Dict[str, List[Dict]]:
         print(f"{away.upper()} @ {home.upper()}: {len(event_rows)} player props")
         props.extend(event_rows)
         game_odds.extend(event_game_odds(event))
-    return {'props': props, 'game_odds': game_odds}
+    events = [{'event_id': e['eventId'], 'start_time': e.get('utcDate')} for e in listed]
+    return {'props': props, 'game_odds': game_odds, 'events': events, 'fetched': fetched,
+            'incomplete': incomplete, 'http': http.summary()}
 
 
 def all_today_props(hours_ahead: int = 36) -> List[Dict]:

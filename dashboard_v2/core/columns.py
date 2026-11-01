@@ -2,7 +2,7 @@
 
 # the props table, in reading order: which line, the decision for its game, the evaluated side and its price after
 # the stake tax. One side column only: no 'our pick', 'better side' and 'projection leans' next to each other
-PROPS_MAIN = ['tier', 'name', 'game', 'tip-off', 'bet_type', 'line', 'decision', 'side', 'side odds', 'p win %',
+PROPS_MAIN = ['stars', 'name', 'game', 'tip-off', 'bet_type', 'line', 'decision', 'side', 'side odds', 'p win %',
               'break-even net %', 'edge net pp', 'ev net 100', 'proj avg', 'pick % L10', 'RotoWire', 'red flag']
 # Props → More → Show every column
 PROPS_MORE = ['p push %', 'line move', 'open line', 'adj avg', 'avg', 'avg L5', 'matchup', 'spread',
@@ -10,8 +10,8 @@ PROPS_MORE = ['p push %', 'line move', 'open line', 'adj avg', 'avg', 'avg L5', 
 # Overview: the offers to bet, only those of a 'Bet' decision (none while no threshold is recorded)
 OVERVIEW_PROPS = ['name', 'game', 'bet_type', 'line', 'side', 'side odds', 'p win %', 'edge net pp', 'ev net 100',
                   'RotoWire']
-# Overview: the night's best lines by expected return (decisions.shortlist), shown while no offer is 'Bet'
-SHORTLIST = ['tier', 'name', 'game', 'tip-off', 'bet_type', 'line', 'side', 'side odds', 'p win %', 'side market %',
+# Overview: the night's best rated lines (decisions.stars), shown while no offer is 'Bet'
+SHORTLIST = ['stars', 'name', 'game', 'tip-off', 'bet_type', 'line', 'side', 'side odds', 'p win %', 'side market %',
              'above price pp', 'ev net 100', 'wait']
 
 # Games: one row per game, then the chosen game's bets and each team's absences
@@ -26,6 +26,6 @@ RESULTS_ALL = ['game_date', 'name', 'game', 'bet_type', 'line', 'pre avg', 'pre 
                'last line']
 RESULTS_BY_TYPE = ['bet_type', 'lines', 'over %', 'line error', 'line − avg', 'toward avg hit %', 'toward avg ROI %',
                    'toward proj hit %']
-RATE_COLUMNS = ['bets', 'expected %', 'hit %', 'ci low %', 'ci high %', 'ROI %', 'ROI % std', 'break-even %',
+RATE_COLUMNS = ['stars', 'bets', 'expected %', 'hit %', 'ci low %', 'ci high %', 'ROI %', 'ROI % std', 'break-even %',
                 'break-even % std', 'avg odds', 'avg odds vs last %', 'edge ≥ pp', 'signal', 'edge bucket', 'pick',
                 'market']

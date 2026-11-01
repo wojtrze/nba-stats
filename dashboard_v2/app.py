@@ -15,12 +15,14 @@ os.chdir(ROOT)
 
 import streamlit as st  # noqa: E402
 
+from core import fetch_worker  # noqa: E402
 from core.state import language, language_picker, no_tax_switch  # noqa: E402
 from core.ui import PAGES, sidebar_status  # noqa: E402
 from i18n import t  # noqa: E402
 
 st.set_page_config(page_title="NBA props v2", page_icon="🏀", layout="wide")
 lang = language()
+fetch_worker.follow_settings()   # the scheduled fetches run while this dashboard does (switch in the Data center)
 
 
 def page(file, key, icon, default=False, title=None):

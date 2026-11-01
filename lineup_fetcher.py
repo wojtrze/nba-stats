@@ -6,6 +6,8 @@ from typing import Dict, List, Optional
 import requests
 from bs4 import BeautifulSoup
 
+from http_polite import PoliteClient
+
 URL = "https://www.rotowire.com/basketball/nba-lineups.php"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                          "Chrome/126.0 Safari/537.36"}
@@ -19,10 +21,15 @@ def espn_team(code: str) -> str:
     return ROTOWIRE_TO_ESPN.get(code, code.lower())
 
 
+_session = requests.Session()
+_session.headers.update(HEADERS)
+_etags: dict = {}
+
+
 def fetch_html(date: str = 'today') -> str:
-    response = requests.get(URL, params={'date': date} if date == 'tomorrow' else None, headers=HEADERS, timeout=30)
-    response.raise_for_status()
-    return response.text
+    """The lineups page, fetched politely (http_polite: retries with backoff, RotoWire's block, ETag)."""
+    http = PoliteClient('rotowire', _session, deadline=120, etags=_etags)
+    return http.get(URL, params={'date': date} if date == 'tomorrow' else None).text
 
 
 def _page_date(soup) -> Optional[str]:

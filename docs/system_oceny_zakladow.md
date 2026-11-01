@@ -40,8 +40,8 @@ rozwoju: poprawek modelu, przejrzystości interfejsu i nowych funkcji.*
 | Źródło | Co dostarcza | Jak często | Plik |
 |---|---|---|---|
 | **ESPN** (JSON API) | Każdy mecz sezonu i linijka statystyk każdego zawodnika (PTS, REB, AST, 3PM, MIN, FGA, FTA, TO, PF, STL, BLK, +/-, pozycja, czy w pierwszej piątce) | rano (scraper dopisuje tylko nowe mecze) | `data/<sezon>/player_gamelogs.csv`, `games.csv` |
-| **Superbet** | Linie zawodników z kursami Over i Under, rynki meczowe ze wszystkimi liniami | na żądanie (przycisk) i 2× dziennie z harmonogramu, najczęściej co 5 min | `superbet_props.csv`, `superbet_game_odds.csv` |
-| **RotoWire** | Przewidywane i potwierdzone piątki, gracze „may not play” z szansą gry (%) i rodzajem urazu | na żywo co 30 min, zapis przy każdej zmianie | `rotowire_lineups.csv` |
+| **Superbet** | Linie zawodników z kursami Over i Under, rynki meczowe ze wszystkimi liniami | harmonogram w działającym dashboardzie v2 (co godzinę oraz T−60/40/20/10/5 min przed każdym meczem) i na żądanie (przycisk, najczęściej co 5 min) | `superbet_props.csv`, `superbet_game_odds.csv` (snapshot z wyceną), `superbet_prop_quotes.csv`, `superbet_game_quotes.csv`, `superbet_event_fetches.csv` (notowania, 8.1) |
+| **RotoWire** | Przewidywane i potwierdzone piątki, gracze „may not play” z szansą gry (%) i rodzajem urazu | przy każdym pobraniu z harmonogramu i na żywo co 30 min, zapis przy każdej zmianie | `rotowire_lineups.csv` |
 | Historia | Linie Unibet 2022/23 (~40 000) z wynikami, dzienniki graczy z lat 2022–2026 | statycznie | `offers_resolved.csv`, `2022-players-logs.csv` |
 
 Każdy pobrany zestaw kursów zapisuje się **razem z wyceną modelu z tamtej chwili** (typ, szansa, przewaga, sygnał,
@@ -67,13 +67,13 @@ pokazuje świeżość danych 🟢/🟠/🔴 (ESPN, Superbet, RotoWire) i odsyła
 
 | Strona | Co pokazuje |
 |---|---|
-| **Przegląd** | Karty dzisiejszych meczów (start czasu polskiego, kursy na zwycięzcę, handicap i sumę, **decyzja dla rynków drużynowych i decyzja dla zawodników** z czasem kursu i składu, prognozowany zwycięzca, status składów z RotoWire, kto nie zagra). Pod kartami *Oferty do gry*: tylko oferty z decyzją *Obstaw*; dopóki ich nie ma, strona mówi, że dziś nie ma na co grać. Pod spodem zawsze **„Najlepsze dziś (ranking, nie przewaga)”** (4.1): linie ★ i w rozwijanej liście ·, z oczekiwanym zwrotem po podatku obok średniej każdej linii i jednym zdaniem o dotychczasowych wynikach rankingu. |
+| **Przegląd** | Karty dzisiejszych meczów (start czasu polskiego, kursy na zwycięzcę, handicap i sumę, **decyzja dla rynków drużynowych i decyzja dla zawodników** z czasem kursu i składu, prognozowany zwycięzca, status składów z RotoWire, kto nie zagra). Pod kartami *Oferty do gry*: tylko oferty z decyzją *Obstaw*; dopóki ich nie ma, strona mówi, że dziś nie ma na co grać. Pod spodem zawsze **„Dzisiejsze oceny: 4★ = najlepsze dziś, nie: opłacalne”** (4.1): linie 4★ i w rozwijanej liście 3★, z oczekiwanym zwrotem po podatku obok średniej każdej linii i jednym zdaniem o dotychczasowych wynikach 4★. |
 | **Zakłady na zawodników** | Nad tabelą decyzja dla zawodników każdego meczu z czasem kursu i składu. Tabela (16 kolumn, domyślnie według startu meczu, ostrzeżenia na końcu) służy do analizy; reszta kolumn jest pod *Więcej → Pokaż każdą kolumnę*. Zaznaczona linia zostaje otwarta po odświeżeniu, a gdy zmieniła się jej linia lub kurs, strona to mówi. Zakładki: **Werdykt** (decyzja meczu i „Dlaczego”: powody za i przeciw z wartością, punktem odniesienia, liczbą obserwacji, czasem i źródłem, oraz jak zbudowano liczbę oczekiwaną: średnia → nieobecni koledzy → mecz i rywal), **Koledzy z drużyny** (macierz „z nim / bez niego”), **Historia** (20 ostatnich meczów wobec linii, rozkład, podziały, mecze z tym rywalem) i **Ruch linii** (każdy zapis). Na dole jest sprawdzarka dowolnej linii. |
 | **Mecze** | Wiersz na mecz z jego dwiema decyzjami (rynki drużynowe: *Niedostępne*; zawodnicy), potem rynki wybranego meczu do analizy; powody otwierają się dla wiersza, który wybierzesz (żaden „najlepszy” wynik nie jest wybierany za użytkownika). Ratingi drużyn, składy i nieobecności. |
 | **Jak to czytać** | Słowniczek: kurs, podatek i marża, nasza szansa, przewaga, decyzja, ostrzeżenia, powody i 4 kroki czytania wieczoru. |
 
 **Kolumny tabeli propsów** (kolejność z `dashboard_v2/core/columns.py`, 17):
-ranking dziś (★ / ·) · zawodnik · mecz · start · statystyka · linia · **decyzja** · **oceniana strona** · kurs · nasza szansa wygranej % ·
+ocena (★★★★☆, 4.1) · zawodnik · mecz · start · statystyka · linia · **decyzja** · **oceniana strona** · kurs · nasza szansa wygranej % ·
 potrzebna skuteczność po podatku % · **przewaga po podatku (pp)** · **oczekiwany zwrot na 100 zł po podatku** ·
 oczekiwane dziś · trafione w ost. 10 % · rola dziś · ostrzeżenie. Kolumny legacy „nasz typ”, „lepsza strona” i
 „projekcja wskazuje” nie są już pokazywane obok siebie (zostają w danych).
@@ -103,7 +103,9 @@ Kolorowanie źródeł: 💰 pomarańczowy = Superbet, 📋 niebieski = RotoWire,
 ### 2.4 Dane
 
 **Centrum danych:** karta na każde źródło z przyciskami *Aktualizuj statystyki*, *Pobierz i zapisz* (Superbet),
-*Zapis ze składami* i *Uruchom oba* (poranna rutyna). Jest tu log uruchomień i kontrola jakości: nazwiska bez
+*Zapis ze składami* i *Uruchom oba* (poranna rutyna). Karta **Pobieranie według harmonogramu** (8.1) ma włącznik,
+opcję „Nie usypiaj komputera”, stan, następne pobranie, ostatni przebieg, pominięte terminy, blokadę Superbetu
+i dzisiejsze zużycie budżetu zapytań. Jest tu log uruchomień i kontrola jakości: nazwiska bez
 dopasowania do ESPN oraz czy punkty graczy sumują się do wyniku meczu.
 
 ---
@@ -233,32 +235,52 @@ tworzą ofert (ich zakłady są zwracane). Przy *Obstaw* każda inna linia tego 
 Sygnały 🟢/🟡 (legacy, liczone przy kursie bez podatku) zostają w zapisach, ale nie są już filtrem ani kolumną
 decyzyjną w panelach. 🔴 i kolumna „ostrzeżenie” zostają: ostrzeżenie blokuje *Obstaw*.
 
-### 4.1 Ranking „Najlepsze dziś” (od 1.11)
+### 4.1 Gwiazdki 0–5 (od 2.11, zamiast ★ / · i 🟢 / 🟡)
 
 **Dlaczego.** Dla każdej zapisanej linii zwrot po podatku wynosi od −12 do −20 zł na 100 zł. Próg 🟢 jest więc
 nieosiągalny niezależnie od liczby nocy: to nie jest kwestia początku sezonu, tylko podatku (12%) i marży
-(7,6–9,6%) przy kalibracji b ≈ 0,13. Decyzja odpowiada tylko na pytanie „czy grać?” (dziś: nie), więc lista ofert
-była zawsze pusta. Ranking odpowiada na drugie pytanie: „jeśli i tak gram, które linie są najlepsze?”.
+(7,6–9,6%) przy kalibracji b ≈ 0,13. Decyzja odpowiada tylko na pytanie „czy grać?” (dziś: nie). Gwiazdki
+odpowiadają na drugie: „jeśli i tak gram, które linie są najlepsze?”. Skala bezwzględna (przedziały oczekiwanego
+zwrotu) dałaby dziś prawie wszystkim 0–1★, więc 1–4★ są **względne**: to miejsce wśród dzisiejszych linii.
+**4★ = najlepsze dziś, nie: opłacalne.**
 
-**Jak** (`decisions.shortlist`). Linie wieczoru są układane według `ev net 100` (oczekiwany zwrot po podatku,
-oceniana strona). Odpadają: mecze *Niedostępne*, linie z 🔴 i gracze, których RotoWire nie podaje jako pewnych
-(szansa gry < 100%). Każdy gracz zostaje z jedną, najlepszą linią. **★** to najlepsza linia każdego z 5
-najlepszych meczów wieczoru (`SHORTLIST_TOP`); **·** to każda inna linia z najlepszej ćwiartki wszystkich
-wycenionych linii wieczoru (`SHORTLIST_LOOK`). Mecz z decyzją *Czekaj* (stare kursy, brak składu) zostaje na
-liście z powodem w kolumnie „uwaga”, zamiast znikać. *Obstaw* działa bez zmian i ma pierwszeństwo.
+**Jak** (`decisions.stars`, wspólna reguła `star_levels` z backtestem). Linie wieczoru są układane według `ev net 100`
+(oczekiwany zwrot po podatku, oceniana strona); `night pct` to miejsce wśród wszystkich wycenionych linii wieczoru.
 
-**Klucz wybrany na danych** (`backtest/shortlist.py` → `data/backtest/shortlist.md`). Kalibracja jest dopasowana
-na wcześniejszych nocach, a ocena odbywa się na nocach niewidzianych. Na Unibet 2022/23 (77 nocy) najlepsza linia
-maksymalnie 5 meczów wygrywała o 3,8 pp częściej, niż mówił kurs bez marży (ROI +0,2% przed podatkiem, −11,9% po
-nim, wobec −15,5% dla każdej linii). Klucz „rozbieżność z kursem” wypadł tam słabiej. Na 3 niewidzianych nocach
-Superbet żaden z kluczy nie daje wniosków (9–23 zakłady).
+| Ocena | Kiedy |
+|---|---|
+| **5★** | tylko oferta z decyzją *Obstaw*, czyli przewaga powyżej progu sprawdzonego na nocach, których nie użyto do jego wyboru (`ADMITTED_THRESHOLD`; dziś brak, więc 5★ nie występuje) |
+| **4★** | najlepsze 5% wieczoru (`STAR_BANDS[0]`), najlepsza linia gracza, **jedna na mecz** (pozostałe kandydatki z tego meczu dostają 3★) |
+| **3★** | do 20% (`STAR_BANDS[1]`) |
+| **2★** | do 50% (`STAR_BANDS[2]`) |
+| **1★** | reszta |
+| **0★** | wyceniona, ale z 🔴 albo gracz, którego RotoWire nie podaje jako pewnego (szansa gry < 100%) |
+| **–** | brak oceny: mecz *Niedostępne* (każdy rynek drużynowy, propsy bez kalibracji) |
 
-**Rozliczenie** (`tracking.settle_shortlist`, `tier_scorecard`). Każde pobranie zapisuje `tier` i `night_rank`
-(od 1.11). Wcześniejsze noce są układane ponownie z pól zapisanych przed meczem, bez ponownej kalibracji
-(„przeliczone”). Wyniki są w *Wyniki → Najlepsze dziś: wyniki*, a jedno zdanie na Przeglądzie. Stan na 11 nocy
-(20–30.10, przeliczone): ★ 47 zakładów, 53,2% trafień przy 54,7% wg kursu, ROI po podatku −21,5% (przedział
-trafień 39–67%); · 705 zakładów, +0,7 pp, −17,7%; każda linia −16,8%. **Na Superbecie ranking jeszcze niczego nie
-dowiódł.** Dowód, że ma sens, pochodzi na razie tylko z 2022/23.
+Mecz z decyzją *Czekaj* zachowuje gwiazdki, z powodem w kolumnie „uwaga”. Każde pobranie zapisuje `stars`
+i `night_rank` (od 2.11; pobrania z 1.11 zapisały jeszcze `tier`). Wcześniejsze noce są oceniane ponownie z pól
+zapisanych przed meczem, bez ponownej kalibracji („przeliczone”).
+
+**Pasma sprawdzone na danych** (`backtest/shortlist.py` → `data/backtest/shortlist.md`, tabela „Star levels”;
+kalibracja dopasowana na wcześniejszych nocach, ocena na niewidzianych). Unibet 2022/23, 77 nocy, klucz `ev`:
+
+| Poziom | Linie | Wygrane | Kurs mówił | Ponad kurs | ROI po podatku |
+|---|---|---|---|---|---|
+| 4★ | 263 | 60,8% | 56,8% | +4,1 pp | −11,3% |
+| 3★ | 2 460 | 58,2% | 55,0% | +3,1 pp | −12,4% |
+| 2★ | 4 135 | 52,9% | 53,2% | −0,4 pp | −17,7% |
+| 1★ | 6 905 | 52,2% | 51,1% | +1,1 pp | −15,5% |
+| 4★ − 1★ | | | | +3,0 pp (−2,5…+8,0) | |
+
+Wniosek: dane rozróżniają **dwie grupy** (najlepsze 20% i reszta), a nie cztery poziomy; 4★ i 3★ są praktycznie
+równe, 2★ nie jest lepsze od 1★. Na 12 nocach Superbet (2.11, w większości przeliczone) granica wypada inaczej:
+4★ +3,5, 3★ +3,0, 2★ +3,5, 1★ +0,2 pp. Pasma (5, 20, 50) zostają do kontroli pod koniec listopada; jeśli
+środkowe poziomy dalej się nie rozróżniają, skalę trzeba scalić.
+
+**Rozliczenie** (`tracking.settle_stars`, `star_scorecard`). Na poziom: trafienia z przedziałem Wilsona, kurs
+bez marży, „ponad kurs”, ROI przed i po podatku, średnie CLV (gdy jest kurs zamknięcia, 8.1) i wiersz „każda
+linia”; na końcu **4★ − 1★** z przedziałem z losowania całych wieczorów. Skala działa tylko wtedy, gdy ten wiersz
+jest powyżej zera. Wyniki: *Wyniki → Oceny: wyniki*, jedno zdanie na Przeglądzie.
 
 **Dźwignie podatkowe.** (1) Przełącznik *Promocja bez podatku* w pasku bocznym v2 (profil `superbet_no_tax`,
 alpha = 1) przelicza kolumny netto bez ponownej wyceny linii, tylko na tę sesję. Zapisy i rozliczenia zostają
@@ -406,10 +428,51 @@ kalibracja „powstanie automatycznie”). Dane pokazują, że model wymaga prze
   **void** (mecz zapisany z kompletnym boxscore, a gracz nie zagrał; Superbet zwraca stawkę), **pending** (meczu
   jeszcze nie ma), **unresolved** (nie da się rozstrzygnąć: niezidentyfikowany gracz, niekompletny boxscore, mecz
   przełożony). Linii nierozstrzygniętych nie zgadujemy, tylko je liczymy.
-- „Zakład” to **pierwszy zapis linii przed meczem**, a „ostatni kurs przed meczem” to ostatni zapis. Przy 2–3
-  zapisach dziennie **nie jest to prawdziwy kurs zamknięcia**, dlatego panel pokazuje, ile godzin przed startem był
-  zapis.
+- „Zakład” to **pierwszy zapis linii przed meczem**, a „ostatni kurs przed meczem” to ostatni zapis w snapshotach
+  z wyceną (`last line`, `last odds`, z liczbą godzin przed startem). Prawdziwy kurs zamknięcia daje 8.1.
 - Kalibrację ocenia się na **ostatnim zapisie przed startem**; dane przed 26.10 zostały odtworzone z historii gita.
+
+### 8.1 Pobieranie według harmonogramu i kurs zamknięcia (od 2.11)
+
+**Tylko gdy program działa.** Wątek w dashboardzie v2 (`dashboard_v2/core/fetch_worker.py`, pętla
+`fetch_loop.loop`) albo `python -m fetch_loop` w terminalu. Nic nie jest rejestrowane w systemie: zamknięcie
+dashboardu kończy pobieranie. Opcja „Nie usypiaj komputera” (`SetThreadExecutionState`, tylko na czas procesu)
+działa, bo mecze są u nas 00:00–04:30. Jeden wątek pobierający naraz także między procesami (`data/fetch_worker.json`
+z bieżącym znacznikiem czasu).
+
+**Terminy** (`fetch_schedule.py`, czysta funkcja testowana z fałszywym zegarem):
+- co godzinę, o pełnej godzinie, wszystkie mecze startujące w ciągu 24 h;
+- w ostatniej godzinie przed każdą godziną startu: **T−60, T−40, T−20, T−10, T−5**, tylko mecze tej godziny;
+- **RotoWire przy każdym terminie** (zapis tylko zmian, z czasem, więc widać moment zmiany składu);
+- termin godzinowy do 15 min od terminu z ostatniej godziny jest do niego dołączany; terminy do 3 min od siebie łączą
+  się w jeden; termin spóźniony o ponad 3 min (uśpiony komputer) jest pomijany i logowany, a nie nadrabiany;
+- przy starcie programu jedno pobranie wszystkich meczów (z wyceną, gdy snapshot jest starszy niż godzina).
+
+**Co się zapisuje.** Każde pobranie: notowania tylko zmienionych linii (`superbet_prop_quotes.csv`,
+`superbet_game_quotes.csv`; wycofana linia = wiersz z pustymi kursami) i wiersz na każdy odczytany mecz
+(`superbet_event_fetches.csv`), żeby „bez zmian” odróżnić od „nie odczytano”. Pełny snapshot z wyceną (czytany przez
+strony) co 2 godziny i w T−60. Każdy przebieg trafia do `data/run_log.csv` (job `quotes` lub `snapshot`,
+`scheduled T-5` itd., z liczbą zapytań, kodami odpowiedzi i ponowieniami).
+
+**Grzeczne pobieranie** (`http_polite.py`, dla Superbetu i RotoWire): 3–6 s losowej przerwy między zapytaniami,
+ponowienia po 429/5xx/zerwanym połączeniu (10 → 30 → 90 s z losowym dodatkiem, z poszanowaniem `Retry-After`),
+**bezpiecznik**: 403 albo dwa 429 z rzędu blokują hosta na 2 h dla każdego procesu (`data/scrape_state.json`),
+limit 4 min na przebieg, **budżet 400 zapytań dziennie** (potem harmonogram staje, przycisk dalej działa),
+`If-None-Match` z ETag (niezmieniony mecz wraca jako 304). Typowa noc to ok. 70–200 zapytań. `robots.txt`:
+host API (`production-superbet-offer-pl.freetls.fastly.net`) go nie ma (404); robots.txt superbet.pl dotyczy
+stron serwisu, nie API, a API jest tym samym publicznym źródłem, z którego korzysta ich strona.
+
+**Kurs zamknięcia i CLV** (`tracking.closing_props`, `add_clv`). Zamknięcie = ostatnie notowanie linii przed
+startem; ważne, gdy mecz odczytano najpóźniej 10 min przed startem (`CLOSE_MAX_AGE_MIN`). Przy tej samej linii:
+`clv %` = kurs zakładu × szansa zamknięcia bez marży − 1 (powyżej 0 = zakład pobił rynek), `clv % std` to samo po
+podatku, `clv pp` = szansa zamknięcia bez marży − szansa przy zakładzie (> 0 = rynek przesunął się w stronę
+zakładu). Przy zmienionej linii tylko `line vs close`. Raport: `python -m backtest.clv_report` →
+`data/backtest/clv.md` (CLV po gwiazdkach, po godzinach przed startem, po ustalonych z góry segmentach: główne
+i poboczne statystyki, Over i Under; odsetek linii, przy których rynek ruszył w stronę oceny modelu).
+
+**Procedura dopuszczenia progu (5★).** Próg wybierany na nocach do daty D, oceniany na kolejnych ≥ 20 nietkniętych
+nocach. Warunek: dolna granica przedziału ROI po podatku > 0 **albo** średnie CLV po podatku > 0 z dolną granicą
+> 0. Dopiero wtedy `ADMITTED_THRESHOLD` dostaje wartość.
 
 ---
 
@@ -495,7 +558,8 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 5. **Powody nie są walidowane** jako osobny sygnał. Od 31.10 nie głosują: decyzja od nich nie zależy.
 6. **Model meczowy jest słaby** (wczesny sezon to głównie zeszły sezon, nie zna letnich transferów, nieobecni liczą
    się tylko wtedy, gdy drużyna już grała bez danego gracza).
-7. **Brak prawdziwego kursu zamknięcia** (2–3 zapisy dziennie), więc nie mierzymy rzetelnie CLV.
+7. **Kurs zamknięcia jest dopiero od 2.11** (8.1) i tylko dla nocy, w które działał dashboard; wcześniejsze noce
+   nie mają CLV.
 8. **Gracze bez meczów w danych** (debiutanci, długo kontuzjowani) nie wchodzą do korekty nieobecności.
 9. **Mała próba Superbet**: 10 nocy to za mało na pewne wnioski w którąkolwiek stronę.
 10. Statystyki poboczne (FGA, FGM, FTA, FTM, PF, TO) stanowią prawie połowę linii, ale model wycenia je tak samo
@@ -554,9 +618,11 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 | Element | Plik |
 |---|---|
 | Wycena propsów i meczów, kalibracja w użyciu, sygnały | `dashboard/models.py` |
-| Decyzje (Obstaw / Nie obstawiaj / Czekaj / Niedostępne), zachowanie otwartej oferty, ranking „Najlepsze dziś” (`shortlist`) | `dashboard/decisions.py` |
-| Wyniki rankingu i AKO na papierze (`settle_shortlist`, `tier_scorecard`, `paper_accumulators`) | `dashboard/tracking.py` |
-| Wybór klucza rankingu | `backtest/shortlist.py` → `data/backtest/shortlist.md` |
+| Decyzje (Obstaw / Nie obstawiaj / Czekaj / Niedostępne), zachowanie otwartej oferty, gwiazdki (`stars`, `star_levels`) | `dashboard/decisions.py` |
+| Wyniki gwiazdek, CLV i AKO na papierze (`settle_stars`, `star_scorecard`, `closing_props`, `add_clv`, `paper_accumulators`) | `dashboard/tracking.py` |
+| Wybór klucza rankingu i sprawdzenie pasm gwiazdek | `backtest/shortlist.py` → `data/backtest/shortlist.md` |
+| Raport CLV | `backtest/clv_report.py` → `data/backtest/clv.md` |
+| Harmonogram pobierania, grzeczny klient HTTP | `fetch_schedule.py`, `fetch_loop.py`, `http_polite.py`, `dashboard_v2/core/fetch_worker.py` |
 | Kontrakt kosztowy (profile, próg, EV, zysk z rozliczenia) | `dashboard/metrics.py` (`COST_PROFILES`, `break_even`, `expected_return_100`, `side_profit`) |
 | Wzory (hit rate, rozkład, kalibracja, rywal, tempo, nieobecni, model meczu) | `dashboard/metrics.py` |
 | Powody i ostrzeżenia | `dashboard/reasons.py` |
@@ -587,8 +653,11 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 | Próg 🟢 | brak | 10+ nocy, 50+ zakładów, dolny koniec 95% powyżej progu rentowności |
 | Kelly | 0,25, max 5% | szansa wygranej na cenie netto, tylko przy *Obstaw* |
 | Profil kosztowy | `superbet_standard`: alpha = 0,88; `legacy` i `superbet_no_tax`: alpha = 1 | 12% podatku od stawki; `superbet_no_tax` tylko z przełącznika promocji |
-| Ranking ★ / · | 5 meczów; najlepsza ćwiartka wieczoru | `SHORTLIST_TOP`, `SHORTLIST_LOOK` |
-| AKO na papierze | 3 linie ★ | `ACCUMULATOR_LEGS` |
-| Próg dla *Obstaw* | brak (`ADMITTED_THRESHOLD = None`) | musi pochodzić z niezależnego okresu |
+| Pasma gwiazdek | 4★ ≤ 5%, 3★ ≤ 20%, 2★ ≤ 50% wieczoru | `STAR_BANDS`; 5★ tylko *Obstaw* |
+| AKO na papierze | 3 linie 4★ | `ACCUMULATOR_LEGS` |
+| Próg dla *Obstaw* | brak (`ADMITTED_THRESHOLD = None`) | musi być sprawdzony na nocach, których nie użyto do jego wyboru (8.1) |
+| Harmonogram | co godzinę; T−60/40/20/10/5 min | `fetch_schedule.LAST_HOUR`; snapshot z wyceną co 2 h i w T−60 |
+| Grzeczne pobieranie | 3–6 s przerwy; 3 ponowienia 10/30/90 s; blokada 2 h; 400 zapytań/dzień; 4 min na przebieg | `http_polite`, `superbet_fetcher.RUN_DEADLINE` |
+| Ważne zamknięcie | odczyt ≤ 10 min przed startem | `tracking.CLOSE_MAX_AGE_MIN` |
 | Wiek kursu dla *Czekaj* | 3 h | |
 | Model meczu | hala 1,5; SD 14 / 18 / 11,5; regresja 30%; prior 10 meczów | |

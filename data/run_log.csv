@@ -78,3 +78,6 @@ started_at,job,command,exit_code,seconds,summary
 2026-10-31T18:30:00Z,lineups,RotoWire lineups (dashboard),0,0.0,saved 71 players for Nov 01 (first fetch of the day)
 2026-11-01T13:17:57Z,stats,python -m espn_scraper,0,13.6,"2026/27: added 7 games, 161 player lines. 4 games not final yet."
 2026-11-01T13:18:11Z,snapshot,python daily_snapshot.py,0,28.5,"rotowire_lineups: 71 rows, superbet_props: 662 rows, superbet_game_odds: 568 rows"
+2026-11-01T15:08:21Z,lineups,RotoWire lineups (dashboard),0,1.6,saved 71 players for Nov 01: 2 changes – Mitchell Robinson (BOS): starter → starter; Adou Thiero (LAL): Ques 25% → Out 0%
+2026-11-01T15:56:22Z,quotes,scheduled manual-test,0,19.4,"4 games read, 705 prop and 568 game quotes changed; 5 requests (200×5), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 71 players for Nov 01: 3 changes – new: Neemias Queta (BOS, starter); Mitchell Robinson (BOS): starter → Out 0%; Gui Santos (GS): starter → starter"
+2026-11-01T16:10:24Z,snapshot,scheduled start,0,43.5,"4 games read, 151 prop and 85 game quotes changed; 5 requests (200×5), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 705 lines, 568 game odds"
