@@ -11,11 +11,16 @@ changes it.
                  offer is best is questionable, or two offers tie for the one slot.
   NIEDOSTEPNE    the model family isn't admitted: every game market, and props without a calibration fitted for
                  the current model.
+
+Next to the decision, shortlist() answers the relative question the decision can't: if one bets tonight anyway,
+which lines are the best of the night? It ranks lines by expected return; it never makes a line OBSTAW, and its
+lines still lose money on average after the stake tax (data/backtest/shortlist.md has the evidence).
 """
 import re
 from datetime import timedelta
 from typing import Dict, Optional
 
+import numpy as np
 import pandas as pd
 
 OBSTAW, NIE_OBSTAWIAJ, CZEKAJ, NIEDOSTEPNE = 'OBSTAW', 'NIE_OBSTAWIAJ', 'CZEKAJ', 'NIEDOSTEPNE'
@@ -28,6 +33,13 @@ ADMITTED_THRESHOLD: Optional[float] = None
 MAX_ODDS_AGE = timedelta(hours=3)
 # two offers whose expected returns (per 100) differ by less than this tie
 TIE_EV = 0.1
+# the shortlist (backtest/shortlist.py): the night's lines ranked by expected return. On 77 unseen 2022/23 nights the
+# best line of up to 5 games a night won 3.8 pp more often than the margin-free price said (about break-even before
+# the tax, −11.9% after it, against −15.5% for every line), and the lines in the night's best quarter beat the
+# price too, while the rest didn't. Relative, not an edge: it's no OBSTAW
+TOP, LOOK = 'top', 'look'
+SHORTLIST_TOP = 5            # TOP: the best line of each of up to this many games a night
+SHORTLIST_LOOK = 0.25        # LOOK: any other line in the night's best quarter by expected return
 
 
 def _decision(status: str, reason: str, offer=None, odds_at=None, lineup_at=None, **values) -> Dict:
@@ -128,6 +140,51 @@ def offers_table(decisions: Dict) -> pd.DataFrame:
     there's no ranking of the rest (no 'least loss' list)."""
     offers = actionable(decisions)
     return pd.DataFrame(offers).reset_index(drop=True) if offers else pd.DataFrame()
+
+
+def shortlist(table: pd.DataFrame, decisions: Optional[Dict] = None) -> pd.DataFrame:
+    """The best lines of each night by expected return: a ranking, not a bet signal. table: price_props +
+    flag_props rows (event_id, name_ESPN, bet_type, side, side odds, p win %, market over %, ev net 100, red flag,
+    RotoWire; start_time sets the night, else it's all one night); decisions: game_decisions of the same lines.
+
+    A line is ranked within its night by ev net 100 (ties: event, player, stat). It's left out when its game's
+    model isn't admitted (NIEDOSTEPNE), it has a red flag, or RotoWire doesn't list its player as sure to play;
+    each player keeps his best line. tier TOP is the best line of each of the SHORTLIST_TOP best games, LOOK any
+    other line in the night's best SHORTLIST_LOOK of every priced line. A game whose decision is CZEKAJ (old odds,
+    no lineup) keeps its lines, with the decision's reason in 'wait', so the list isn't empty while lines are
+    priced. Adds tier, rank (1 = best of the night), night pct (100 × rank among the night's priced lines),
+    side market % (the margin-free price of the evaluated side) and above price pp (p win % − side market %)."""
+    columns = ['tier', 'rank', 'night pct', 'side market %', 'above price pp', 'wait']
+    if table.empty:
+        return pd.DataFrame(columns=list(table.columns) + columns)
+    decisions = decisions or {}
+    priced = table[table['side'].fillna('').ne('') & table['side odds'].notna() & table['ev net 100'].notna()]
+    if 'start_time' in priced:
+        from nightly import et_night
+        priced = priced.assign(night=et_night(priced['start_time']).values)
+    else:
+        priced = priced.assign(night=0)
+    priced = priced.sort_values(['night', 'ev net 100', 'event_id', 'name_ESPN', 'bet_type'],
+                                ascending=[True, False, True, True, True], kind='stable')
+    priced['night pct'] = 100 * (priced.groupby('night').cumcount() + 1) / priced.groupby('night')['night'] \
+        .transform('size')
+    status = priced['event_id'].map(lambda e: decisions.get(e, {}).get('status'))
+    chance = [play_chance(str(r or '')) for r in priced['RotoWire']] if 'RotoWire' in priced else [None] * len(priced)
+    sure = pd.Series([c is None or c >= 100 for c in chance], index=priced.index)
+    clean = priced['red flag'].fillna('').eq('') if 'red flag' in priced else True
+    eligible = priced[(status != NIEDOSTEPNE) & sure & clean].drop_duplicates(['night', 'name_ESPN'])
+    top = eligible.drop_duplicates(['night', 'event_id']).groupby('night', sort=False).head(SHORTLIST_TOP)
+    look = eligible[~eligible.index.isin(top.index) & (eligible['night pct'] <= 100 * SHORTLIST_LOOK)]
+    out = pd.concat([top.assign(tier=TOP), look.assign(tier=LOOK)])
+    out = out.assign(is_top=out['tier'] == TOP)         .sort_values(['night', 'is_top', 'ev net 100'], ascending=[True, False, False], kind='stable')         .drop(columns='is_top')
+    out['rank'] = out.groupby('night').cumcount() + 1
+    over = out['side'] == 'Over'
+    market_over = out['market over %'] if 'market over %' in out else pd.Series(np.nan, index=out.index)
+    out['side market %'] = market_over.where(over, 100 - market_over)
+    out['above price pp'] = out['p win %'] - out['side market %']
+    out['wait'] = [decisions.get(e, {}).get('reason', '') if decisions.get(e, {}).get('status') == CZEKAJ else ''
+                   for e in out['event_id']]
+    return out.drop(columns='night').reset_index(drop=True)
 
 
 def offer_decision(decision: Dict, row) -> Dict:

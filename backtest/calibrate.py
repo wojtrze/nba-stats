@@ -103,8 +103,8 @@ def lines_2022(path: str = LINES_FILE, version: str = MODEL_VERSION) -> pd.DataF
 
 def superbet_lines(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
     """Every saved Superbet line judged by its last fetch before tip-off, settled against the stats, in the
-    backtest's columns (game_date, line, actual, over/under odds, market over %, raw over/under %) with the saved
-    edge and signal; source 'superbet'. Only lines saved with the raw chances; voids and pending games left out.
+    backtest's columns (game_date, home, away, name_ESPN, line, actual, over/under odds, market over %, raw over/under
+    %) with the saved edge and signal; source 'superbet'. Only lines saved with the raw chances; voids and pending games left out.
     logs: prepare_logs output; games: games.csv rows (date parsed)."""
     from nightly import et_night
     from tracking import PROP_KEY, settle_props
@@ -121,7 +121,8 @@ def superbet_lines(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFr
     t = last.assign(game_date=et_night(last['start_time']), actual=settled['actual'].values,
                     status=settled['status'].values)
     t = t[t['status'] == 'settled']
-    return pd.DataFrame({'game_date': t['game_date'], 'bet_type': t['bet_type'], 'line': t['line'],
+    return pd.DataFrame({'game_date': t['game_date'], 'home': t['home'], 'away': t['away'],
+                         'name_ESPN': t['name_ESPN'], 'bet_type': t['bet_type'], 'line': t['line'],
                          'actual': t['actual'], 'over_odds': t['over_odds'], 'under_odds': t['under_odds'],
                          'market over %': t['market_over_pct'], 'raw over %': t['raw_over_pct'],
                          'raw under %': t['raw_under_pct'], 'saved edge pp': t['edge_pp'],

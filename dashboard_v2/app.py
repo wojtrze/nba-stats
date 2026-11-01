@@ -15,7 +15,7 @@ os.chdir(ROOT)
 
 import streamlit as st  # noqa: E402
 
-from core.state import language, language_picker  # noqa: E402
+from core.state import language, language_picker, no_tax_switch  # noqa: E402
 from core.ui import PAGES, sidebar_status  # noqa: E402
 from i18n import t  # noqa: E402
 
@@ -44,6 +44,7 @@ navigation = st.navigation({
 })
 with st.sidebar:
     language_picker()
+    no_tax_switch()
 navigation.run()
 # drawn after the page, so it already knows what the page fetched (pages that stop early use core.ui.stop)
 sidebar_status()

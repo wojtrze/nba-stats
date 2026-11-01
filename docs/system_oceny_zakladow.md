@@ -1,7 +1,8 @@
 # System oceny zakładów NBA (Superbet): interfejs, współczynniki i zasady decyzji
 
 *Stan na 30 października 2026 r. (model `2026-10-26-count`, kalibracja z 30.10, linie Superbet rozliczone do 29.10);
-sekcje 0, 2.1, 3.6, 4–7 zaktualizowane 31.10 o kontrakt kosztowy i decyzje (fazy 1–2).*
+sekcje 0, 2.1, 3.6, 4–7 zaktualizowane 31.10 o kontrakt kosztowy i decyzje (fazy 1–2); 1.11 dodany ranking
+„Najlepsze dziś” (sekcje 0, 2.1, 4.1, 9.2, 10).*
 *Dokument opisuje to, co jest w kodzie i w danych, bez upiększeń. Ma służyć jako wspólna podstawa do planowania
 rozwoju: poprawek modelu, przejrzystości interfejsu i nowych funkcji.*
 
@@ -28,7 +29,9 @@ rozwoju: poprawek modelu, przejrzystości interfejsu i nowych funkcji.*
 5. System jest zbudowany tak, żeby **nie udawał przewagi**: *Obstaw* wymaga progu zapisanego na niezależnym okresie,
    a takiego progu nie ma, więc żadna oferta go nie dostaje; rynki drużynowe są zawsze *Niedostępne*; brak kursu lub
    składu daje *Czekaj*. Jego realna wartość to dziś **filtr i narzędzie analizy**: pokazuje, czego nie grać i
-   dlaczego. Nie jest generatorem pewnych zakładów.
+   dlaczego. Nie jest generatorem pewnych zakładów. Od 1.11 obok decyzji jest **ranking „Najlepsze dziś”**
+   (sekcja 4.1): odpowiada na pytanie „jeśli i tak gram, to co?”, z widocznym kosztem i własnymi wynikami. To nie
+   przewaga i nie zmienia decyzji.
 
 ---
 
@@ -64,13 +67,13 @@ pokazuje świeżość danych 🟢/🟠/🔴 (ESPN, Superbet, RotoWire) i odsyła
 
 | Strona | Co pokazuje |
 |---|---|
-| **Przegląd** | Karty dzisiejszych meczów (start czasu polskiego, kursy na zwycięzcę, handicap i sumę, **decyzja dla rynków drużynowych i decyzja dla zawodników** z czasem kursu i składu, prognozowany zwycięzca, status składów z RotoWire, kto nie zagra). Pod kartami *Oferty do gry*: tylko oferty z decyzją *Obstaw*; dopóki ich nie ma, strona mówi, że dziś nie ma na co grać, i nie pokazuje żadnego rankingu pozostałych linii. |
+| **Przegląd** | Karty dzisiejszych meczów (start czasu polskiego, kursy na zwycięzcę, handicap i sumę, **decyzja dla rynków drużynowych i decyzja dla zawodników** z czasem kursu i składu, prognozowany zwycięzca, status składów z RotoWire, kto nie zagra). Pod kartami *Oferty do gry*: tylko oferty z decyzją *Obstaw*; dopóki ich nie ma, strona mówi, że dziś nie ma na co grać. Pod spodem zawsze **„Najlepsze dziś (ranking, nie przewaga)”** (4.1): linie ★ i w rozwijanej liście ·, z oczekiwanym zwrotem po podatku obok średniej każdej linii i jednym zdaniem o dotychczasowych wynikach rankingu. |
 | **Zakłady na zawodników** | Nad tabelą decyzja dla zawodników każdego meczu z czasem kursu i składu. Tabela (16 kolumn, domyślnie według startu meczu, ostrzeżenia na końcu) służy do analizy; reszta kolumn jest pod *Więcej → Pokaż każdą kolumnę*. Zaznaczona linia zostaje otwarta po odświeżeniu, a gdy zmieniła się jej linia lub kurs, strona to mówi. Zakładki: **Werdykt** (decyzja meczu i „Dlaczego”: powody za i przeciw z wartością, punktem odniesienia, liczbą obserwacji, czasem i źródłem, oraz jak zbudowano liczbę oczekiwaną: średnia → nieobecni koledzy → mecz i rywal), **Koledzy z drużyny** (macierz „z nim / bez niego”), **Historia** (20 ostatnich meczów wobec linii, rozkład, podziały, mecze z tym rywalem) i **Ruch linii** (każdy zapis). Na dole jest sprawdzarka dowolnej linii. |
 | **Mecze** | Wiersz na mecz z jego dwiema decyzjami (rynki drużynowe: *Niedostępne*; zawodnicy), potem rynki wybranego meczu do analizy; powody otwierają się dla wiersza, który wybierzesz (żaden „najlepszy” wynik nie jest wybierany za użytkownika). Ratingi drużyn, składy i nieobecności. |
 | **Jak to czytać** | Słowniczek: kurs, podatek i marża, nasza szansa, przewaga, decyzja, ostrzeżenia, powody i 4 kroki czytania wieczoru. |
 
-**Kolumny tabeli propsów** (kolejność z `dashboard_v2/core/columns.py`, 16):
-zawodnik · mecz · start · statystyka · linia · **decyzja** · **oceniana strona** · kurs · nasza szansa wygranej % ·
+**Kolumny tabeli propsów** (kolejność z `dashboard_v2/core/columns.py`, 17):
+ranking dziś (★ / ·) · zawodnik · mecz · start · statystyka · linia · **decyzja** · **oceniana strona** · kurs · nasza szansa wygranej % ·
 potrzebna skuteczność po podatku % · **przewaga po podatku (pp)** · **oczekiwany zwrot na 100 zł po podatku** ·
 oczekiwane dziś · trafione w ost. 10 % · rola dziś · ostrzeżenie. Kolumny legacy „nasz typ”, „lepsza strona” i
 „projekcja wskazuje” nie są już pokazywane obok siebie (zostają w danych).
@@ -230,6 +233,39 @@ tworzą ofert (ich zakłady są zwracane). Przy *Obstaw* każda inna linia tego 
 Sygnały 🟢/🟡 (legacy, liczone przy kursie bez podatku) zostają w zapisach, ale nie są już filtrem ani kolumną
 decyzyjną w panelach. 🔴 i kolumna „ostrzeżenie” zostają: ostrzeżenie blokuje *Obstaw*.
 
+### 4.1 Ranking „Najlepsze dziś” (od 1.11)
+
+**Dlaczego.** Dla każdej zapisanej linii zwrot po podatku wynosi od −12 do −20 zł na 100 zł. Próg 🟢 jest więc
+nieosiągalny niezależnie od liczby nocy: to nie jest kwestia początku sezonu, tylko podatku (12%) i marży
+(7,6–9,6%) przy kalibracji b ≈ 0,13. Decyzja odpowiada tylko na pytanie „czy grać?” (dziś: nie), więc lista ofert
+była zawsze pusta. Ranking odpowiada na drugie pytanie: „jeśli i tak gram, które linie są najlepsze?”.
+
+**Jak** (`decisions.shortlist`). Linie wieczoru są układane według `ev net 100` (oczekiwany zwrot po podatku,
+oceniana strona). Odpadają: mecze *Niedostępne*, linie z 🔴 i gracze, których RotoWire nie podaje jako pewnych
+(szansa gry < 100%). Każdy gracz zostaje z jedną, najlepszą linią. **★** to najlepsza linia każdego z 5
+najlepszych meczów wieczoru (`SHORTLIST_TOP`); **·** to każda inna linia z najlepszej ćwiartki wszystkich
+wycenionych linii wieczoru (`SHORTLIST_LOOK`). Mecz z decyzją *Czekaj* (stare kursy, brak składu) zostaje na
+liście z powodem w kolumnie „uwaga”, zamiast znikać. *Obstaw* działa bez zmian i ma pierwszeństwo.
+
+**Klucz wybrany na danych** (`backtest/shortlist.py` → `data/backtest/shortlist.md`). Kalibracja jest dopasowana
+na wcześniejszych nocach, a ocena odbywa się na nocach niewidzianych. Na Unibet 2022/23 (77 nocy) najlepsza linia
+maksymalnie 5 meczów wygrywała o 3,8 pp częściej, niż mówił kurs bez marży (ROI +0,2% przed podatkiem, −11,9% po
+nim, wobec −15,5% dla każdej linii). Klucz „rozbieżność z kursem” wypadł tam słabiej. Na 3 niewidzianych nocach
+Superbet żaden z kluczy nie daje wniosków (9–23 zakłady).
+
+**Rozliczenie** (`tracking.settle_shortlist`, `tier_scorecard`). Każde pobranie zapisuje `tier` i `night_rank`
+(od 1.11). Wcześniejsze noce są układane ponownie z pól zapisanych przed meczem, bez ponownej kalibracji
+(„przeliczone”). Wyniki są w *Wyniki → Najlepsze dziś: wyniki*, a jedno zdanie na Przeglądzie. Stan na 11 nocy
+(20–30.10, przeliczone): ★ 47 zakładów, 53,2% trafień przy 54,7% wg kursu, ROI po podatku −21,5% (przedział
+trafień 39–67%); · 705 zakładów, +0,7 pp, −17,7%; każda linia −16,8%. **Na Superbecie ranking jeszcze niczego nie
+dowiódł.** Dowód, że ma sens, pochodzi na razie tylko z 2022/23.
+
+**Dźwignie podatkowe.** (1) Przełącznik *Promocja bez podatku* w pasku bocznym v2 (profil `superbet_no_tax`,
+alpha = 1) przelicza kolumny netto bez ponownej wyceny linii, tylko na tę sesję. Zapisy i rozliczenia zostają
+z podatkiem. (2) *AKO na papierze* (`tracking.paper_accumulators`): co wieczór wirtualny kupon z 3 najlepszych
+linii ★. Podatek jest pobierany raz od stawki kuponu, ale opłaca się to tylko wtedy, gdy każde zdarzenie bije
+swój kurs przed podatkiem o ok. 4,4%. Stan: 10 kuponów, 0 wygranych, −10 j. Śledzone, nie polecane.
+
 ---
 
 ## 5. Powody za i przeciw: zakłady na zawodników
@@ -368,6 +404,19 @@ Lepsza strona modelu traci mniej niż ślepa gra, ale **nie pokonuje marży**.
 Na Unibet 2022/23 (luty–maj) dodatnią przewagę miało 305 linii: trafienia 57,0% przy progu rentowności 57,1%,
 ROI −0,7%. Też nie ma przewagi.
 
+Ranking wieczoru według oczekiwanego zwrotu (`data/backtest/shortlist.md`, Unibet 2022/23, 77 niewidzianych nocy):
+
+| Miejsce w wieczorze | Linie | Wygrane | Kurs mówił | ROI | ROI po podatku |
+|---|---|---|---|---|---|
+| najlepsze 2% | 233 | 59,7% | 55,1% | +2,3% | −10,0% |
+| 10–25% | 2 071 | 57,7% | 54,7% | −0,7% | −12,6% |
+| 25–50% | 3 447 | 52,5% | 53,1% | −6,8% | −18,0% |
+| dolne 50% | 6 905 | 52,2% | 51,1% | −4,0% | −15,5% |
+| ★ (5 na wieczór, 1 na mecz) | 295 | 60,7% | 56,9% | +0,2% | −11,9% |
+
+Ranking zmniejsza oczekiwaną stratę wobec losowej linii, ale nie pokonuje podatku. Na Superbecie (4.1) przewagi
+rankingu jeszcze nie widać.
+
 ### 9.3 Co wnosi każda część modelu (`data/backtest/ablation.md`)
 
 Na 2022/23 dane gracza (hit rate, rozkład) poprawiają trafność względem kursu o ok. 0,0005–0,0007 log loss
@@ -422,6 +471,8 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 
 - ~~Jasny komunikat, gdy nie ma przewagi~~ (zrobione 31.10: jedna decyzja na mecz, komunikat „dziś nie ma na co
   grać”; lista „Najmniejsza strata” i 5 największych przewag meczowych usunięte z roli decyzyjnej).
+- ~~Zawsze coś użytecznego do pokazania~~ (zrobione 1.11: ranking „Najlepsze dziś” z kosztem i własnymi wynikami,
+  4.1).
 - **Rozdzielić „trafność” od „opłacalności”**: wysoka nasza szansa przy kursie 1,30 to nie wartość. Rozważyć ukrycie
   „naszej szansy” na rzecz „przewagi” i „zwrotu na 100 zł”.
 - **Wagi powodów:** od 31.10 powody nie głosują; dalej warto pokazać, które są uwzględnione w szansie (oczekiwane
@@ -436,7 +487,8 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 - Powtórzyć **ablację na 10+ nocach Superbet**; dopiero po niej decydować o dalszych zmianach.
 - **Walidować powody:** dla każdego powodu sprawdzić na rozliczonych liniach, czy zgodność z nim zmienia trafienia
   i ROI. Powody bez wartości zdegradować do kontekstu, a te z wartością włączyć do szansy.
-- **Osobny, nietknięty okres walidacji** dla progu 🟢 (np. listopad), żeby usunąć problem F4.
+- **Osobny, nietknięty okres walidacji** dla progu 🟢 (np. listopad), żeby usunąć problem F4. Linie ★ / ·
+  zapisywane od 1.11 są gotową populacją do tej walidacji.
 - **Projekcja minut** jako osobny krok (minuty × wydajność na minutę), bo minuty są główną niewiadomą przy
   nieobecnościach i pogromach.
 - **Gęstsze zapisy kursów** (np. 60 i 15 min przed startem) do pomiaru CLV i wykrywania ruchów rynku.
@@ -448,9 +500,10 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 
 ### 10.3 Pytania do konsultanta
 
-1. Jak zakomunikować użytkownikowi „brak przewagi” tak, żeby narzędzie nadal było użyteczne (filtr, analiza), a nie
-   zniechęcało?
-2. Czy „najmniejsza strata” to rozsądna funkcja, czy zachęca do gry bez przewagi?
+1. ~~Jak zakomunikować „brak przewagi”, żeby narzędzie było użyteczne?~~ Odpowiedź z 1.11: decyzja („czy
+   grać”) i ranking („jeśli gram, to co”) są osobno; ranking pokazuje swój koszt i swoje wyniki.
+2. ~~Czy „najmniejsza strata” to rozsądna funkcja?~~ Wróciła jako ranking z kosztem i rozliczeniem (4.1); co
+   wieczór sprawdzamy, czy jest lepszy od losowej linii.
 3. Jaki format uzasadnienia (lista powodów, punktacja, jedno zdanie) jest najbardziej zrozumiały i najmniej
    wprowadza w błąd?
 4. Które rynki i jakie progi (minimalna przewaga, minimalna liczba meczów) użytkownik uzna za wiarygodne?
@@ -463,7 +516,9 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 | Element | Plik |
 |---|---|
 | Wycena propsów i meczów, kalibracja w użyciu, sygnały | `dashboard/models.py` |
-| Decyzje (Obstaw / Nie obstawiaj / Czekaj / Niedostępne), zachowanie otwartej oferty | `dashboard/decisions.py` |
+| Decyzje (Obstaw / Nie obstawiaj / Czekaj / Niedostępne), zachowanie otwartej oferty, ranking „Najlepsze dziś” (`shortlist`) | `dashboard/decisions.py` |
+| Wyniki rankingu i AKO na papierze (`settle_shortlist`, `tier_scorecard`, `paper_accumulators`) | `dashboard/tracking.py` |
+| Wybór klucza rankingu | `backtest/shortlist.py` → `data/backtest/shortlist.md` |
 | Kontrakt kosztowy (profile, próg, EV, zysk z rozliczenia) | `dashboard/metrics.py` (`COST_PROFILES`, `break_even`, `expected_return_100`, `side_profit`) |
 | Wzory (hit rate, rozkład, kalibracja, rywal, tempo, nieobecni, model meczu) | `dashboard/metrics.py` |
 | Powody i ostrzeżenia | `dashboard/reasons.py` |
@@ -493,7 +548,9 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 | Kalibracja | a = 1,140, b = 0,132 | |
 | Próg 🟢 | brak | 10+ nocy, 50+ zakładów, dolny koniec 95% powyżej progu rentowności |
 | Kelly | 0,25, max 5% | szansa wygranej na cenie netto, tylko przy *Obstaw* |
-| Profil kosztowy | `superbet_standard`: alpha = 0,88; `legacy`: alpha = 1 | 12% podatku od stawki |
+| Profil kosztowy | `superbet_standard`: alpha = 0,88; `legacy` i `superbet_no_tax`: alpha = 1 | 12% podatku od stawki; `superbet_no_tax` tylko z przełącznika promocji |
+| Ranking ★ / · | 5 meczów; najlepsza ćwiartka wieczoru | `SHORTLIST_TOP`, `SHORTLIST_LOOK` |
+| AKO na papierze | 3 linie ★ | `ACCUMULATOR_LEGS` |
 | Próg dla *Obstaw* | brak (`ADMITTED_THRESHOLD = None`) | musi pochodzić z niezależnego okresu |
 | Wiek kursu dla *Czekaj* | 3 h | |
 | Model meczu | hala 1,5; SD 14 / 18 / 11,5; regresja 30%; prior 10 meczów | |

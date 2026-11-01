@@ -345,9 +345,10 @@ def wilson_interval(hits: int, n: int, z: float = 1.96):
 # What a bet costs. Superbet (Poland) keeps 12% of every stake as tax, so a winning bet pays alpha × odds × stake
 # with alpha = 0.88; 'legacy' is the plain decimal odds every saved field and report used before (alpha = 1), kept
 # so they stay reproducible. A push or void returns the whole stake in both. The 10% tax on large wins isn't
-# deducted. The pages price and decide with ACTIVE_PROFILE.
-LEGACY, SUPERBET_STANDARD = 'legacy', 'superbet_standard'
-COST_PROFILES = {LEGACY: 1.0, SUPERBET_STANDARD: 0.88}
+# deducted. The pages price and decide with ACTIVE_PROFILE. 'superbet_no_tax' is a promotion that waives the tax
+# (alpha = 1, like legacy): the v2 pages switch to it only when the user says one is on, and nothing is saved with it.
+LEGACY, SUPERBET_STANDARD, SUPERBET_NO_TAX = 'legacy', 'superbet_standard', 'superbet_no_tax'
+COST_PROFILES = {LEGACY: 1.0, SUPERBET_STANDARD: 0.88, SUPERBET_NO_TAX: 1.0}
 ACTIVE_PROFILE = SUPERBET_STANDARD
 
 
@@ -367,6 +368,18 @@ def expected_return_100(p_win, odds, profile: str = ACTIVE_PROFILE, p_push=0.0):
     returns the stake (neither a win nor a loss), so p_win + p_loss + p_push = 1."""
     return 100 * (np.asarray(p_win, dtype=float) * alpha(profile) * np.asarray(odds, dtype=float)
                   + np.asarray(p_push, dtype=float) - 1)
+
+
+def reprice_net(table: pd.DataFrame, profile: str) -> pd.DataFrame:
+    """models.price_props output with its net columns (break-even net %, edge net pp, ev net 100, cost profile)
+    priced again under `profile` from the same chances, odds and push chances. The evaluated side stays: one alpha
+    scales both sides' expected return alike."""
+    p_push = table['p push %'] / 100
+    be = 100 * break_even(table['side odds'], profile, p_push)
+    return table.assign(**{'break-even net %': be, 'edge net pp': table['p win %'] - be,
+                           'ev net 100': expected_return_100(table['p win %'] / 100, table['side odds'], profile,
+                                                             p_push),
+                           'cost profile': profile})
 
 
 def best_by_ev(candidates, profile: str = ACTIVE_PROFILE) -> Optional[Dict]:

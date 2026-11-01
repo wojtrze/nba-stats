@@ -87,7 +87,7 @@ def log_run(started: datetime, job: str, command: str, code: int, seconds: float
 # the snapshot's model columns; the pages price the lines themselves
 _MODEL_COLUMNS = ['player_id_ESPN', 'pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag',
                   'raw_over_pct', 'raw_under_pct', 'market_over_pct', 'cost_profile', 'eval_side', 'ev_net_100',
-                  'decision', 'model_version', 'calibration_id', 'prediction_origin']
+                  'decision', 'tier', 'night_rank', 'model_version', 'calibration_id', 'prediction_origin']
 
 
 @st.cache_resource(show_spinner=False)

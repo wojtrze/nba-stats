@@ -11,7 +11,7 @@ sys.path[:0] = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
                 os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dashboard_v2')]
 
 import i18n  # noqa: E402
-from core.columns import OVERVIEW_PROPS, PROPS_MAIN, PROPS_MORE  # noqa: E402
+from core.columns import OVERVIEW_PROPS, PROPS_MAIN, PROPS_MORE, SHORTLIST  # noqa: E402
 
 
 def _fields(text: str) -> set:
@@ -39,7 +39,7 @@ def test_the_numbers_a_pick_rests_on_say_what_more_and_less_mean():
 
 
 def test_every_props_and_overview_column_has_a_term():
-    for column in PROPS_MAIN + PROPS_MORE + OVERVIEW_PROPS:
+    for column in PROPS_MAIN + PROPS_MORE + OVERVIEW_PROPS + SHORTLIST:
         assert i18n.term(column) is not None, column
 
 

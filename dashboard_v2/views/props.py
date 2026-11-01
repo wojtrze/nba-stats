@@ -6,7 +6,7 @@ from components import decision_text, decision_times, reasons_panel
 from core import charts
 from core.analysis import teammate_impact
 from core.data import lineups as rotowire_lineups, player_decisions, priced_props, rotowire, superbet
-from decisions import OBSTAW, offer_changed, offer_decision, offer_key
+from decisions import LOOK, OBSTAW, TOP, offer_changed, offer_decision, offer_key, shortlist
 from core.columns import PROPS_MAIN as MAIN_COLUMNS, PROPS_MORE as MORE_COLUMNS
 from core.state import language, persist, remember
 from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, stop, table
@@ -25,6 +25,11 @@ logs = filtered_logs(seasons, season_types)
 lineups = rotowire_lineups()
 table_all = priced_props(seasons, season_types)
 decided = player_decisions(table_all)
+# the night's best lines by expected return (decisions.shortlist): ★ / · next to every line, '' for the rest
+if len(table_all):
+    ranked = shortlist(table_all, decided)[PROP_KEY + ['tier', 'rank']].rename(columns={'rank': 'shortlist rank'})
+    table_all = table_all.merge(ranked, on=PROP_KEY, how='left')
+    table_all['tier'] = table_all['tier'].map({TOP: '★', LOOK: '·'}).fillna('')
 if warning := calibration_warning(table_all['calibration'].iloc[0] if len(table_all) else None, lang):
     st.warning(warning, icon="⚠️")
 
@@ -38,17 +43,22 @@ FORMATS = {'raw model %': '%.0f', 'line': '%g', 'side odds': '%.2f', 'p win %': 
 
 
 # how the table can be ordered (i18n 'props.sort.*'): by tip-off by default; none of them says what to bet
-SORTS = ['tip', 'return', 'chance']
+SORTS = ['tip', 'shortlist', 'return', 'chance']
 
 
 def sort_lines(rows: pd.DataFrame, how: str) -> pd.DataFrame:
     """The lines in the chosen order, warnings always last. tip: the earliest game first; return: the highest
-    expected return after the tax; chance: the highest chance to win (mostly low odds)."""
+    expected return after the tax; chance: the highest chance to win (mostly low odds); shortlist: tonight's best
+    lines first (★ then ·, decisions.shortlist), the rest by expected return."""
     rows = rows.assign(warned=rows['red flag'].fillna('') != '')
+    if 'shortlist rank' not in rows:
+        rows = rows.assign(**{'shortlist rank': np.nan, 'tier': ''})
+    rows = rows.assign(listed=rows['tier'].map({'★': 0, '·': 1}).fillna(2))
     by = {'return': ['warned', 'ev net 100'], 'chance': ['warned', 'p win %'],
-          'tip': ['warned', 'tip_at', 'game', 'ev net 100']}[how]
-    ascending = {'return': [True, False], 'chance': [True, False], 'tip': [True, True, True, False]}[how]
-    return rows.sort_values(by, ascending=ascending, kind='stable').drop(columns='warned')
+          'tip': ['warned', 'tip_at', 'game', 'ev net 100'], 'shortlist': ['warned', 'listed', 'ev net 100']}[how]
+    ascending = {'return': [True, False], 'chance': [True, False], 'tip': [True, True, True, False],
+                 'shortlist': [True, True, False]}[how]
+    return rows.sort_values(by, ascending=ascending, kind='stable').drop(columns=['warned', 'listed'])
 
 
 def line_decision(row) -> dict:
@@ -279,6 +289,7 @@ lineup_banner()
 
 # --- filters ---
 for key, default in (('props_games', []), ('props_types', DEFAULT_TYPES), ('props_hide_red', False),
+                     ('props_only_best', False),
                      ('props_hide_out', True), ('props_min_games', 5), ('props_more', False),
                      ('props_sort', 'tip')):
     persist(key, default)
@@ -300,6 +311,8 @@ sort = f[2].segmented_control(t('props.sort', lang), SORTS, key='props_sort', on
                               args=('props_sort',), format_func=lambda k: t(f'props.sort.{k}', lang),
                               help=t('props.sort_help', lang)) or 'tip'
 with f[3].popover(t('props.more', lang), width='stretch'):
+    only_best = st.toggle(t('props.only_best', lang), key='props_only_best', on_change=remember,
+                          args=('props_only_best',), help=t('props.only_best_help', lang))
     hide_red = st.toggle(t('props.hide_red', lang), key='props_hide_red', on_change=remember,
                          args=('props_hide_red',))
     hide_out = st.toggle(t('props.hide_out', lang), key='props_hide_out', on_change=remember,
@@ -313,6 +326,8 @@ if game_filter:
     shown = shown[shown['game'].isin(game_filter)]
 if type_filter:
     shown = shown[shown['bet_type'].isin(type_filter)]
+if only_best:
+    shown = shown[shown['tier'] != '']
 if hide_red:
     shown = shown[shown['red flag'].fillna('') == '']
 if hide_out:

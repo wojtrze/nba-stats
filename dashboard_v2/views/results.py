@@ -5,6 +5,7 @@ import streamlit as st
 
 from core import charts
 from core.analysis import GAP_LABELS, settle_lines, side_rates
+from core.data import shortlist_record
 from core.columns import RESULTS_ALL, RESULTS_BY_TYPE
 from core.state import language
 from core.ui import PAGES, go_to_data, kpis, page_header, stop, table
@@ -13,14 +14,16 @@ from i18n import label, t, value
 from loaders import filtered_logs, games, player_logs, snapshot_history
 import night_view
 from glossary import signal_legend
-from tracking import calibration, edge_bucket, results_table, settle_games, threshold_table
+from tracking import (RECOMPUTED, RECORDED, calibration, edge_bucket, paper_accumulators, results_table,
+                      settle_games, threshold_table, tier_scorecard)
 
 lang = language()
 seasons, season_types = page_header(t('results.title', lang), t('results.purpose', lang), with_scope=True)
 
 RATE_FORMATS = {'lines': '%d', 'bets': '%d', 'expected %': '%.0f', 'hit %': '%.0f', 'ROI %': '%+.1f',
                 'ROI % std': '%+.1f', 'break-even %': '%.1f', 'break-even % std': '%.1f',
-                'ci low %': '%.0f', 'ci high %': '%.0f', 'avg odds': '%.2f', 'avg odds vs last %': '%+.1f', 'edge ≥ pp': '%d'}
+                'ci low %': '%.0f', 'ci high %': '%.0f', 'avg odds': '%.2f', 'avg odds vs last %': '%+.1f', 'edge ≥ pp': '%d',
+                'nights': '%d', 'price said %': '%.0f', 'won − price pp': '%+.1f'}
 
 
 def rates(df: pd.DataFrame, words=('signal', 'pick', 'market')):
@@ -95,9 +98,9 @@ with saved_tab:
            'value': f"{100 * avg_decided['pre avg profit'].mean():+.1f}" if len(avg_decided) else "–",
            'help': t('results.kpi.toward_roi_help', lang)}])
 
-    avg_tab, picks_tab, games_tab, all_tab = st.tabs(
-        [t('results.tab.avg', lang), t('results.tab.picks', lang), t('results.tab.games', lang),
-         t('results.tab.all', lang)])
+    avg_tab, picks_tab, shortlist_tab, games_tab, all_tab = st.tabs(
+        [t('results.tab.avg', lang), t('results.tab.picks', lang), t('results.tab.shortlist', lang),
+         t('results.tab.games', lang), t('results.tab.all', lang)])
 
     with avg_tab:
         if done.empty:
@@ -223,6 +226,33 @@ with saved_tab:
                 grouped = results_table(g, by)
                 if len(grouped):
                     rates(grouped)
+
+    with shortlist_tab:
+        record = shortlist_record()
+        st.caption(t('results.shortlist_intro', lang))
+        scorecard = tier_scorecard(record)
+        if scorecard.empty or not scorecard['bets'].iloc[:2].sum():
+            st.info(t('results.shortlist_none', lang))
+        else:
+            nights = record.drop_duplicates('game_date')
+            st.caption(t('results.shortlist_origin', lang, recorded=int((nights['origin'] == RECORDED).sum()),
+                         recomputed=int((nights['origin'] == RECOMPUTED).sum())))
+            rates(scorecard.assign(tier=scorecard['tier'].map({'top': '★', 'look': '·'}).fillna(
+                t('results.every_line', lang))))
+            st.markdown(f"**{t('results.ako', lang)}**")
+            st.caption(t('results.ako_intro', lang))
+            ako = paper_accumulators(record)
+            if len(ako):
+                st.caption(t('results.ako_summary', lang, n=len(ako), won=int((ako['result'] == 'win').sum()),
+                             total=ako['profit std'].sum()))
+                shown = ako.sort_values('game_date', ascending=False)
+                st.dataframe(shown.assign(result=shown['result'].map(lambda v: value(v, lang))), hide_index=True,
+                             width='stretch',
+                             column_config=column_config(list(shown.columns),
+                                                         {'odds': '%.2f', 'profit': '%+.2f', 'profit std': '%+.2f',
+                                                          'cumulative std': '%+.2f'}, lang=lang, context='results')
+                             | {'game_date': st.column_config.DateColumn(label('game_date', lang),
+                                                                         format='YYYY-MM-DD')})
 
     with all_tab:
         cols = RESULTS_ALL

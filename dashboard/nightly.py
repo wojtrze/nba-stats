@@ -54,6 +54,9 @@ MODEL_COLUMNS = ['pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal
                  'raw_over_pct', 'raw_under_pct', 'market_over_pct', *NET_COLUMNS]
 # the decision (decisions.py) for the players of the line's game, as the fetch saved it; live fetches only
 DECISION_COLUMN = 'decision'
+# the line's place in decisions.shortlist as the fetch showed it: tier ('top' / 'look', '' when not listed) and
+# its rank in the night; live fetches from Nov 1 only (tracking.tier_scorecard recomputes the older ones)
+SHORTLIST_COLUMNS = ['tier', 'night_rank']
 
 # which model priced a saved line: models.MODEL_VERSION. calibration_id: models.calibration_id at pricing time. prediction_origin: recorded_live = saved by the fetch itself, historical_replay = priced later
 # as of the fetch (daily_snapshot.py --reprice, kept in its own file). Rows saved before Oct 26 leave them empty.

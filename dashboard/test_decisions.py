@@ -174,3 +174,77 @@ def test_every_status_has_words(status):
 def test_the_evaluated_side_has_its_own_words_and_games_keep_theirs():
     assert i18n.label('side', 'pl') == "oceniana strona" and i18n.label('side', 'en') == "evaluated side"
     assert i18n.label('side', 'pl', 'games') == "strona"
+
+
+# --- the shortlist: the night's best lines by expected return, never a bet signal ---
+
+def _slate(n_games=8, per_game=3):
+    rows = []
+    for g in range(n_games):
+        for k in range(per_game):
+            rows.append(_line(f'P{g}-{k}', ev=-10.0 - g - 0.1 * k, event=g, **{'market over %': 50.0}))
+    return pd.DataFrame(rows)
+
+
+def test_shortlist_keeps_one_line_per_game_on_top_and_ranks_by_expected_return():
+    s = decisions.shortlist(_slate())
+    top = s[s['tier'] == decisions.TOP]
+    assert len(top) == decisions.SHORTLIST_TOP and top['event_id'].is_unique
+    assert list(top['event_id']) == [0, 1, 2, 3, 4]
+    assert list(s['rank']) == list(range(1, len(s) + 1))
+    # the rest of the night's best quarter is worth a look; nothing below it is listed
+    look = s[s['tier'] == decisions.LOOK]
+    assert len(look) and (look['night pct'] <= 100 * decisions.SHORTLIST_LOOK).all()
+    assert not set(look['name_ESPN']) & set(top['name_ESPN'])
+
+
+def test_shortlist_is_never_a_bet():
+    s = decisions.shortlist(_slate())
+    assert (s['ev net 100'] < 0).all()      # every listed line still loses on average: the page says so
+    assert actionable(game_decisions(_slate(), models.FITTED, _lineups('bos', 'nyk'), FETCHED, NOW)) == []
+
+
+def test_shortlist_leaves_out_red_flags_unsure_players_and_unadmitted_games():
+    rows = pd.DataFrame([_line('A', ev=-5.0, flag='Too few games', event=1),
+                         _line('B', ev=-6.0, role='Ques 50%', event=2),
+                         _line('C', ev=-7.0, role='Out 0%', event=3),
+                         _line('D', ev=-8.0, event=4),
+                         _line('E', ev=-9.0, event=5)])
+    unadmitted = {5: {'status': NIEDOSTEPNE, 'reason': 'decision.reason.no_calibration'}}
+    assert list(decisions.shortlist(rows, unadmitted)['name_ESPN']) == ['D']
+
+
+def test_shortlist_keeps_a_players_best_line_only():
+    rows = pd.DataFrame([_line('A', ev=-5.0, event=1), _line('A', ev=-6.0, event=1, bet_type='REB'),
+                         _line('B', ev=-7.0, event=2)])
+    s = decisions.shortlist(rows)
+    assert list(zip(s['name_ESPN'], s['bet_type'])) == [('A', 'PTS'), ('B', 'PTS')]
+
+
+def test_shortlist_marks_a_waiting_game_instead_of_hiding_it():
+    rows = pd.DataFrame([_line('A', ev=-5.0, event=1), _line('B', ev=-6.0, event=2)])
+    waiting = {1: {'status': CZEKAJ, 'reason': 'decision.reason.stale_odds'},
+               2: {'status': NIE_OBSTAWIAJ, 'reason': 'decision.reason.no_threshold'}}
+    s = decisions.shortlist(rows, waiting)
+    assert list(s['wait']) == ['decision.reason.stale_odds', '']
+
+
+def test_shortlist_ranks_each_night_apart_and_breaks_ties_the_same_way():
+    rows = pd.DataFrame([_line('A', ev=-5.0, event=1, start_time='2026-10-30T23:00:00Z'),
+                         _line('B', ev=-5.0, event=2, start_time='2026-10-30T23:30:00Z'),
+                         _line('C', ev=-9.0, event=3, start_time='2026-10-31T23:00:00Z')])
+    s = decisions.shortlist(rows)
+    assert list(s['name_ESPN']) == ['A', 'B', 'C'] and list(s['rank']) == [1, 2, 1]
+    # the order the lines arrive in doesn't matter
+    assert list(decisions.shortlist(rows.iloc[::-1])['name_ESPN']) == ['A', 'B', 'C']
+
+
+def test_shortlist_side_price_and_gap():
+    rows = pd.DataFrame([_line('A', side='Under', **{'market over %': 40.0, 'p win %': 63.0})])
+    s = decisions.shortlist(rows)
+    assert s['side market %'].iloc[0] == 60.0 and s['above price pp'].iloc[0] == pytest.approx(3.0)
+
+
+def test_shortlist_of_nothing_is_empty():
+    assert decisions.shortlist(pd.DataFrame()).empty
+    assert decisions.shortlist(pd.DataFrame([_line(odds=np.nan)])).empty
