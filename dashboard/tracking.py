@@ -118,8 +118,63 @@ def _last_quote(snapshots: pd.DataFrame, key, cols) -> pd.DataFrame:
     return last[key + cols].assign(**{'last h before tip': _hours_before_tip(last['fetched_at'], last['start_time'])})
 
 
+# --- the closing line: the scheduled fetches' last quote before tip-off (fetch_loop: T-10 and T-5 minutes) ---
+
+CLOSE_MAX_AGE_MIN = 10      # a close is valid when the game was last read at most this long before tip-off
+CLOSE_COLUMNS = ['close line', 'close over', 'close under', 'close age min']
+CLV_COLUMNS = ['close line', 'close odds', 'close age min', 'line vs close', 'clv %', 'clv % std', 'clv pp']
+
+
+def closing_props(quotes: pd.DataFrame, event_fetches: pd.DataFrame) -> pd.DataFrame:
+    """Each line's closing quote from fetch_loop's files: the last quote of its key before tip-off (quotes holds
+    only changes, so that's the line and odds as the game was last read) and 'close age min', how long before
+    tip-off the game was last read (its superbet_event_fetches row: a game read and unchanged still counts). A
+    line withdrawn before tip-off (empty odds) has no close."""
+    if quotes.empty or event_fetches.empty:
+        return pd.DataFrame(columns=PROP_KEY + CLOSE_COLUMNS)
+    reads = event_fetches.assign(at=pd.to_datetime(event_fetches['fetched_at'], utc=True),
+                                 tip=pd.to_datetime(event_fetches['start_time'], utc=True))
+    reads = reads[reads['at'] < reads['tip']]
+    last_read = reads.groupby('event_id').agg(tip=('tip', 'first'), last=('at', 'max'))
+    last_read['close age min'] = ((last_read['tip'] - last_read['last']).dt.total_seconds() / 60).round(1)
+    q = quotes.merge(last_read[['tip']], left_on='event_id', right_index=True)
+    q = q[pd.to_datetime(q['fetched_at'], utc=True) < q['tip']].sort_values('fetched_at', kind='stable')
+    close = q.drop_duplicates(PROP_KEY, keep='last')
+    close = close[close['over_odds'].notna() & close['under_odds'].notna()]
+    close = close.rename(columns={'line': 'close line', 'over_odds': 'close over', 'under_odds': 'close under'})
+    return close.merge(last_read[['close age min']], left_on='event_id', right_index=True)[PROP_KEY + CLOSE_COLUMNS]
+
+
+def _no_vig(side_odds, other_odds):
+    return (1 / side_odds) / (1 / side_odds + 1 / other_odds)
+
+
+def add_clv(bets: pd.DataFrame, closing: pd.DataFrame) -> pd.DataFrame:
+    """bets (with pick, line, over_odds, under_odds, odds) and their close: close line / close odds (the pick's),
+    close age min, line vs close (+ = the bet's line was better in the pick's direction), and, when the close is
+    valid (close age min ≤ CLOSE_MAX_AGE_MIN) at the same line: clv % = the bet's expected return at the closing
+    margin-free price (odds × p_close − 1; the standard measure of having beaten the market), clv % std = the same
+    after the 12% stake tax, clv pp = the closing margin-free chance minus the one at the bet's quote. Pushes
+    aren't modelled (half lines mostly)."""
+    out = bets.drop(columns=[c for c in CLOSE_COLUMNS if c in bets]).merge(closing, on=PROP_KEY, how='left')
+    out.index = bets.index
+    over = out['pick'] == 'Over'
+    direction = np.where(over, 1, -1)
+    out['close odds'] = np.where(over, out['close over'], out['close under'])
+    out['line vs close'] = ((out['close line'] - out['line']) * direction).where(out['pick'].notna())
+    valid = (out['close age min'] <= CLOSE_MAX_AGE_MIN) & (out['close line'] == out['line']) & out['pick'].notna()
+    p_close = pd.Series(np.where(over, _no_vig(out['close over'], out['close under']),
+                                 _no_vig(out['close under'], out['close over'])), index=out.index)
+    p_bet = pd.Series(np.where(over, _no_vig(out['over_odds'], out['under_odds']),
+                               _no_vig(out['under_odds'], out['over_odds'])), index=out.index)
+    out['clv %'] = (100 * (out['odds'] * p_close - 1)).where(valid)
+    out['clv % std'] = (100 * (alpha(SUPERBET_STANDARD) * out['odds'] * p_close - 1)).where(valid)
+    out['clv pp'] = (100 * (p_close - p_bet)).where(valid)
+    return out
+
+
 def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
-                 bets: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+                 bets: Optional[pd.DataFrame] = None, closing: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     """One row per snapshotted prop (event, player, stat), as first offered before tip-off, with the dashboard's
     pick at that moment (the pick / edge columns daily_snapshot.py saves; empty for older snapshots), the player's
     actual number and the result.
@@ -135,7 +190,7 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     odds vs last %: the same with the odds, when the line didn't change.
     logs: prepare_logs output; games: games.csv rows (date parsed). bets: rows in the snapshot format (with a
     pick) to settle instead of every line's first snapshot, e.g. the bet slip; the snapshots then only give the
-    last quote."""
+    last quote. closing: closing_props output, which adds CLV_COLUMNS (add_clv)."""
     if bets is None:
         bets = _open_and_close(snapshots, PROP_KEY)[0] if len(snapshots) else snapshots
     if bets.empty:
@@ -189,6 +244,9 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     bets['line vs last'] = ((bets['last line'] - bets['line']) * direction).where(bets['pick'].notna())
     bets['odds vs last %'] = (100 * (bets['odds'] / bets['last odds'] - 1)).where(bets['last line'] == bets['line'])
     bets['signal'] = _signal(bets).where(bets['pick'].notna(), '')
+    if closing is not None:
+        bets = add_clv(bets, closing)
+        keep = CLV_COLUMNS + keep
     return bets[PROP_RESULT_COLUMNS + ['player_id', 'start_time'] + keep]
 
 
@@ -294,20 +352,20 @@ def calibration(settled: pd.DataFrame, width: float = 10) -> pd.DataFrame:
                          'actual %': 100 * grouped['won'].mean()}).reset_index()
 
 
-# --- the shortlist's record (decisions.shortlist): what the night's best lines did, as shown before tip-off ---
+# --- the stars' record (decisions.stars): what each level did, as shown before tip-off ---
 
 RECORDED, RECOMPUTED = 'recorded', 'recomputed'
 ACCUMULATOR_LEGS = 3
+EVERY_LINE = 'every line'
 
 
-def shortlist_lines(snapshots: pd.DataFrame, every_line: bool = False) -> pd.DataFrame:
-    """Each night's shortlisted lines as of every line's last fetch before tip-off, in the snapshot format with
-    'pick' = the evaluated side, tier ('top' / 'look'), night_rank, 'side market %' and origin. RECORDED: the tier
-    the fetch saved (live fetches from Nov 1); RECOMPUTED: older nights, ranked again by decisions.shortlist from
-    the fields the fetch saved before the game (its side and expected return when saved, else its pick and that
-    pick's model %; no RotoWire chance to play, so only the saved red flag leaves a player out). Nothing is
-    recalibrated. every_line: every line, '' as the tier of those not listed (the baseline to compare with)."""
-    from decisions import shortlist
+def star_lines(snapshots: pd.DataFrame) -> pd.DataFrame:
+    """Every line as of its last fetch before tip-off, in the snapshot format with 'pick' = the evaluated side,
+    stars (NA = no rating), night_rank, 'side market %' and origin. RECORDED: the stars the fetch saved (live
+    fetches from Nov 2); RECOMPUTED: older nights, rated again by decisions.stars from the fields the fetch saved
+    before the game (its side and expected return when saved, else its pick and that pick's model %; no RotoWire
+    chance to play, so only the saved red flag gives 0★). Nothing is recalibrated."""
+    from decisions import stars
     needed = {'fetched_at', 'start_time', 'over_odds', 'under_odds', 'model_pct', 'pick'}
     if snapshots.empty or not needed <= set(snapshots.columns):
         return pd.DataFrame()
@@ -315,7 +373,7 @@ def shortlist_lines(snapshots: pd.DataFrame, every_line: bool = False) -> pd.Dat
     rows = snapshots[fetched < pd.to_datetime(snapshots['start_time'], utc=True)].sort_values('fetched_at',
                                                                                                 kind='stable')
     last = rows.drop_duplicates(PROP_KEY, keep='last').reset_index(drop=True)
-    for col in ('tier', 'night_rank', 'eval_side', 'ev_net_100', 'market_over_pct', 'red_flag'):
+    for col in ('stars', 'night_rank', 'eval_side', 'ev_net_100', 'market_over_pct', 'red_flag'):
         if col not in last:
             last[col] = np.nan
     has_net = last['eval_side'].isin(['Over', 'Under'])
@@ -323,79 +381,97 @@ def shortlist_lines(snapshots: pd.DataFrame, every_line: bool = False) -> pd.Dat
     last = last[last['pick'].isin(['Over', 'Under'])].reset_index(drop=True)
     has_net = last['eval_side'].isin(['Over', 'Under'])
     night = _et_date(last['start_time'])
-    # a night is recorded once a fetch of it saved the tiers; older nights are ranked again here
-    recorded = night.isin(set(night[last['tier'].fillna('').ne('')]))
+    saved = pd.to_numeric(last['stars'], errors='coerce')
+    # a night is recorded once a fetch of it saved the stars; older nights are rated again here
+    recorded = night.isin(set(night[saved.notna()]))
     last['origin'] = np.where(recorded, RECORDED, RECOMPUTED)
-    last['tier'] = last['tier'].where(recorded, '').fillna('')
+    last['stars'] = saved.where(recorded)
     last['night_rank'] = pd.to_numeric(last['night_rank'], errors='coerce').where(recorded)
 
     older = last[~recorded]
     if len(older):
         odds = pd.Series(np.where(older['pick'] == 'Over', older['over_odds'], older['under_odds']), index=older.index)
         own_ev = 100 * (pd.to_numeric(older['model_pct'], errors='coerce') / 100 * alpha(SUPERBET_STANDARD) * odds - 1)
-        ranked = shortlist(pd.DataFrame({
+        rated = stars(pd.DataFrame({
             'event_id': older['event_id'], 'name_ESPN': older['name_ESPN'], 'bet_type': older['bet_type'],
             'start_time': older['start_time'], 'side': older['pick'], 'side odds': odds,
             'ev net 100': pd.to_numeric(older['ev_net_100'], errors='coerce').where(has_net[older.index], own_ev),
             'p win %': older['model_pct'], 'market over %': older['market_over_pct'],
             'red flag': older['red_flag']}))
-        if len(ranked):
-            found = older.reset_index()[['index'] + PROP_KEY].merge(ranked[PROP_KEY + ['tier', 'rank']], on=PROP_KEY)
-            last.loc[found['index'], 'tier'] = found['tier'].values
+        if len(rated):
+            found = older.reset_index()[['index'] + PROP_KEY].merge(rated[PROP_KEY + ['stars', 'rank']], on=PROP_KEY)
+            last.loc[found['index'], 'stars'] = found['stars'].astype(float).values
             last.loc[found['index'], 'night_rank'] = found['rank'].values
+    last['stars'] = last['stars'].astype('Int64')
     market = pd.to_numeric(last['market_over_pct'], errors='coerce')
     last['side market %'] = market.where(last['pick'] == 'Over', 100 - market)
-    out = last if every_line else last[last['tier'] != '']
-    # night by night, in the shortlist's order (lines not listed last)
-    order = pd.DataFrame({'night': night[out.index], 'rank': out['night_rank']}).sort_values(
+    # night by night, in the stars' order
+    order = pd.DataFrame({'night': night, 'rank': last['night_rank']}).sort_values(
         ['night', 'rank'], na_position='last', kind='stable').index
-    return out.loc[order].reset_index(drop=True)
+    return last.loc[order].reset_index(drop=True)
 
 
-def settle_shortlist(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
-                     every_line: bool = True) -> pd.DataFrame:
-    """settle_props of shortlist_lines (every line by default, tier '' for those not listed), with tier,
-    night_rank, side market % and origin next to each result."""
-    lines = shortlist_lines(snapshots, every_line)
+def settle_stars(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
+                 closing: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    """settle_props of star_lines, with stars, night_rank, side market % and origin next to each result; with the
+    CLV columns when `closing` (closing_props) is given."""
+    lines = star_lines(snapshots)
     if lines.empty:
         return pd.DataFrame()
-    settled = settle_props(snapshots, logs, games, bets=lines)         # keeps the order of the bets it's given
-    for col in ['tier', 'night_rank', 'side market %', 'origin', 'event_id']:
+    settled = settle_props(snapshots, logs, games, bets=lines, closing=closing)  # keeps the bets' order
+    for col in ['stars', 'night_rank', 'side market %', 'origin', 'event_id']:
         settled[col] = lines[col].values
     return settled
 
 
-def _tier_row(part: pd.DataFrame) -> dict:
+def _level_row(part: pd.DataFrame) -> dict:
     decided = part[part['result'].isin(['win', 'loss'])]
     wins, n = int((decided['result'] == 'win').sum()), len(decided)
     low, high = wilson_interval(wins, n)
     price = decided['side market %'].mean() if n else np.nan
+    clv = decided['clv %'].dropna() if 'clv %' in decided else pd.Series(dtype=float)
     return {'nights': int(decided['game_date'].nunique()), 'bets': n,
             'hit %': 100 * wins / n if n else np.nan, 'ci low %': 100 * low, 'ci high %': 100 * high,
             'price said %': price, 'won − price pp': 100 * wins / n - price if n else np.nan,
             'ROI %': 100 * decided['profit'].mean() if n else np.nan,
-            'ROI % std': 100 * decided['profit std'].mean() if n else np.nan}
+            'ROI % std': 100 * decided['profit std'].mean() if n else np.nan,
+            'CLV bets': len(clv), 'CLV %': clv.mean() if len(clv) else np.nan}
 
 
-def tier_scorecard(settled: pd.DataFrame) -> pd.DataFrame:
-    """Per shortlist tier ('top', 'look', then 'every line' of settle_shortlist, the baseline): nights, decided bets, hit %, its 95% range, the margin-free
-    price's chance of the same sides ('price said %'), how much more often they won than that, and ROI at the
-    plain odds and after the stake tax ('ROI % std'). Pushes and voids are left out."""
+def star_scorecard(settled: pd.DataFrame) -> pd.DataFrame:
+    """Per star level (5★ … 0★, then EVERY_LINE of settle_stars, the baseline): nights, decided bets, hit %, its
+    95% range, the margin-free price's chance of the same sides ('price said %'), how much more often they won than
+    that, ROI at the plain odds and after the stake tax ('ROI % std'), and the average CLV % where the close is
+    known. Then '4★ − 1★': the difference of won − price pp with its 95% range from resampling whole nights (the
+    scale works only if it's above 0). Pushes and voids are left out; lines without a rating only count in
+    EVERY_LINE."""
+    from decisions import MAX_STARS
     if settled.empty:
         return pd.DataFrame()
-    rows = [{'tier': tier, **_tier_row(settled[settled['tier'] == tier])} for tier in ('top', 'look')]
-    return pd.DataFrame(rows + [{'tier': 'every line', **_tier_row(settled)}])
+    rows = [{'stars': n, **_level_row(settled[settled['stars'] == n])} for n in range(MAX_STARS, -1, -1)]
+    rows.append({'stars': EVERY_LINE, **_level_row(settled)})
+    decided = settled[settled['result'].isin(['win', 'loss'])]
+    top, bottom = decided[decided['stars'] == 4], decided[decided['stars'] == 1]
+    if len(top) and len(bottom):
+        from backtest.ablation import night_bootstrap
+        excess = lambda d: 100 * ((d['result'] == 'win') - d['side market %'] / 100)
+        both = pd.concat([top.assign(w=len(top) + len(bottom), x=excess(top) / len(top)),
+                          bottom.assign(w=len(top) + len(bottom), x=-excess(bottom) / len(bottom))])
+        low, high = night_bootstrap(both['game_date'].values, (both['x'] * both['w']).values)
+        rows.append({'stars': '4★ − 1★', 'won − price pp': excess(top).mean() - excess(bottom).mean(),
+                     'ci low %': low, 'ci high %': high})
+    return pd.DataFrame(rows)
 
 
 def paper_accumulators(settled: pd.DataFrame, legs: int = ACCUMULATOR_LEGS) -> pd.DataFrame:
-    """A virtual accumulator (AKO) a night: the `legs` best 'top' lines (one per game already), 1 unit at the
+    """A virtual accumulator (AKO) a night: the `legs` best 4★ lines (one per game already), 1 unit at the
     product of their odds. Superbet takes its 12% tax once, from the coupon's stake, so a win pays alpha × Π odds −
     1: it can only pay if the legs beat their prices before the tax by enough (about 4.4% each for 3 legs). A
     pushed or void leg counts as odds 1; a night with a leg pending or unresolved, or fewer legs, is left out. A
     record on paper only: nothing recommends it."""
     if settled.empty:
         return pd.DataFrame()
-    top = settled[settled['tier'] == 'top'].sort_values(['game_date', 'night_rank'], kind='stable')
+    top = settled[settled['stars'] >= 4].sort_values(['game_date', 'night_rank'], kind='stable')
     rows = []
     for night, part in top.groupby('game_date'):
         part = part.head(legs)

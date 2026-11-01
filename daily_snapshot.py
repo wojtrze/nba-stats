@@ -70,22 +70,44 @@ def last_superbet_contact() -> Optional[datetime]:
         return None
 
 
-def superbet_wait(now: Optional[datetime] = None) -> Optional[timedelta]:
-    """How long until Superbet may be contacted again; None = now."""
+def superbet_wait(now: Optional[datetime] = None, cooldown: timedelta = SUPERBET_COOLDOWN) -> Optional[timedelta]:
+    """How long until Superbet may be contacted again (the cooldown, or a block after 403/429, see http_polite);
+    None = now."""
+    from http_polite import blocked_until
+    from superbet_fetcher import HOST
+    now = now or datetime.now(timezone.utc)
+    until = blocked_until(HOST, now)
+    if until:
+        return until - now
     last = last_superbet_contact()
-    left = last + SUPERBET_COOLDOWN - (now or datetime.now(timezone.utc)) if last else None
+    left = last + cooldown - now if last else None
     return left if left and left > timedelta(0) else None
 
 
-def claim_superbet() -> Optional[timedelta]:
-    """Record a contact now unless one was made within SUPERBET_COOLDOWN, checked and written under one lock so
-    two processes can't both go ahead. None = claimed (go ahead); otherwise how long to wait."""
+def claim_superbet(cooldown: timedelta = SUPERBET_COOLDOWN) -> Optional[timedelta]:
+    """Record a contact now unless one was made within `cooldown` (SUPERBET_COOLDOWN for a fetch asked for by
+    hand; the scheduled fetches use their own shorter gap) or Superbet is blocked, checked and written under one
+    lock so two processes can't both go ahead. None = claimed (go ahead); otherwise how long to wait."""
     with locked(CONTACT_FILE):
-        wait = superbet_wait()
+        wait = superbet_wait(cooldown=cooldown)
         if wait:
             return wait
         atomic_write_text(CONTACT_FILE, datetime.now(timezone.utc).isoformat() + '\n')
         return None
+
+
+# --- the run log: every scraper run and Superbet fetch, from a dashboard or the scheduled fetches ---
+
+RUN_LOG = os.path.join('data', 'run_log.csv')
+RUN_LOG_COLUMNS = ['started_at', 'job', 'command', 'exit_code', 'seconds', 'summary']
+
+
+def log_run(started: datetime, job: str, command: str, code: int, seconds: float, summary: str):
+    """Append one run to data/run_log.csv. job: stats, snapshot, fetch, lineups or quotes; code 0 = success."""
+    row = pd.DataFrame([{'started_at': started.strftime('%Y-%m-%dT%H:%M:%SZ'), 'job': job, 'command': command,
+                         'exit_code': code, 'seconds': round(seconds, 1), 'summary': summary}],
+                       columns=RUN_LOG_COLUMNS)
+    append_csv(row, RUN_LOG, RUN_LOG_COLUMNS)
 
 
 # --- RotoWire: the dashboards save every fetch that differs from the last saved version of that day ---
@@ -163,7 +185,7 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
     from models import (DEFAULT_SEASON_TYPES, GAME_DEFAULTS, GAME_TYPES, game_ratings, prepare_logs, price_games,
                         price_props, top_up_logs)
     from name_resolver import NameResolver
-    from decisions import game_decisions, shortlist, team_decision
+    from decisions import game_decisions, stars, team_decision
     from metrics import ACTIVE_PROFILE
     from models import calibration_status
     from nightly import DECISION_COLUMN, MODEL_VERSION, RECORDED_LIVE, SHORTLIST_COLUMNS, lineage, model_columns
@@ -188,13 +210,13 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
         # the decision for each game's players as of this fetch (decisions.py): what the pages show now
         now = pd.Timestamp.now(tz='UTC')
         decided = game_decisions(table, calibration_status(), lineups, now, now)
-        # where each line stood in the night's shortlist, so it's settled as shown before the game
-        ranked = shortlist(table, decided)[PROP_KEY + ['tier', 'rank']].rename(columns={'rank': 'night_rank'})
-        listed = table[PROP_KEY].merge(ranked, on=PROP_KEY, how='left').set_axis(table.index)
+        # each line's stars and place in the night, so every level is settled as shown before the game
+        rated = stars(table, decided)[PROP_KEY + ['stars', 'rank']].rename(columns={'rank': 'night_rank'})
+        listed = table[PROP_KEY].merge(rated, on=PROP_KEY, how='left').set_axis(table.index)
         props = props.assign(**model_columns(table), **lineage(RECORDED_LIVE),
                              **{DECISION_COLUMN: table['event_id'].map(lambda e: decided[e]['status'])},
                              **{c: listed[c] for c in SHORTLIST_COLUMNS})
-        props['tier'] = props['tier'].fillna('')
+        props['stars'] = props['stars'].astype('Int64')
         props['night_rank'] = props['night_rank'].astype('Int64')
     if not game_odds.empty:
         model = game_ratings(games, CURRENT_SEASON, GAME_DEFAULTS['prior_games'], GAME_DEFAULTS['regress'])
@@ -271,7 +293,7 @@ def reprice_snapshots() -> int:
                          SHORTLIST_COLUMNS, et_night, lineage, lineups_before_tip, recompute_props)
 
     path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    model_cols = ['player_id_ESPN', *MODEL_COLUMNS, DECISION_COLUMN, *SHORTLIST_COLUMNS, *LINEAGE_COLUMNS]
+    model_cols = ['player_id_ESPN', *MODEL_COLUMNS, DECISION_COLUMN, *SHORTLIST_COLUMNS, 'tier', *LINEAGE_COLUMNS]
     saved = pd.read_csv(path, dtype=str, keep_default_na=False).drop(columns=model_cols, errors='ignore')
     props = read_snapshot(path).drop(columns=model_cols, errors='ignore')
     odds = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))

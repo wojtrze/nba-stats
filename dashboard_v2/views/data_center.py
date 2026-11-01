@@ -4,7 +4,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from core import freshness, jobs
+from core import fetch_worker, freshness, jobs
 from core.data import LAST_FETCH, clear_live, game_odds, lineups, props, rotowire, superbet
 from core.state import language
 from core.ui import page_header
@@ -193,6 +193,55 @@ with lineup_col.container(border=True):
     lineups_caption()
 
 st.caption(t('dc.rw_caption', lang))
+
+
+# --- the scheduled fetches (fetch_loop, a thread of this dashboard) ---
+@st.fragment(run_every=30)
+def schedule_card():
+    import fetch_loop
+    import superbet_fetcher
+    from http_polite import DAILY_REQUEST_BUDGET, blocked_until, requests_today
+    fetch_worker.follow_settings()           # also restarts a worker stopped to change keep_awake
+    settings = fetch_loop.worker_settings()
+    with st.container(border=True):
+        st.markdown(t('dc.schedule_card', lang))
+        st.caption(t('dc.schedule_how', lang))
+        c = st.columns(2)
+        enabled = c[0].toggle(t('dc.schedule_switch', lang), value=settings['enabled'], key='schedule_on')
+        awake = c[1].toggle(t('dc.keep_awake', lang), value=settings['keep_awake'], key='schedule_awake',
+                            help=t('dc.keep_awake_help', lang))
+        if (enabled, awake) != (settings['enabled'], settings['keep_awake']):
+            fetch_loop.save_worker_settings(enabled=enabled, keep_awake=awake)
+            if awake != settings['keep_awake']:
+                fetch_worker.stop()          # restarted with the new setting on the next page run
+            fetch_worker.follow_settings()
+        s = fetch_worker.status()
+        raw = s.get('state', 'stopped') if s['running'] else 'stopped'
+        if raw.startswith('another'):
+            state = t('dc.state.other', lang)
+        elif raw.startswith('fetching'):
+            state = t('dc.state.fetching', lang) + raw[len('fetching'):]
+        elif raw in ('waiting', 'starting', 'stopped'):
+            state = t(f'dc.state.{raw}', lang)
+        else:
+            state = raw
+        nxt = s.get('next')
+        st.markdown(t('dc.schedule_state', lang, state=state, games=s.get('games', 0),
+                      next=f"{pd.Timestamp(nxt).tz_convert(freshness.PL):%a %H:%M}" if nxt else '–'))
+        last_run = s.get('last')
+        if last_run:
+            st.caption(t('dc.schedule_last', lang, ok="✅" if last_run['ok'] else "❌", summary=last_run['summary'],
+                         when=f"{pd.Timestamp(last_run['at']).tz_convert(freshness.PL):%H:%M}"))
+        if s.get('skipped'):
+            st.caption(t('dc.schedule_skipped', lang, n=s['skipped']))
+        until = blocked_until(superbet_fetcher.HOST)
+        if until:
+            st.warning(t('dc.schedule_blocked', lang, when=f"{pd.Timestamp(until).tz_convert(freshness.PL):%H:%M}"))
+        st.caption(t('dc.schedule_budget', lang, n=requests_today(superbet_fetcher.HOST),
+                     budget=DAILY_REQUEST_BUDGET))
+
+
+schedule_card()
 if st.button(t('dc.reload', lang), help=t('dc.reload_help', lang)):
     clear_live()
     st.rerun()

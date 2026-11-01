@@ -5,3 +5,8 @@ __pycache__/
 *.lock
 *.tmp
 data/superbet_contact.txt
+
+# runtime state of the scheduled fetches (http_polite, fetch_loop)
+data/scrape_state.json
+data/fetch_worker.json
+data/fetch_worker_settings.json

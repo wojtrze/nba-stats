@@ -14,8 +14,9 @@ from i18n import label, t, value
 from loaders import filtered_logs, games, player_logs, snapshot_history
 import night_view
 from glossary import signal_legend
-from tracking import (RECOMPUTED, RECORDED, calibration, edge_bucket, paper_accumulators, results_table,
-                      settle_games, threshold_table, tier_scorecard)
+from tracking import (EVERY_LINE, RECOMPUTED, RECORDED, calibration, edge_bucket, paper_accumulators,
+                      results_table, settle_games, star_scorecard, threshold_table)
+from decisions import star_text
 
 lang = language()
 seasons, season_types = page_header(t('results.title', lang), t('results.purpose', lang), with_scope=True)
@@ -230,15 +231,16 @@ with saved_tab:
     with shortlist_tab:
         record = shortlist_record()
         st.caption(t('results.shortlist_intro', lang))
-        scorecard = tier_scorecard(record)
-        if scorecard.empty or not scorecard['bets'].iloc[:2].sum():
+        scorecard = star_scorecard(record)
+        if scorecard.empty or not scorecard.loc[scorecard['stars'] == EVERY_LINE, 'bets'].sum():
             st.info(t('results.shortlist_none', lang))
         else:
             nights = record.drop_duplicates('game_date')
             st.caption(t('results.shortlist_origin', lang, recorded=int((nights['origin'] == RECORDED).sum()),
                          recomputed=int((nights['origin'] == RECOMPUTED).sum())))
-            rates(scorecard.assign(tier=scorecard['tier'].map({'top': '★', 'look': '·'}).fillna(
-                t('results.every_line', lang))))
+            rates(scorecard.assign(stars=[star_text(n) if isinstance(n, int) else
+                                          t('results.every_line', lang) if n == EVERY_LINE else n
+                                          for n in scorecard['stars']]))
             st.markdown(f"**{t('results.ako', lang)}**")
             st.caption(t('results.ako_intro', lang))
             ako = paper_accumulators(record)

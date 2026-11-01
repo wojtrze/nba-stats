@@ -63,18 +63,9 @@ def snapshot_history(name: str) -> pd.DataFrame:
     return read_snapshot(path) if os.path.exists(path) else pd.DataFrame()
 
 
-# --- the run log: every scraper run and Superbet fetch started from a dashboard ---
+# --- the run log: every scraper run and Superbet fetch (daily_snapshot.log_run, shared with the scheduled fetches) ---
 
-RUN_LOG = os.path.join('data', 'run_log.csv')
-RUN_LOG_COLUMNS = ['started_at', 'job', 'command', 'exit_code', 'seconds', 'summary']
-
-
-def log_run(started: datetime, job: str, command: str, code: int, seconds: float, summary: str):
-    """Append one run to data/run_log.csv. job: stats, snapshot or fetch; code 0 = success."""
-    row = pd.DataFrame([{'started_at': started.strftime('%Y-%m-%dT%H:%M:%SZ'), 'job': job, 'command': command,
-                         'exit_code': code, 'seconds': round(seconds, 1), 'summary': summary}],
-                       columns=RUN_LOG_COLUMNS)
-    append_csv(row, RUN_LOG, RUN_LOG_COLUMNS)
+from daily_snapshot import RUN_LOG, RUN_LOG_COLUMNS, log_run  # noqa: E402
 
 
 # --- Superbet, on demand only ---
@@ -87,7 +78,7 @@ def log_run(started: datetime, job: str, command: str, code: int, seconds: float
 # the snapshot's model columns; the pages price the lines themselves
 _MODEL_COLUMNS = ['player_id_ESPN', 'pick', 'model_pct', 'edge_pp', 'edge_low', 'proj_avg', 'signal', 'red_flag',
                   'raw_over_pct', 'raw_under_pct', 'market_over_pct', 'cost_profile', 'eval_side', 'ev_net_100',
-                  'decision', 'tier', 'night_rank', 'model_version', 'calibration_id', 'prediction_origin']
+                  'decision', 'tier', 'stars', 'night_rank', 'model_version', 'calibration_id', 'prediction_origin']
 
 
 @st.cache_resource(show_spinner=False)
@@ -136,6 +127,11 @@ def fetch_superbet() -> Optional[str]:
     None when it worked. A failed fetch saves nothing; the pages keep the previous fetch."""
     from daily_snapshot import save_superbet
     from superbet_fetcher import todays_offers
+    from http_polite import blocked_until
+    from superbet_fetcher import HOST
+    until = blocked_until(HOST)
+    if until:
+        return f"Superbet refused requests (403/429): the next try is at {until:%H:%M} UTC"
     if claim_superbet():
         return f"Superbet was contacted less than {SUPERBET_COOLDOWN.seconds // 60} minutes ago"
     store = _superbet_store()
