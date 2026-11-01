@@ -7,11 +7,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from backtest.explore import bets, cumulative, filter_lines, lines_summary, totals
+from backtest.explore import add_stars, bets, cumulative, filter_lines, lines_summary, totals
 from backtest.run import MIN_GAMES, picks_frame, rate_row, strategies
 from core import charts
 from core.state import language
 from core.ui import kpis, table
+from decisions import star_text
 from glossary import column_config, tinted
 from i18n import label, t, value
 from metrics import grouped_rates
@@ -25,17 +26,21 @@ RATE_FORMATS = {'bets': '%d', 'hit %': '%.1f', 'ci low %': '%.1f', 'ci high %': 
                 'avg odds': '%.2f'}
 BET_FORMATS = {'line': '%g', 'actual': '%g', 'avg': '%.1f', 'proj avg': '%.1f', 'edge pp': '%+.1f',
                'model %': '%.0f', 'bet odds': '%.2f', 'bet profit': '%+.2f', 'games': '%d'}
-BET_COLUMNS = ['game_date', 'name_ESPN', 'team', 'bet_type', 'line', 'avg', 'proj avg', 'best side', 'signal',
+BET_COLUMNS = ['game_date', 'name_ESPN', 'team', 'bet_type', 'line', 'avg', 'proj avg', 'best side', 'stars',
                'edge pp', 'model %', 'bet side', 'bet odds', 'actual', 'bet result', 'bet profit', 'games']
 SUMMARY_FORMATS = {'lines': '%d', 'over %': '%.0f', 'avg line': '%.1f', 'avg actual': '%.1f',
                    'actual − line': '%+.2f'}
 STAT_NAME = lambda s: 'PRA' if s == 'ARP' else s
+STAR_FILTER = [4, 3, 2, 1, 0, 'none']
+TOP_STARS = "Model pick, 4★"          # the summary's star strategies, next to backtest.run.strategies
+SOME_STARS = "Model pick, 3★ or more"
 
 
 @st.cache_data(show_spinner="Reading the 2022/23 backtest...")
 def backtest_lines(mtime: float) -> pd.DataFrame:
-    """data/backtest/2022_lines.csv; mtime only makes a new run re-read."""
-    return pd.read_csv(BACKTEST_FILE, parse_dates=['game_date'])
+    """data/backtest/2022_lines.csv with each line's stars (explore.add_stars); mtime only makes a new run
+    re-read."""
+    return add_stars(pd.read_csv(BACKTEST_FILE, parse_dates=['game_date']))
 
 
 def _rates(rates: pd.DataFrame):
@@ -79,7 +84,7 @@ def profit_chart(b: pd.DataFrame, key: str, title: str):
 def bets_table(b: pd.DataFrame, height: int = 400):
     """The bets, newest first. Unstyled (no column tint): a whole season is too many cells for a pandas Styler."""
     shown = b.sort_values(['game_date', 'name_ESPN'], ascending=[False, True])
-    shown = shown.assign(signal=shown['signal'].fillna(''))   # an empty signal reads 'None' otherwise
+    shown = shown.assign(stars=shown['stars'].map(star_text))
     lang = language()
     words = shown[BET_COLUMNS].assign(**{c: shown[c].map(lambda v: value(v, lang))
                                          for c in ('best side', 'bet side', 'bet result')})
@@ -94,17 +99,22 @@ def summary_view(every: pd.DataFrame):
     lang = language()
     lines = every[every['main'] & (every['games'] >= MIN_GAMES)]
     st.caption(t('bt.lines_caption', lang, n=len(lines), games=MIN_GAMES, dates=lines['game_date'].nunique()))
-    rows = pd.DataFrame([{'strategy': name, **rate_row(lines, side, odds)}
-                         for name, (side, odds) in strategies(lines).items()])
+    # the 🟢 / 🟡 strategies stay in backtest.run's report (the earlier threshold); the page rates by stars
+    tested = {name: s for name, s in strategies(lines).items() if '🟢' not in name}
+    pick, odds = tested["Model pick (every line)"]
+    tested |= {TOP_STARS: (pick.where(lines['stars'] == 4), odds), SOME_STARS: (pick.where(lines['stars'] >= 3), odds)}
+    rows = pd.DataFrame([{'strategy': name, **rate_row(lines, side, odds)} for name, (side, odds) in tested.items()])
     picks = picks_frame(lines)
+    picks = picks.assign(stars=picks['stars'].map(star_text))
     by_name = rows.set_index('strategy')
-    green, under = by_name.loc["Model pick, 🟢 only"], by_name.loc["Always Under"]
+    top, under = by_name.loc[TOP_STARS], by_name.loc["Always Under"]
     kpis([{'label': t('bt.kpi.picks_hit', lang), 'value': f"{100 * picks['is_hit'].mean():.1f}%",
            'help': t('bt.kpi.picks_hit_help', lang)},
           {'label': t('bt.kpi.picks_roi', lang),
            'value': f"{100 * (np.where(picks['is_hit'], picks['odds'], 0) - 1).mean():+.1f}"},
-          {'label': t('bt.kpi.green_roi', lang), 'value': f"{green['ROI %']:+.1f}",
-           'delta': t('bt.kpi.n_bets', lang, n=int(green['bets'])), 'delta_color': 'off'},
+          {'label': t('bt.kpi.top_roi', lang), 'value': f"{top['ROI %']:+.1f}",
+           'delta': t('bt.kpi.n_bets', lang, n=int(top['bets'])), 'delta_color': 'off',
+           'help': t('bt.kpi.top_help', lang)},
           {'label': t('bt.kpi.under_roi', lang), 'value': f"{under['ROI %']:+.1f}",
            'help': t('bt.kpi.under_help', lang)}])
     left, right = st.columns([3, 2])
@@ -123,7 +133,7 @@ def summary_view(every: pd.DataFrame):
                                   xaxis=dict(title=t('results.calibration_x', lang), range=[20, 100]),
                                   yaxis=dict(title=t('results.calibration_y', lang), range=[20, 100])), key='bt_cal')
         st.caption(t('results.calibration_caption', lang))
-    for i, (what, by) in enumerate([('signal', 'signal'), ('edge', 'edge bucket'), ('stat', 'bet_type'),
+    for i, (what, by) in enumerate([('stars', 'stars'), ('edge', 'edge bucket'), ('stat', 'bet_type'),
                                     ('month', 'month')]):
         if i % 2 == 0:
             cols = st.columns(2)
@@ -142,8 +152,9 @@ def tester_view(every: pd.DataFrame):
                                placeholder=t('bt.all_players', lang))
     stats = f[2].pills(t('bt.stats', lang), sorted(every['bet_type'].unique()), selection_mode='multi',
                        key='bt_stats', format_func=STAT_NAME, help=t('bt.none_all', lang))
-    signals = f[3].pills(t('bt.signal', lang), ['🟢', '🟡', 'none'], selection_mode='multi', key='bt_signals',
-                         format_func=lambda v: value(v, lang), help=t('bt.signal_help', lang))
+    stars = f[3].pills(t('bt.stars', lang), STAR_FILTER, selection_mode='multi', key='bt_stars',
+                       format_func=lambda v: t('bt.unrated', lang) if v == 'none' else star_text(v),
+                       help=t('bt.stars_help', lang))
     g = st.columns([5, 2, 3], vertical_alignment='bottom')
     bet_on = g[0].segmented_control(t('bt.bet_on', lang), BET_LABELS, default='model',
                                     format_func=lambda k: t(f'bt.bet.{k}', lang), key='bt_bet_on') or 'model'
@@ -159,7 +170,7 @@ def tester_view(every: pd.DataFrame):
         + [t('bt.f.main', lang)] * main_only
     st.caption(t('bt.filters', lang, list=", ".join(active)))
     since, until = period if isinstance(period, tuple) and len(period) == 2 else (first, last)
-    chosen = filter_lines(every, since, until, players, stats, signals, min_edge if use_edge else None, min_games,
+    chosen = filter_lines(every, since, until, players, stats, stars, min_edge if use_edge else None, min_games,
                           main_only)
     b = bets(chosen, bet_on, side)
     if b.empty:
@@ -217,8 +228,9 @@ def player_view(every: pd.DataFrame):
                     line=dict(color=charts.AVERAGE))
     fig.add_scatter(x=part['game_date'], y=part['actual'], mode='markers', name=t('bt.result', lang),
                     marker=dict(size=9, color=colours),
-                    customdata=part[['line', 'best side', 'signal']].fillna('').assign(
-                        **{'best side': lambda d: d['best side'].map(lambda v: value(v, lang))}),
+                    customdata=part[['line', 'best side']].fillna('').assign(
+                        **{'best side': lambda d: d['best side'].map(lambda v: value(v, lang)),
+                           'stars': part['stars'].map(star_text)}),
                     hovertemplate=t('bt.player_hover', lang) + "<extra></extra>")
     charts.show(charts.layout(fig, 340, t('bt.player_chart', lang, name=player, stat=STAT_NAME(stat)),
                               yaxis=dict(title=STAT_NAME(stat))), key='bt_player_chart')
@@ -258,10 +270,11 @@ def render():
 
 def calibration_view():
     """The report of python -m backtest.calibrate: fitted on the earlier 2022/23 and Superbet lines, scored on the
-    later ones, with the 🟢 threshold."""
+    later ones, with the 🟢 threshold (the earlier name of the threshold a 5★ needs)."""
     if not os.path.exists(CALIBRATION_REPORT):
         st.info(t('bt.no_calibration', language()))
         return
+    st.caption(t('bt.green_is_admission', language()))
     if language() != 'en':
         st.caption(t('bt.report_english', language()))
     with open(CALIBRATION_REPORT, encoding='utf-8') as f:

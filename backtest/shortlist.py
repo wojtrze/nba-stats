@@ -97,18 +97,25 @@ def shortlist_table(d: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows + [{'lines bet': "every line (the key's side)", **rates(d)}])
 
 
-def star_table(d: pd.DataFrame) -> pd.DataFrame:
-    """rates() per star level, with decisions.star_levels' rules on the scored lines (🔴 = 0★), then 'every line'
-    and 4★ − 1★: the difference of won − price pp with its 95% range from resampling whole nights."""
+def night_stars(d: pd.DataFrame, score: pd.Series) -> pd.Series:
+    """decisions.star_levels of d's lines ranked by score within each night (game_date): 🔴 = 0★, 4★ only for the
+    player's best line and once per game, as tonight's stars. Indexed like d."""
     from decisions import star_levels
-    from backtest.ablation import night_bootstrap
+    order = d.assign(rank_score=score).sort_values(['game_date', 'rank_score'], ascending=[True, False],
+                                                   kind='stable')
+    pct = 100 * order.groupby('game_date')['rank_score'].rank(ascending=False, pct=True, method='first')
     signal = 'saved signal' if 'saved signal' in d else 'signal'
-    d = d.sort_values(['game_date', 'score'], ascending=[True, False], kind='stable')
-    pct = 100 * d.groupby('game_date')['score'].rank(ascending=False, pct=True, method='first')
-    eligible = d[signal].fillna('') != '🔴' if signal in d else pd.Series(True, index=d.index)
-    best = ~d[['game_date', 'name_ESPN']].duplicated()
-    event = d['home'].astype(str) + d['away'].astype(str)
-    d = d.assign(stars=star_levels(pct, eligible, best, d['game_date'], event).values)
+    eligible = order[signal].fillna('') != '🔴' if signal in d else pd.Series(True, index=order.index)
+    best = ~order[['game_date', 'name_ESPN']].duplicated()
+    event = order['home'].astype(str) + order['away'].astype(str)
+    return star_levels(pct, eligible, best, order['game_date'], event).reindex(d.index)
+
+
+def star_table(d: pd.DataFrame) -> pd.DataFrame:
+    """rates() per star level (night_stars on the key's score), then 'every line' and 4★ − 1★: the difference of
+    won − price pp with its 95% range from resampling whole nights."""
+    from backtest.ablation import night_bootstrap
+    d = d.assign(stars=night_stars(d, d['score']))
     rows = [{'stars': f"{n}★", **rates(d[d['stars'] == n])} for n in (4, 3, 2, 1, 0)]
     rows.append({'stars': 'every line', **rates(d)})
     top, bottom = d[d['stars'] == 4], d[d['stars'] == 1]

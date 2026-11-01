@@ -233,3 +233,56 @@ def test_closing_line_and_clv(green_at_5):
     assert pd.isna(settled.loc['REB', 'clv %'])
     stale = closing.assign(**{'close age min': CLOSE_MAX_AGE_MIN + 1})  # last read too early: no CLV
     assert pd.isna(settle_props(_props(), _logs(), _games(), bets=first, closing=stale)['clv %']).all()
+
+
+def test_game_closing_line_and_clv():
+    from tracking import CLOSE_MAX_AGE_MIN, closing_games
+    late = '2026-10-23T23:20:00Z'
+    quotes = pd.DataFrame([
+        {'fetched_at': '2026-10-22T08:00:00Z', 'event_id': 1, 'market': 'ML', 'side': 'home', 'line': np.nan,
+         'odds': 1.5},
+        {'fetched_at': '2026-10-22T08:00:00Z', 'event_id': 1, 'market': 'ML', 'side': 'away', 'line': np.nan,
+         'odds': 2.6},
+        # the home moneyline shortened by the close
+        {'fetched_at': '2026-10-22T23:20:00Z', 'event_id': 1, 'market': 'ML', 'side': 'home', 'line': np.nan,
+         'odds': 1.4},
+        {'fetched_at': '2026-10-22T23:20:00Z', 'event_id': 1, 'market': 'ML', 'side': 'away', 'line': np.nan,
+         'odds': 2.9},
+        # a spread's sides have opposite lines; the away side was withdrawn: neither has a margin-free close
+        {'fetched_at': '2026-10-22T08:00:00Z', 'event_id': 1, 'market': 'SPREAD', 'side': 'home', 'line': -5.5,
+         'odds': 1.9},
+        {'fetched_at': '2026-10-22T08:00:00Z', 'event_id': 1, 'market': 'SPREAD', 'side': 'away', 'line': 5.5,
+         'odds': 1.9},
+        {'fetched_at': '2026-10-22T23:20:00Z', 'event_id': 1, 'market': 'SPREAD', 'side': 'away', 'line': 5.5,
+         'odds': np.nan},
+        {'fetched_at': late, 'event_id': 1, 'market': 'ML', 'side': 'home', 'line': np.nan, 'odds': 9.0},
+    ])
+    reads = pd.DataFrame({'fetched_at': ['2026-10-22T08:00:00Z', '2026-10-22T23:20:00Z', late], 'event_id': 1,
+                          'start_time': START})
+    closing = closing_games(quotes, reads).set_index(['market', 'side'])
+    assert closing.loc[('ML', 'home'), 'close odds'] == 1.4 and closing.loc[('ML', 'home'), 'close age min'] == 10
+    assert closing.loc[('SPREAD', 'home'), 'close odds'] == 1.9 and ('SPREAD', 'away') not in closing.index
+    assert pd.isna(closing.loc[('SPREAD', 'home'), 'close other'])
+    settled = settle_games(_game_odds(), _games(), closing=closing.reset_index()).set_index(['market', 'side'])
+    home = settled.loc[('ML', 'home')]
+    p_close, p_bet = (1 / 1.4) / (1 / 1.4 + 1 / 2.9), (1 / 1.5) / (1 / 1.5 + 1 / 2.6)
+    assert home['clv %'] == pytest.approx(100 * (1.5 * p_close - 1))     # the bet beat the close
+    assert home['clv % std'] == pytest.approx(100 * (0.88 * 1.5 * p_close - 1))
+    assert home['clv pp'] == pytest.approx(100 * (p_close - p_bet))
+    assert settled.loc[('ML', 'away'), 'clv pp'] == pytest.approx(-home['clv pp'])
+    assert pd.isna(settled.loc[('SPREAD', 'home'), 'clv %']) and pd.isna(settled.loc[('TOTAL', 'over'), 'clv %'])
+    stale = closing.reset_index().assign(**{'close age min': CLOSE_MAX_AGE_MIN + 1})
+    assert settle_games(_game_odds(), _games(), closing=stale)['clv %'].isna().all()
+
+
+def test_close_coverage_of_the_last_started_night():
+    from tracking import close_coverage
+    reads = pd.DataFrame({'event_id': [1, 1, 2, 3],
+                          'fetched_at': ['2026-10-22T20:00:00Z', '2026-10-22T23:25:00Z', '2026-10-22T22:00:00Z',
+                                         '2026-10-23T20:00:00Z'],
+                          'start_time': [START, START, START, '2026-10-23T23:30:00Z']})
+    # game 1 read 5 min before tip-off, game 2 last read 90 min before; game 3 (the next night) not started yet
+    assert close_coverage(reads, pd.Timestamp('2026-10-23T12:00:00Z')) == {
+        'night': pd.Timestamp('2026-10-22'), 'valid': 1, 'games': 2}
+    assert close_coverage(reads, pd.Timestamp('2026-10-22T12:00:00Z')) is None
+    assert close_coverage(pd.DataFrame(), pd.Timestamp('2026-10-23T12:00:00Z')) is None

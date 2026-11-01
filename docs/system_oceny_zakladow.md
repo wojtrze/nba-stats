@@ -466,13 +466,22 @@ stron serwisu, nie API, a API jest tym samym publicznym źródłem, z którego k
 startem; ważne, gdy mecz odczytano najpóźniej 10 min przed startem (`CLOSE_MAX_AGE_MIN`). Przy tej samej linii:
 `clv %` = kurs zakładu × szansa zamknięcia bez marży − 1 (powyżej 0 = zakład pobił rynek), `clv % std` to samo po
 podatku, `clv pp` = szansa zamknięcia bez marży − szansa przy zakładzie (> 0 = rynek przesunął się w stronę
-zakładu). Przy zmienionej linii tylko `line vs close`. Raport: `python -m backtest.clv_report` →
-`data/backtest/clv.md` (CLV po gwiazdkach, po godzinach przed startem, po ustalonych z góry segmentach: główne
-i poboczne statystyki, Over i Under; odsetek linii, przy których rynek ruszył w stronę oceny modelu).
+zakładu). Przy zmienionej linii tylko `line vs close`. Rynki meczowe (`closing_games`, `add_game_clv`): szansa
+bez marży z pary stron w tym samym odczycie (gospodarze/goście; spread `home −x` z `away +x`; Over/Under tej samej
+linii). Raport: `python -m backtest.clv_report` → `data/backtest/clv.md` (CLV po gwiazdkach, po godzinach przed
+startem, po ustalonych z góry segmentach: główne i poboczne statystyki, Over i Under, pierwsza piątka i rezerwa
+wg ostatniego składu RotoWire przed startem; odsetek linii, przy których rynek ruszył w stronę oceny modelu;
+tabela po statystykach tylko opisowa; strona modelu na głównych liniach meczowych). Karta harmonogramu w Centrum
+danych pokazuje, dla ilu meczów ostatniej nocy zamknięcie jest ważne.
 
-**Procedura dopuszczenia progu (5★).** Próg wybierany na nocach do daty D, oceniany na kolejnych ≥ 20 nietkniętych
-nocach. Warunek: dolna granica przedziału ROI po podatku > 0 **albo** średnie CLV po podatku > 0 z dolną granicą
-> 0. Dopiero wtedy `ADMITTED_THRESHOLD` dostaje wartość.
+**Procedura dopuszczenia progu (5★)**: `python -m backtest.threshold_admission [--until D]` →
+`data/backtest/threshold_admission.md`. Na nocach do daty D (co najmniej 10) dopasowuje kalibrację i wybiera
+najmniejszy próg przewagi po podatku (`edge net pp` ∈ 0, 1, 2, 3, 5, 8), którego zakłady zarobiły po podatku
+(≥ 50 zakładów, ≥ 10 nocy). Ocenia go na kolejnych ≥ 20 nocach, których nie widział ani wybór, ani kalibracja,
+na zakładach takich, jakie dałaby decyzja *Obstaw*: w każdym meczu najlepsza linia bez 🔴 powyżej progu.
+Warunek: dolna granica przedziału ROI po podatku > 0 **albo** średnie CLV po podatku > 0 z dolną granicą > 0
+(przedziały z losowania całych nocy). Domyślne D zostawia 20 nocy do oceny. Raport nigdy nie ustawia
+`ADMITTED_THRESHOLD`: wartość wpisuje się ręcznie, po przeczytaniu raportu, osobnym commitem.
 
 ---
 
@@ -619,9 +628,10 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 |---|---|
 | Wycena propsów i meczów, kalibracja w użyciu, sygnały | `dashboard/models.py` |
 | Decyzje (Obstaw / Nie obstawiaj / Czekaj / Niedostępne), zachowanie otwartej oferty, gwiazdki (`stars`, `star_levels`) | `dashboard/decisions.py` |
-| Wyniki gwiazdek, CLV i AKO na papierze (`settle_stars`, `star_scorecard`, `closing_props`, `add_clv`, `paper_accumulators`) | `dashboard/tracking.py` |
+| Wyniki gwiazdek, CLV i AKO na papierze (`settle_stars`, `star_scorecard`, `closing_props`, `closing_games`, `add_clv`, `paper_accumulators`) | `dashboard/tracking.py` |
 | Wybór klucza rankingu i sprawdzenie pasm gwiazdek | `backtest/shortlist.py` → `data/backtest/shortlist.md` |
 | Raport CLV | `backtest/clv_report.py` → `data/backtest/clv.md` |
+| Dopuszczenie progu 5★ | `backtest/threshold_admission.py` → `data/backtest/threshold_admission.md` |
 | Harmonogram pobierania, grzeczny klient HTTP | `fetch_schedule.py`, `fetch_loop.py`, `http_polite.py`, `dashboard_v2/core/fetch_worker.py` |
 | Kontrakt kosztowy (profile, próg, EV, zysk z rozliczenia) | `dashboard/metrics.py` (`COST_PROFILES`, `break_even`, `expected_return_100`, `side_profit`) |
 | Wzory (hit rate, rozkład, kalibracja, rywal, tempo, nieobecni, model meczu) | `dashboard/metrics.py` |

@@ -2008,14 +2008,16 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'bt.kpi.picks_hit_help': _w("Every line's model pick; break-even at these odds is about 52.5%",
                                 "Typ modelu na każdej linii; próg opłacalności przy tych kursach to ok. 52.5%"),
     'bt.kpi.picks_roi': _w("Model picks: profit per 100", "Typy modelu: zysk na 100"),
-    'bt.kpi.green_roi': _w("🟢 picks: profit per 100", "Typy 🟢: zysk na 100"),
+    'bt.kpi.top_roi': _w("4★ picks: profit per 100", "Typy 4★: zysk na 100"),
+    'bt.kpi.top_help': _w("The model's pick on each night's 4★ lines: the best of that night, not a profitable bet",
+                          "Typ modelu na liniach 4★ każdej nocy: najlepsze tej nocy, nie: opłacalne"),
     'bt.kpi.n_bets': _w("{n} bets", "{n} {n|zakład|zakłady|zakładów}"),
     'bt.kpi.under_roi': _w("Always Under: profit per 100", "Zawsze Poniżej: zysk na 100"),
     'bt.kpi.under_help': _w("The simplest baseline", "Najprostszy punkt odniesienia"),
     'bt.strategies': _w("**Strategies on the same lines**", "**Strategie na tych samych liniach**"),
     'bt.cal_title': _w("Model chance vs how often the pick won", "Szansa modelu a jak często typ wygrywał"),
     'bt.by': _w("**Model pick – {what}**", "**Typ modelu – {what}**"),
-    'bt.by.signal': _w("by signal", "wg sygnału"), 'bt.by.edge': _w("by edge (pp)", "wg przewagi (pp)"),
+    'bt.by.stars': _w("by stars", "wg gwiazdek"), 'bt.by.edge': _w("by edge (pp)", "wg przewagi (pp)"),
     'bt.by.stat': _w("by stat", "wg statystyki"), 'bt.by.month': _w("by month", "wg miesiąca"),
     'bt.tester_caption': _w("Choose which lines to bet and how; every number below is for exactly that selection, 1 "
                             "unit per bet at Unibet's odds.", "Wybierz, które linie grać i jak; każda liczba poniżej "
@@ -2024,9 +2026,16 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'bt.dates': _w("Game dates", "Daty meczów"), 'bt.players': _w("Players", "Zawodnicy"),
     'bt.all_players': _w("All players", "Wszyscy zawodnicy"), 'bt.stats': _w("Stats", "Statystyki"),
     'bt.none_all': _w("None picked = all", "Nic nie wybrane = wszystkie"),
-    'bt.signal': _w("Model signal", "Sygnał modelu"),
-    'bt.signal_help': _w("The model's signal on the line, whatever you bet on. None picked = all",
-                         "Sygnał modelu na linii, niezależnie od tego, co grasz. Nic nie wybrane = wszystkie"),
+    'bt.stars': _w("Stars", "Gwiazdki"),
+    'bt.stars_help': _w("The line's stars that night, by the rules of tonight's: its place among the night's main "
+                        "lines by the model's expected return, whatever you bet on. None picked = all",
+                        "Gwiazdki linii tej nocy, według zasad dzisiejszych: miejsce wśród głównych linii nocy wg "
+                        "oczekiwanego zwrotu modelu, niezależnie od tego, co grasz. Nic nie wybrane = wszystkie"),
+    'bt.unrated': _w("no rating", "bez oceny"),
+    'bt.green_is_admission': _w("🟢 below is the earlier name of the admission threshold: a 5★ needs one that held "
+                                "up on nights not used to choose it, and none has yet.",
+                                "🟢 poniżej to dawna nazwa progu dopuszczenia: 5★ wymaga progu sprawdzonego na "
+                                "nocach, których nie użyto do jego wyboru, a takiego jeszcze nie ma."),
     'bt.bet_on': _w("Strategy tested", "Testowana strategia"), 'bt.side': _w("Side", "Strona"),
     'bt.side_help': _w("Only the bets on this side; none picked = both", "Tylko zakłady na tę stronę; nic = obie"),
     'bt.more': _w("More filters", "Więcej filtrów"),
@@ -2239,6 +2248,10 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'dc.schedule_budget': _w("Superbet requests today: {n} of {budget}", "Zapytania do Superbet dziś: {n} z {budget}"),
     'dc.schedule_blocked': _w("Superbet refused requests (403/429): no contact until {when}.",
                               "Superbet odmówił (403/429): żadnych zapytań do {when}."),
+    'dc.schedule_closes': _w("Night of {night}: a valid closing price for {n} of {games} started games (read at most "
+                             "{minutes} min before tip-off)",
+                             "Noc {night}: ważne zamknięcie dla {n} z {games} rozpoczętych meczów (odczyt najpóźniej "
+                             "{minutes} min przed startem)"),
     'dc.schedule_skipped': _w("{n} slots missed (the computer slept or the dashboard started late)",
                               "{n} terminów pominiętych (komputer spał albo dashboard ruszył później)"),
     'dc.state.waiting': _w("waiting", "czeka"), 'dc.state.starting': _w("starting", "startuje"),

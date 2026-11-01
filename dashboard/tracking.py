@@ -123,26 +123,99 @@ def _last_quote(snapshots: pd.DataFrame, key, cols) -> pd.DataFrame:
 CLOSE_MAX_AGE_MIN = 10      # a close is valid when the game was last read at most this long before tip-off
 CLOSE_COLUMNS = ['close line', 'close over', 'close under', 'close age min']
 CLV_COLUMNS = ['close line', 'close odds', 'close age min', 'line vs close', 'clv %', 'clv % std', 'clv pp']
+GAME_CLOSE_COLUMNS = ['close odds', 'close other', 'close age min']
+GAME_CLV_COLUMNS = ['close odds', 'close age min', 'clv %', 'clv % std', 'clv pp']
 
 
-def closing_props(quotes: pd.DataFrame, event_fetches: pd.DataFrame) -> pd.DataFrame:
-    """Each line's closing quote from fetch_loop's files: the last quote of its key before tip-off (quotes holds
-    only changes, so that's the line and odds as the game was last read) and 'close age min', how long before
-    tip-off the game was last read (its superbet_event_fetches row: a game read and unchanged still counts). A
-    line withdrawn before tip-off (empty odds) has no close."""
-    if quotes.empty or event_fetches.empty:
-        return pd.DataFrame(columns=PROP_KEY + CLOSE_COLUMNS)
+def last_reads(event_fetches: pd.DataFrame) -> pd.DataFrame:
+    """Per event_id (index): tip and close age min, how long before tip-off the game was last read (its
+    superbet_event_fetches rows: a game read and unchanged still counts)."""
     reads = event_fetches.assign(at=pd.to_datetime(event_fetches['fetched_at'], utc=True),
                                  tip=pd.to_datetime(event_fetches['start_time'], utc=True))
     reads = reads[reads['at'] < reads['tip']]
-    last_read = reads.groupby('event_id').agg(tip=('tip', 'first'), last=('at', 'max'))
-    last_read['close age min'] = ((last_read['tip'] - last_read['last']).dt.total_seconds() / 60).round(1)
-    q = quotes.merge(last_read[['tip']], left_on='event_id', right_index=True)
+    out = reads.groupby('event_id').agg(tip=('tip', 'first'), last=('at', 'max'))
+    out['close age min'] = ((out['tip'] - out['last']).dt.total_seconds() / 60).round(1)
+    return out[['tip', 'close age min']]
+
+
+def close_coverage(event_fetches: pd.DataFrame, now) -> Optional[dict]:
+    """The latest night (US-Eastern date) with a game already started: {'night', 'valid' (its started games read
+    at most CLOSE_MAX_AGE_MIN before tip-off), 'games' (its started games)}; None when no game has started."""
+    if event_fetches.empty:
+        return None
+    reads = last_reads(event_fetches)
+    started = reads[reads['tip'] <= pd.Timestamp(now)]
+    if started.empty:
+        return None
+    night = _et_date(started['tip'])
+    last = started[night == night.max()]
+    return {'night': night.max(), 'valid': int((last['close age min'] <= CLOSE_MAX_AGE_MIN).sum()),
+            'games': len(last)}
+
+
+def _closing(quotes: pd.DataFrame, event_fetches: pd.DataFrame, key) -> pd.DataFrame:
+    """Each key's last quote before tip-off (quotes holds only changes, so that's the quote as the game was last
+    read), with close age min."""
+    reads = last_reads(event_fetches)
+    q = quotes.merge(reads[['tip']], left_on='event_id', right_index=True)
     q = q[pd.to_datetime(q['fetched_at'], utc=True) < q['tip']].sort_values('fetched_at', kind='stable')
-    close = q.drop_duplicates(PROP_KEY, keep='last')
+    return q.drop_duplicates(key, keep='last').merge(reads[['close age min']], left_on='event_id',
+                                                     right_index=True)
+
+
+def closing_props(quotes: pd.DataFrame, event_fetches: pd.DataFrame) -> pd.DataFrame:
+    """Each line's closing quote from fetch_loop's files: the last quote of its key before tip-off and close age
+    min (last_reads). A line withdrawn before tip-off (empty odds) has no close."""
+    if quotes.empty or event_fetches.empty:
+        return pd.DataFrame(columns=PROP_KEY + CLOSE_COLUMNS)
+    close = _closing(quotes, event_fetches, PROP_KEY)
     close = close[close['over_odds'].notna() & close['under_odds'].notna()]
     close = close.rename(columns={'line': 'close line', 'over_odds': 'close over', 'under_odds': 'close under'})
-    return close.merge(last_read[['close age min']], left_on='event_id', right_index=True)[PROP_KEY + CLOSE_COLUMNS]
+    return close[PROP_KEY + CLOSE_COLUMNS]
+
+
+def _with_other(outcomes: pd.DataFrame, other: str, on) -> pd.DataFrame:
+    """outcomes with `other`, the odds of the opposite outcome among the same rows (matched on `on`): the other
+    team (a spread's line is from its side, so home −5.5 faces away +5.5) or the other side of the same total.
+    NaN without one."""
+    flip = {'home': 'away', 'away': 'home', 'over': 'under', 'under': 'over'}
+    spread = outcomes['market'] == 'SPREAD'
+    flipped = outcomes[on + ['odds']].assign(side=outcomes['side'].map(flip),
+                                             line=outcomes['line'].where(~spread, -outcomes['line']))
+    out = outcomes.merge(flipped.rename(columns={'odds': other}).drop_duplicates(on), on=on, how='left')
+    out.index = outcomes.index      # pandas matches the moneyline's NaN line to NaN
+    return out
+
+
+def closing_games(quotes: pd.DataFrame, event_fetches: pd.DataFrame) -> pd.DataFrame:
+    """Each game outcome's closing quote (as closing_props): close odds, close other (the opposite outcome's
+    closing odds, for the margin-free chance) and close age min. Withdrawn outcomes have no close."""
+    if quotes.empty or event_fetches.empty:
+        return pd.DataFrame(columns=GAME_KEY + GAME_CLOSE_COLUMNS)
+    close = _closing(quotes, event_fetches, GAME_KEY)
+    close = _with_other(close[close['odds'].notna()], 'close other', GAME_KEY)
+    return close.rename(columns={'odds': 'close odds'})[GAME_KEY + GAME_CLOSE_COLUMNS]
+
+
+def add_game_clv(bets: pd.DataFrame, closing: pd.DataFrame, snapshots: pd.DataFrame) -> pd.DataFrame:
+    """bets (game outcomes with odds and fetched_at) and their close: close odds, close age min and, when the close
+    is valid with both sides quoted: clv %, clv % std and clv pp as in add_clv. The bet's own margin-free chance
+    comes from the opposite outcome in the same fetch (snapshots)."""
+    out = bets.drop(columns=[c for c in GAME_CLOSE_COLUMNS if c in bets]).merge(closing, on=GAME_KEY, how='left')
+    out.index = bets.index
+    on = GAME_KEY + ['fetched_at']
+    if len(snapshots) and 'fetched_at' in out:
+        same_fetch = _with_other(snapshots[on + ['odds']], 'bet other', on)
+        out = out.merge(same_fetch[on + ['bet other']].drop_duplicates(on), on=on, how='left')
+        out.index = bets.index
+    else:
+        out['bet other'] = np.nan
+    valid = (out['close age min'] <= CLOSE_MAX_AGE_MIN) & out['close other'].notna()
+    p_close = _no_vig(out['close odds'], out['close other'])
+    out['clv %'] = (100 * (out['odds'] * p_close - 1)).where(valid)
+    out['clv % std'] = (100 * (alpha(SUPERBET_STANDARD) * out['odds'] * p_close - 1)).where(valid)
+    out['clv pp'] = (100 * (p_close - _no_vig(out['odds'], out['bet other']))).where(valid)
+    return out.drop(columns=['bet other', 'close other'])
 
 
 def _no_vig(side_odds, other_odds):
@@ -259,12 +332,14 @@ def _main_keys(snapshots: pd.DataFrame) -> set:
     return keys
 
 
-def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd.DataFrame] = None,
+                 closing: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     """One row per snapshotted game outcome (event, market, side, line) as first offered before tip-off, with the
     model's chance and edge at that moment (saved by daily_snapshot.py), the final score and the result.
     main = it was Superbet's main line in a snapshot. h before tip / last odds / last h before tip / odds vs last
     %: as in settle_props (+ = a better price than the last quote before tip-off). status: settled, pending (not stored yet) or unresolved (still
-    missing while later games are stored). bets: as in settle_props."""
+    missing while later games are stored). bets: as in settle_props. closing: closing_games output, which adds
+    GAME_CLV_COLUMNS (add_game_clv)."""
     if bets is None:
         bets = _open_and_close(snapshots, GAME_KEY)[0] if len(snapshots) else snapshots
     if bets.empty:
@@ -304,6 +379,9 @@ def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd
     bets['h before tip'] = _hours_before_tip(bets['fetched_at'], bets['start_time']) if 'fetched_at' in bets \
         else np.nan
     bets['odds vs last %'] = 100 * (bets['odds'] / bets['last odds'] - 1)
+    if closing is not None:
+        bets = add_game_clv(bets, closing, snapshots)
+        keep = GAME_CLV_COLUMNS + keep
     return bets[GAME_RESULT_COLUMNS + keep]
 
 

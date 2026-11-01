@@ -5,18 +5,32 @@ from typing import Iterable, Optional
 import numpy as np
 import pandas as pd
 
-from backtest.run import side_result, strategies
+from backtest.run import MIN_GAMES, side_result, strategies
 
 # what the tester can bet on each line: a backtest.run.strategies name
 BET_ON = {'model': "Model pick (every line)", 'average': "Toward the season average", 'under': "Always Under",
           'over': "Always Over"}
 
 
+def add_stars(t: pd.DataFrame) -> pd.DataFrame:
+    """t with 'stars' (Int64): shortlist.night_stars of the model's pick on each night's main lines of players with
+    MIN_GAMES+ games (per variant), ranked by its expected return (model % × pick odds), as tonight's stars are;
+    NA for the other lines."""
+    from backtest.shortlist import night_stars
+    rated = t['main'].astype(bool) & (t['games'] >= MIN_GAMES) & t['model %'].notna() & t['pick odds'].notna()
+    out = pd.Series(pd.NA, index=t.index, dtype='Int64')
+    variant = t['variant'] if 'variant' in t else pd.Series(0, index=t.index)
+    for _, part in t[rated].groupby(variant[rated]):
+        out[part.index] = night_stars(part, part['model %'] * part['pick odds']).astype('Int64')
+    return t.assign(stars=out)
+
+
 def filter_lines(t: pd.DataFrame, since=None, until=None, players: Iterable = (), stats: Iterable = (),
-                 signals: Iterable = (), min_edge: Optional[float] = None, min_games: int = 0,
+                 stars: Iterable = (), min_edge: Optional[float] = None, min_games: int = 0,
                  main_only: bool = True) -> pd.DataFrame:
-    """The lines matching every filter given. players: name_ESPN; signals: '🟢', '🟡' or 'none'; min_edge: the
-    model's edge in pp (of its own pick), so it also narrows the other strategies to lines the model likes."""
+    """The lines matching every filter given. players: name_ESPN; stars: 0–4 or 'none' (no rating, add_stars);
+    min_edge: the model's edge in pp (of its own pick), so it also narrows the other strategies to lines the model
+    likes."""
     keep = t['games'] >= min_games
     if main_only:
         keep &= t['main'].astype(bool)
@@ -28,8 +42,8 @@ def filter_lines(t: pd.DataFrame, since=None, until=None, players: Iterable = ()
         keep &= t['name_ESPN'].isin(list(players))
     if stats:
         keep &= t['bet_type'].isin(list(stats))
-    if signals:
-        keep &= t['signal'].fillna('').replace('', 'none').isin(list(signals))
+    if stars:
+        keep &= t['stars'].astype(object).where(t['stars'].notna(), 'none').isin(list(stars))
     if min_edge is not None:
         keep &= t['edge pp'] >= min_edge
     return t[keep]

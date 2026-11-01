@@ -11,7 +11,9 @@ stars) and the first fetch of every line (the earliest price one could have take
   - model_vs_move: how often the market moved toward the side the model rated (clv pp > 0). 50% = the model
     doesn't foresee moves; clearly more = betting early on its side gets better prices than the close.
   - the same by when the quote was taken (hours before tip-off) and for the segments fixed in advance: main vs
-    side stats, Over vs Under. Nothing else is split, so no segment wins by chance among many.
+    side stats, Over vs Under, starters vs bench (RotoWire's last lineup before tip-off). Nothing else is split
+    for a decision, so no segment wins by chance among many; the per-stat table is descriptive only.
+  - game markets (main lines): the model's side of each moneyline, spread and total at its first fetch.
 
 Ranges are 95% from resampling whole nights. Writes data/backtest/clv.md.
 
