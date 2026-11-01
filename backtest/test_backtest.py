@@ -109,7 +109,8 @@ def _priced():
         'over_odds': [1.9, 2.0, 1.8, 1.9, 1.9], 'under_odds': [1.9, 1.8, 2.0, 1.9, 1.9],
         'avg': [22.0, 6.0, 19.0, 12.0, 4.0], 'avg L5': 1.0, 'proj avg': 1.0,
         'best side': ['Over', 'Under', 'Under', 'Over', 'Under'], 'edge pp': [6.0, 2.0, -1.0, 8.0, 3.0],
-        'signal': ['🟢', '🟡', np.nan, '🟢', '🟡'], 'games': [8, 8, 20, 20, 30], 'main': [True, True, True, True, False]})
+        'signal': ['🟢', '🟡', np.nan, '🟢', '🟡'], 'games': [8, 8, 20, 20, 30], 'main': [True, True, True, True, False],
+        'stars': pd.array([4, 1, pd.NA, 3, pd.NA], dtype='Int64')})
 
 
 def test_filter_lines():
@@ -118,7 +119,8 @@ def test_filter_lines():
     assert len(filter_lines(t)) == 4                                   # the alternative line is out
     assert len(filter_lines(t, main_only=False)) == 5
     assert filter_lines(t, players=['A'])['line'].tolist() == [20.5, 20.5]
-    assert filter_lines(t, signals=['none'])['line'].tolist() == [20.5]
+    assert filter_lines(t, stars=['none'])['line'].tolist() == [20.5]
+    assert filter_lines(t, stars=[4, 3])['line'].tolist() == [20.5, 10.0]
     assert len(filter_lines(t, min_edge=5)) == 2 and len(filter_lines(t, min_games=10)) == 2
     assert len(filter_lines(t, since='2022-12-01', until='2022-12-01')) == 2
 
@@ -413,3 +415,60 @@ def test_recency_features_weight_recent_games():
     assert out['ew mean h1'] == pytest.approx(np.sum(w * [10, 10, 30]) / w.sum())
     assert out['ew n h1'] == pytest.approx(w.sum() ** 2 / np.sum(w ** 2))
     assert out['ew over h1'] == pytest.approx(out['ew n h1'] * 1.0 / w.sum())
+
+
+def test_clv_report_roles_use_the_last_lineup_before_tip_off():
+    from backtest.clv_report import BENCH, STARTER, UNKNOWN, roles
+    start = '2026-10-22T23:30:00Z'
+    record = pd.DataFrame({'game_date': pd.Timestamp('2026-10-22'), 'start_time': start,
+                           'game': ['NYK @ BOS', 'NYK @ BOS', 'NYK @ BOS', 'LAL @ GS'],
+                           'player_id': [1, 2, 3, 4]})
+    lineup = lambda at, starters: pd.DataFrame({'fetched_at': at, 'game_date': '2026-10-22', 'team': 'bos',
+                                                'player_id_ESPN': [1, 2],
+                                                'role': ['starter' if p in starters else 'may_not_play'
+                                                         for p in (1, 2)]})
+    # player 2 started in the lineup saved before tip-off; the one saved after it doesn't count
+    rotowire = pd.concat([lineup('2026-10-22T20:00:00Z', {1}), lineup('2026-10-22T23:00:00Z', {1, 2}),
+                          lineup('2026-10-23T00:00:00Z', set())])
+    assert list(roles(record, rotowire)) == [STARTER, STARTER, BENCH, UNKNOWN]
+    assert list(roles(record, pd.DataFrame())) == [UNKNOWN] * 4
+
+
+def _admission_lines(nights, informative, seed=0):
+    """Superbet-shaped lines, 8 games a night, priced with a 5% margin: each line hides a ±25 pp lean the price
+    misses; an informative model's raw chance sees it, a noisy one guesses."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for k, night in enumerate(pd.date_range('2026-10-20', periods=nights)):
+        for g in range(8):
+            for p in range(4):
+                market = rng.uniform(0.4, 0.6)
+                lean = rng.choice([-1, 1])
+                over = rng.random() < market + 0.25 * lean
+                seen = lean if informative else rng.choice([-1, 1])
+                raw = market + 0.2 * seen + rng.normal(0, 0.03)
+                rows.append({'game_date': night, 'event_id': 100 * k + g, 'home': f'h{g}', 'away': f'a{g}',
+                             'name_ESPN': f'P{g}{p}', 'bet_type': 'PTS', 'line': 20.5,
+                             'actual': 25.0 if over else 15.0, 'over_odds': 1 / (1.05 * market),
+                             'under_odds': 1 / (1.05 * (1 - market)), 'market over %': 100 * market,
+                             'raw over %': 100 * raw, 'raw under %': 100 * (1 - raw), 'saved signal': '',
+                             'source': 'superbet'})
+    return pd.DataFrame(rows)
+
+
+def test_threshold_admission_chooses_early_and_judges_later_nights():
+    import decisions
+    from backtest.threshold_admission import MIN_JUDGED_NIGHTS, admit, bets
+    good = admit(_admission_lines(35, informative=True))
+    assert good['admitted'] is not None and good['judged']['nights'] == MIN_JUDGED_NIGHTS
+    assert good['until'] == pd.Timestamp('2026-10-20') + pd.Timedelta(days=35 - MIN_JUDGED_NIGHTS - 1)
+    noise = admit(_admission_lines(35, informative=False))
+    assert noise['admitted'] is None
+    few = admit(_admission_lines(25, informative=True))
+    assert few['admitted'] is None and few['until'] is None and 'too few nights' in few['why']
+    assert decisions.ADMITTED_THRESHOLD is None                      # the report never sets it
+    # one bet per game, never a 🔴 line
+    lines = _admission_lines(3, informative=True).assign(**{'saved signal': lambda d: np.where(
+        d['name_ESPN'].str.endswith('0'), '🔴', '')})
+    b = bets(lines, {'a': 1.0, 'b': 1.0, 'c': 0.0, 'd': 0.0}, 0)
+    assert not b.duplicated(['game_date', 'home', 'away']).any() and (b['saved signal'] != '🔴').all()

@@ -13,6 +13,7 @@ from espn_scraper.storage import snapshot_file
 from glossary import column_config
 from i18n import t
 from metrics import score_check
+from tracking import CLOSE_MAX_AGE_MIN, close_coverage
 from loaders import (SUPERBET_COOLDOWN, clear_rotowire, fetch_superbet, games, player_logs, season_label,
                      season_status, snapshot_history, superbet_error, superbet_wait)
 
@@ -239,6 +240,11 @@ def schedule_card():
             st.warning(t('dc.schedule_blocked', lang, when=f"{pd.Timestamp(until).tz_convert(freshness.PL):%H:%M}"))
         st.caption(t('dc.schedule_budget', lang, n=requests_today(superbet_fetcher.HOST),
                      budget=DAILY_REQUEST_BUDGET))
+        reads = snapshot_file(CURRENT_SEASON, 'superbet_event_fetches')
+        cover = close_coverage(pd.read_csv(reads), pd.Timestamp.now(tz='UTC')) if os.path.exists(reads) else None
+        if cover:
+            st.caption(t('dc.schedule_closes', lang, night=f"{cover['night']:%d.%m}", n=cover['valid'],
+                         games=cover['games'], minutes=CLOSE_MAX_AGE_MIN))
 
 
 schedule_card()
