@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -11,9 +10,9 @@ from glossary import column_config, source_legend, tinted
 from i18n import t
 from loaders import (fetch_rotowire, filtered_logs, games as all_games, player_logs, rotowire_lineups, sidebar_filters,
                      snapshot_history, superbet_fetch_controls, superbet_offers, today_game_odds, today_props)
-from metrics import STATS, absence_adjustments, hit_rates, percentile_band, rotowire_team, stint_games
+from metrics import STATS, absence_adjustments, hit_rates, percentile_band
 from models import calibration_warning, price_props, top_up_logs
-from reasons import flag_props, prop_reasons
+from reasons import flag_props, offer_context, prop_reasons
 from schedule import tip_label
 from tracking import prop_movement
 
@@ -25,7 +24,6 @@ superbet_fetch_controls(key='props')
 props = today_props()
 lineups = rotowire_lineups()
 by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
-position = logs.groupby('player_id_ESPN')['position_group'].last()
 names = logs.groupby('player_id_ESPN')['player_display_name'].last()
 
 
@@ -47,11 +45,6 @@ def priced(seasons, season_types, props, lineups, odds) -> pd.DataFrame:
     return flag_props(prop_movement(snapshot_history('superbet_props'), table), logs_, lineups)
 
 
-def rotowire_entry(player_id) -> dict:
-    listed = lineups[lineups['player_id_ESPN'] == player_id]
-    return listed.iloc[0].to_dict() if len(listed) else {}
-
-
 PROP_TIPS = {'side': "The side with the higher expected return after Superbet's 12% stake tax: the side the "
                      "decision looks at. Not a pick",
              'model %': "Chance the pick wins, calibrated on 2022/23: the model's own chance (raw model %) mapped "
@@ -64,30 +57,14 @@ PROP_TIPS = {'side': "The side with the higher expected return after Superbet's 
 
 def prop_panel(row, decision, changed=None):
     """The decision for the selected line's game, the reasons behind it, and a link to the full Player page."""
-    games = by_player.get(row['player_id'], logs.iloc[0:0])
+    # the games the line was priced from (priced() tops a player with few games up with last season's)
+    games = top_up_logs(by_player.get(row['player_id'], logs.iloc[0:0]), player_logs(),
+                        max(seasons, default=CURRENT_SEASON), [row['player_id']])
     every = player_logs()
     history = every[(every['player_id_ESPN'] == row['player_id']) & every['season_type'].isin(season_types)
                     & (every['OPP'].str.lower() == (row['opp'] or ''))]
-    entry = rotowire_entry(row['player_id'])
-    tip = pd.to_datetime(row['start_time']).tz_convert('US/Eastern').tz_localize(None).normalize()
-    rest = (tip - games['Date'].iloc[-1]).days if len(games) else np.nan
-    starter = row['RotoWire'].startswith('starter') if row['RotoWire'] else \
-        bool(len(games) and games['starter'].tail(10).mean() > 0.5)
-    out_ids = rotowire_team(lineups, row['team'])['out']
-    missed = [int((~stint_games(logs, row['player_id'], o)['teammate_played']).sum()) for o in out_ids
-              if o != row['player_id']]
-    bet = {'name': row['name'], 'stat': row['bet_type'], 'side': row['side'] or None, 'line': row['line'],
-           'odds': row['side odds'], 'model %': row['p win %'], 'break-even %': row['break-even net %'],
-           'edge pp': row['edge net pp'], 'avg': row['avg'], 'proj avg': row['proj avg'],
-           'lineup adj': row['lineup adj'], 'status': row['RotoWire'], 'play_pct': entry.get('play_pct', np.nan),
-           'out_names': [str(names.get(p, p)) for p in out_ids], 'out_n': min(missed) if missed else None,
-           'team_games': row.get('team_games'), 'odds_at': superbet_offers()['fetched_at'],
-           'lineup_at': fetch_rotowire()['fetched_at'], 'stats_through': logs['Date'].max(),
-           'open_line': row.get('open line', np.nan),
-           'home': row['is_home'], 'rest_days': rest, 'opp': row['opp'] or '', 'team': row['team'] or '',
-           'matchup': row['matchup_info'], 'position': position.get(row['player_id']), 'implied': row['implied'],
-           'team_pts': row['team_pts'], 'spread': row['spread'], 'starter': starter,
-           'line_move': row.get('line move', np.nan)}
+    bet = offer_context(row, games, logs, lineups, names, superbet_offers()['fetched_at'],
+                        fetch_rotowire()['fetched_at'])
     if bet['side'] is None:
         st.info("Superbet has no odds for this line.")
         return

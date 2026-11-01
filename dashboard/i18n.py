@@ -1277,40 +1277,67 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'panel.why_note': _w("The reasons explain the decision; how many there are doesn't change it.",
                          "Powody objaśniają decyzję; ich liczba jej nie zmienia."),
     'panel.meta': _w("{n} obs. · {source} · {as_of}", "{n} obs. · {source} · {as_of}"),
-    'panel.flags': _w("Warnings (an offer with one can't get 'Bet')", "Ostrzeżenia (oferta z ostrzeżeniem nie dostanie "
-                                                                       "'Obstaw')"),
+    'panel.meta_quote': _w("{source} · {as_of}", "{source} · {as_of}"),
+    'panel.economics': _w("Price", "Cena"),
+    'panel.economics_note': _w("The evaluated side is the one with the higher expected return, which isn't "
+                               "necessarily positive. Only the stake tax is counted; the separate tax on large "
+                               "winnings isn't.",
+                               "Oceniana strona to ta z wyższym oczekiwanym zwrotem, który nie musi być dodatni. "
+                               "Liczony jest tylko podatek od stawki; osobny podatek od dużych wygranych nie."),
+    'panel.economics_note_games': _w("The game model isn't admitted: its chance is an experimental estimate, not "
+                                     "a reason to bet.",
+                                     "Model meczów nie jest dopuszczony: jego szansa to eksperymentalna ocena, nie "
+                                     "powód do zakładu."),
+    'panel.drivers': _w("What the model used", "Czego użył model"),
+    'panel.drivers_note': _w("Each input with how much it moved the final chance (pp, after calibration). The "
+                             "effects overlap: don't add them up.",
+                             "Każde wejście z tym, o ile zmieniło końcową szansę (pp, po kalibracji). Efekty się "
+                             "nakładają: nie sumuj ich."),
     'panel.context': _w("Context", "Kontekst"),
+    'panel.context_note': _w("What the games show that the model doesn't use. Not for or against unless it "
+                             "predicted results beyond the model on unseen lines.",
+                             "Co pokazują mecze, a czego model nie używa. Nie jest za ani przeciw, chyba że "
+                             "przewidywało wyniki lepiej niż model na niewidzianych liniach."),
+    'panel.validation.untested': _w("not tested", "nie testowane"),
+    'panel.validation.no_lift': _w("tested: no gain beyond the model", "testowane: nic ponad model"),
+    'panel.validation.lift': _w("tested: predicted beyond the model", "testowane: przewidywało ponad model"),
+    'panel.warnings': _w("Worth knowing (doesn't block a bet)", "Warto wiedzieć (nie blokuje zakładu)"),
+    'panel.flags': _w("Blockers (an offer with one can't get 'Bet')", "Blokady (oferta z blokadą nie dostanie "
+                                                                     "'Obstaw')"),
     'panel.for': _w("For", "Za"), 'panel.against': _w("Against", "Przeciw"), 'panel.nothing': _w("nothing", "nic"),
     'panel.chart': _w("Last {n} games: {stat} (green = over the line)", "Ostatnie {n} meczów: {stat} (zielone = "
                                                                        "powyżej linii)"),
     'panel.line': _w("line {line:g}", "linia {line:g}"),
-    # reasons for and against a prop (reasons.prop_reasons)
-    'reason.model': _w("Model: {side} wins {model:.0f}% of the time; odds {odds:.2f} after Superbet's 12% stake tax need "
-                       "{be:.0f}% (edge {edge:+.1f} pp)",
-                       "Model: {side} wygrywa w {model:.0f}% przypadków; kurs {odds:.2f} po 12% podatku od stawki "
-                       "wymaga {be:.0f}% (przewaga {edge:+.1f} pp)"),
-    'reason.hits': _w("{side} in {hits} of {label} ({rate:.0f}%; needs {be:.0f}%)",
-                      "{side} w {hits} z {label} ({rate:.0f}%; potrzeba {be:.0f}%)"),
-    'reason.last_games': _w("the last {n} games", "ostatnich {n} meczów"),
-    'reason.all_games': _w("all {n} games", "wszystkich {n} meczów"),
+    # reasons about a prop (reasons.prop_reasons): the price
+    'reason.model': _w("Model: {side} wins {model:.1f}%; odds {odds:.2f} after the {tax:.0f}% stake tax need "
+                       "{be:.1f}% (edge {edge:+.1f} pp, {ev:+.1f} per 100 staked)",
+                       "Model: {side} wygrywa w {model:.1f}%; kurs {odds:.2f} po {tax:.0f}% podatku od stawki "
+                       "wymaga {be:.1f}% (przewaga {edge:+.1f} pp, {ev:+.1f} na 100 zł stawki)"),
+    'reason.model_no_tax': _w("Model: {side} wins {model:.1f}%; odds {odds:.2f} without the stake tax (promotion, "
+                              "{tax:.0f}%) need {be:.1f}% (edge {edge:+.1f} pp, {ev:+.1f} per 100 staked)",
+                              "Model: {side} wygrywa w {model:.1f}%; kurs {odds:.2f} bez podatku od stawki "
+                              "(promocja, {tax:.0f}%) wymaga {be:.1f}% (przewaga {edge:+.1f} pp, {ev:+.1f} na 100 zł "
+                              "stawki)"),
+    'reason.beyond_price': _w("The price alone says {side} {market:.1f}% (margin-free), {price:.1f}% after the "
+                              "calibration; the player's numbers move it {beyond:+.1f} pp",
+                              "Sama cena mówi {side} {market:.1f}% (bez marży), {price:.1f}% po kalibracji; liczby "
+                              "zawodnika zmieniają to o {beyond:+.1f} pp"),
+    # what the model used
+    'reason.impact': _w("; moves the model's chance {impact:+.1f} pp", "; zmienia szansę modelu o {impact:+.1f} pp"),
+    'reason.impact_none': _w("; moves the model's chance less than {least:g} pp",
+                             "; zmienia szansę modelu o mniej niż {least:g} pp"),
     'reason.expected': _w("Expected {proj:.1f} {stat} tonight vs the line {line:g} ({diff:+.1f}); average {avg:.1f}, "
                           "median {median:.1f}", "Oczekiwane dziś {proj:.1f} {stat} wobec linii {line:g} "
                                                  "({diff:+.1f}); średnia {avg:.1f}, mediana {median:.1f}"),
-    'reason.minutes_up': _w("Minutes up lately: {recent:.1f} per game in the last 5 vs {usual:.1f}",
-                            "Ostatnio więcej minut: {recent:.1f} na mecz w ostatnich 5 wobec {usual:.1f}"),
-    'reason.minutes_down': _w("Minutes down lately: {recent:.1f} per game in the last 5 vs {usual:.1f}",
-                              "Ostatnio mniej minut: {recent:.1f} na mecz w ostatnich 5 wobec {usual:.1f}"),
     'reason.teammates': _w("{names} out: in his games without them {name} averaged {adj:+.1f} {stat} compared with his "
-                           "games with them (a description, not their effect)",
+                           "games with them (after shrinking; fewest games without one of them: {n}; a "
+                           "description, not their effect)",
                            "{names} nie zagra: w meczach bez nich {name} miał średnio {adj:+.1f} {stat} wobec meczów "
-                           "z nimi (opis, nie ich wpływ)"),
-    'reason.home': _w("At home: {value:.1f} in {n} home games ({avg:.1f} overall)",
-                      "U siebie: {value:.1f} w {n} meczach u siebie ({avg:.1f} ogółem)"),
-    'reason.away': _w("Away: {value:.1f} in {n} away games ({avg:.1f} overall)",
-                      "Na wyjeździe: {value:.1f} w {n} meczach wyjazdowych ({avg:.1f} ogółem)"),
-    'reason.b2b': _w("Second night of a back-to-back", "Drugi mecz dzień po dniu"),
-    'reason.b2b_detail': _w(": {value:.1f} in {n} such games ({avg:.1f} overall)",
-                            ": {value:.1f} w {n} takich meczach ({avg:.1f} ogółem)"),
+                           "z nimi (po ściągnięciu; najmniej meczów bez jednego z nich: {n}; opis, nie ich wpływ)"),
+    'reason.environment': _w("Scoring environment: Superbet expects {team} to score {implied:.0f} (usually "
+                             "{usual:.0f})",
+                             "Otoczenie punktowe: Superbet oczekuje, że {team} zdobędzie {implied:.0f} (zwykle "
+                             "{usual:.0f})"),
     'reason.matchup': _w("{opp} allow {value:.1f} {stat} per game to {position}, {diff:.1f} {more} than average (rank "
                          "{rank} of {teams}, 1 = allows the most): {word} matchup",
                          "{opp} pozwalają {position} na {value:.1f} {stat} na mecz, o {diff:.1f} {more} niż przeciętnie "
@@ -1318,31 +1345,73 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'reason.more': _w("more", "więcej"), 'reason.fewer': _w("fewer", "mniej"),
     'reason.position.G': _w("guards", "obrońcom"), 'reason.position.F': _w("forwards", "skrzydłowym"),
     'reason.position.C': _w("centers", "środkowym"), 'reason.position.': _w("this position", "tej pozycji"),
+    # context: what the games show that the model doesn't use
+    'reason.history_last': _w("At this line: {side} in {hits} of the last {n} games ({rate:.0f}%, 95% range "
+                              "{low:.0f}–{high:.0f}%)",
+                              "Przy tej linii: {side} w {hits} z ostatnich {n} meczów ({rate:.0f}%, przedział 95% "
+                              "{low:.0f}–{high:.0f}%)"),
+    'reason.history_all': _w(", {hits} of all {n} ({rate:.0f}%)", ", {hits} ze wszystkich {n} ({rate:.0f}%)"),
+    'reason.history_note': _w("; needs {be:.0f}% after tax. The model uses this rate only pulled toward the price",
+                              "; potrzeba {be:.0f}% po podatku. Model używa tej częstości tylko ściągniętej do ceny"),
+    'reason.sample_last_season': _w("; {n} of the games are from last season", "; {n} z meczów to zeszły sezon"),
+    'reason.sample_preseason': _w("; {n} are preseason", "; {n} to przedsezon"),
+    'reason.minutes': _w("Minutes: {recent:.1f} per game in the last 5 ({low:.0f}–{high:.0f}) vs {usual:.1f} in his "
+                         "{n} earlier games with {team}",
+                         "Minuty: {recent:.1f} na mecz w ostatnich 5 ({low:.0f}–{high:.0f}) wobec {usual:.1f} w {n} "
+                         "wcześniejszych meczach w {team}"),
+    'reason.minutes_short': _w("; short games among them: {short} (5+ fouls in {fouls}, decided by 20+ in {blowouts})",
+                               "; krótkie mecze wśród nich: {short} (5+ fauli w {fouls}, różnica 20+ w {blowouts})"),
+    'reason.role': _w("Role: started {started} of the last {n} games; RotoWire tonight: {role}",
+                      "Rola: zaczynał {started} z ostatnich {n} meczów; RotoWire dziś: {role}"),
+    'reason.volume': _w("Shots per 36 min in the last 5: {fga:.1f} FGA, {tpa:.1f} 3PA, {fta:.1f} FTA (before: "
+                        "{fga0:.1f}, {tpa0:.1f}, {fta0:.1f}); made {fg:.0f}% / {tp:.0f}% / {ft:.0f}% (before: "
+                        "{fg0:.0f}% / {tp0:.0f}% / {ft0:.0f}%), {attempts} attempts in the last 5",
+                        "Rzuty na 36 min w ostatnich 5: {fga:.1f} FGA, {tpa:.1f} 3PA, {fta:.1f} FTA (wcześniej: "
+                        "{fga0:.1f}, {tpa0:.1f}, {fta0:.1f}); celność {fg:.0f}% / {tp:.0f}% / {ft:.0f}% (wcześniej: "
+                        "{fg0:.0f}% / {tp0:.0f}% / {ft0:.0f}%), {attempts} prób w ostatnich 5"),
+    'reason.home': _w("At home: {value:.1f} in {n} home games ({avg:.1f} overall)",
+                      "U siebie: {value:.1f} w {n} meczach u siebie ({avg:.1f} ogółem)"),
+    'reason.away': _w("Away: {value:.1f} in {n} away games ({avg:.1f} overall)",
+                      "Na wyjeździe: {value:.1f} w {n} meczach wyjazdowych ({avg:.1f} ogółem)"),
+    'reason.rest': _w("Rest days: {team} {rest}, {opp} {opp_rest}; {name} played {m3:.0f} min in the last 3 days "
+                      "and {m7:.0f} in the last 7",
+                      "Dni odpoczynku: {team} {rest}, {opp} {opp_rest}; {name} grał {m3:.0f} min w ostatnich 3 "
+                      "dniach i {m7:.0f} w ostatnich 7"),
     'reason.vs_opp': _w("Against {opp}: {avg:.1f} {stat} in {n} games (all stored seasons)",
                         "Przeciw {opp}: {avg:.1f} {stat} w {n} meczach (wszystkie zapisane sezony)"),
-    'reason.implied_higher': _w("Superbet expects {team} to score {implied:.0f} (usually {usual:.0f}): a "
-                                "higher-scoring game than usual", "Superbet oczekuje, że {team} zdobędzie "
-                                                                  "{implied:.0f} (zwykle {usual:.0f}): mecz z większą "
-                                                                  "liczbą punktów niż zwykle"),
-    'reason.implied_lower': _w("Superbet expects {team} to score {implied:.0f} (usually {usual:.0f}): a "
-                               "lower-scoring game than usual", "Superbet oczekuje, że {team} zdobędzie "
-                                                                "{implied:.0f} (zwykle {usual:.0f}): mecz z mniejszą "
-                                                                "liczbą punktów niż zwykle"),
-    'reason.blowout_favoured': _w("{team} favoured by {spread:g}: in a blowout starters sit out the fourth quarter",
-                                  "{team} faworytem o {spread:g}: przy pogromie podstawowi siedzą w czwartej "
-                                  "kwarcie"),
-    'reason.blowout_underdogs': _w("{team} underdogs by {spread:g}: in a blowout starters sit out the fourth quarter",
-                                   "{team} słabszy o {spread:g}: przy pogromie podstawowi siedzą w czwartej "
-                                   "kwarcie"),
-    # warnings (reasons.prop_flags)
-    'reason.line_moved': _w("The line moved {move:+g} since the first snapshot ({open:g} → {line:g}); market "
-                            "context, not a reason for the current offer",
+    'reason.blowout_favoured': _w("{team} favoured by {spread:g}: in his games decided by 15+ he played {big:.1f} "
+                                  "min ({n_big}), in closer ones {close:.1f} ({n_close})",
+                                  "{team} faworytem o {spread:g}: w jego meczach rozstrzygniętych różnicą 15+ grał "
+                                  "{big:.1f} min ({n_big}), w wyrównanych {close:.1f} ({n_close})"),
+    'reason.blowout_underdogs': _w("{team} underdogs by {spread:g}: in his games decided by 15+ he played {big:.1f} "
+                                   "min ({n_big}), in closer ones {close:.1f} ({n_close})",
+                                   "{team} słabszy o {spread:g}: w jego meczach rozstrzygniętych różnicą 15+ grał "
+                                   "{big:.1f} min ({n_big}), w wyrównanych {close:.1f} ({n_close})"),
+    'reason.line_moved': _w("The line moved {move:+g} since first seen ({open:g} → {line:g}); market context, not a "
+                            "reason for the current offer",
                             "Linia ruszyła o {move:+g} od pierwszego zapisu ({open:g} → {line:g}); kontekst rynku, "
                             "nie powód za aktualną ofertą"),
+    'reason.odds_moved': _w("Same line {line:g}, odds {open_odds:.2f} → {odds:.2f} since first seen: the "
+                            "margin-free chance of {side} went {was:.0f}% → {now:.0f}%",
+                            "Ta sama linia {line:g}, kurs {open_odds:.2f} → {odds:.2f} od pierwszego zapisu: szansa "
+                            "{side} bez marży {was:.0f}% → {now:.0f}%"),
+    'reason.before_tip': _w(" ({hours:.0f} h before tip-off)", " ({hours:.0f} h przed meczem)"),
+    # worth knowing, doesn't block (reasons.prop_reasons)
+    'warn.role': _w("Started {started} of the last {n} games but RotoWire lists him as {role} tonight: the numbers "
+                    "come from another role",
+                    "Zaczynał {started} z ostatnich {n} meczów, a RotoWire podaje go dziś jako {role}: liczby "
+                    "pochodzą z innej roli"),
+    'warn.stint': _w("Only {k} of the {n} games are with {team}: the rest are from another team",
+                     "Tylko {k} z {n} meczów to {team}: reszta to inna drużyna"),
+    'warn.lineup_expected': _w("RotoWire's lineup of {team} is expected, not confirmed",
+                               "Skład {team} na RotoWire jest przewidywany, nie potwierdzony"),
+    # blockers (reasons.prop_flags)
     'flag.few_games': _w("Only {n} {n|game|games|games} in the sample: too few to trust the numbers",
                          "Tylko {n} {n|mecz|mecze|meczów} w próbie: za mało, żeby ufać liczbom"),
     'flag.preseason': _w("Every game is preseason: minutes and roles change in the regular season",
                          "Wszystkie mecze to przedsezon: minuty i role zmieniają się w sezonie zasadniczym"),
+    'flag.out': _w("RotoWire: {status}: won't play (the line is refunded)",
+                   "RotoWire: {status}: nie zagra (zakład zostanie zwrócony)"),
     'flag.may_not_play': _w("RotoWire: {status}: may sit or play limited minutes",
                             "RotoWire: {status}: może nie zagrać albo zagrać mało minut"),
     'flag.minutes': _w("Minutes swing a lot ({low:.0f}–{high:.0f}): the role isn't settled",
@@ -2328,6 +2397,10 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                   "{every:+.1f}.",
                                   "Oczekiwany zwrot na 100 zł po podatku: linie ★ {top:+.1f}, każda linia dziś "
                                   "{every:+.1f}."),
+    'overview.shortlist_negative': _w("Every ★ line loses money on average after tax: a ranking of the least bad, "
+                                      "not bets.",
+                                      "Każda linia ★ średnio traci po podatku: ranking najmniej złych, nie "
+                                      "zakłady."),
     'overview.shortlist_record': _w("So far ({nights} {nights|night|nights|nights}, {bets} ★ bets): ★ won {hit:.0f}% "
                                     "where the price said {price:.0f}%, after tax {roi:+.1f} per 100; every line "
                                     "{every:+.1f}.",

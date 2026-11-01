@@ -270,41 +270,79 @@ swój kurs przed podatkiem o ok. 4,4%. Stan: 10 kuponów, 0 wygranych, −10 j. 
 
 ## 5. Powody za i przeciw: zakłady na zawodników
 
-Kod: `dashboard/reasons.py::prop_reasons`. Każdy powód jest **za** ocenianą stroną, **przeciw** niej albo
-**kontekstem**. „Za Over” oznacza, że liczba wskazuje w górę; dla Under ten sam fakt działa odwrotnie. Każdy powód
-podaje **kierunek, wartość, punkt odniesienia, liczbę obserwacji, czas i źródło** (ESPN, Superbet, RotoWire, model).
-**Brak danych oznacza brak powodu**: powód bez któregoś z tych pól nie powstaje. Powody nie głosują.
+Kod: `dashboard/reasons.py::prop_reasons`, dane wejściowe z `reasons.offer_context` (ten sam słownik w obu
+dashboardach). Od 1.11 (przegląd w `docs/reasons-refactoring.md`) każdy powód mówi, **jakiego rodzaju** jest
+twierdzeniem, i tylko niektóre mają kierunek:
+
+| Rodzaj | Co mówi | Kierunek |
+|---|---|---|
+| **Cena** (`economics`) | szansa modelu wobec tego, czego wymaga kurs po podatku; cena sama, po kalibracji, i o ile liczby zawodnika ją zmieniają | za, gdy przewaga po podatku > 0 |
+| **Czego użył model** (`driver`) | wejście projekcji z tym, o ile zmieniło **końcową, skalibrowaną** szansę (pp) | znak tej zmiany; przy \|zmiana\| < 0,1 pp brak kierunku |
+| **Kontekst** (`context`) | co pokazują mecze, a czego model nie używa; z oznaczeniem, czy to testowano | brak, chyba że cecha przewidywała wyniki ponad model na niewidzianych liniach (`lift`) |
+| **Warto wiedzieć** (`warning`) | rzecz do sprawdzenia, która nie blokuje zakładu | brak |
+| **Blokada** (🔴, `flag`) | oferta z blokadą nie dostanie *Obstaw* ani miejsca na liście „Najlepsze dziś” | przeciw |
+
+Każdy powód podaje **wartość, punkt odniesienia, czas i źródło**, a oparty na meczach także **liczbę obserwacji**.
+**Brak danych oznacza brak powodu.** Powody nie głosują: ich liczba nie zmienia decyzji. Zmiany wpływu się
+nakładają, więc nie należy ich sumować. Przy kalibracji b ≈ 0,09 typowy wpływ to dziesiąte części punktu: tyle
+naprawdę zmieniają.
+
+Liczby panelu pochodzą z tych samych meczów, z których wyceniono linię (z dopełnieniem zeszłym sezonem, gdy
+meczów jest mało), więc „cena + zmiana” daje szansę modelu, a blokady w panelu zgadzają się z tabelą.
 
 ### 5.1 Powody (z progami)
 
-| # | Powód (tekst w panelu) | Kiedy się pojawia | Za / przeciw |
+| # | Rodzaj | Powód (tekst w panelu) | Kiedy się pojawia |
 |---|---|---|---|
-| 1 | **Model:** „Over wygrywa w X%; kurs K po 12% podatku od stawki wymaga Y% (przewaga ±Z pp)” | gdy jest wycena i znany czas kursu | za, gdy przewaga po podatku > 0 |
-| 2 | **Trafienia, ostatnie 10:** „Over w h z ostatnich 10 meczów (r%; potrzeba Y%)” | ≥ 3 mecze | za, gdy r > próg rentowności |
-| 3 | **Trafienia, cały sezon** | > 10 meczów | jw. |
-| 4 | **Oczekiwane dziś:** „Oczekiwane dziś P wobec linii L (±d); średnia, mediana” | ≥ 1 mecz | neutralny, gdy \|d\| < max(0,5; 3% linii), poza tym za/przeciw zależnie od kierunku |
-| 5 | **Minuty:** „Ostatnio więcej / mniej minut: ost. 5 wobec średniej” | ≥ 6 meczów i różnica ≥ 3 min | więcej minut działa za Over |
-| 6 | **Nieobecni koledzy:** „A, B nie zagra: w meczach bez nich gracz miał średnio +x (opis, nie ich wpływ)” | `lineup adj` ≠ 0 i znana liczba meczów bez nich | dodatnie działa za Over; porównanie jest opisowe, nie przyczynowe |
-| 7 | **Dom / wyjazd:** średnia w meczach u siebie lub na wyjeździe wobec ogólnej | ≥ 6 meczów, ≥ 3 w danym miejscu | neutralny przy różnicy < 5% |
-| 8 | **Mecz dzień po dniu:** średnia w takich meczach | dziś drugi mecz z rzędu **i ≥ 2 takie mecze w próbce** | za Over, gdy w takich meczach gracz miał więcej; bez takich meczów powodu nie ma (dawniej liczył się przeciw Over) |
-| 9 | **Rywal:** „OPP pozwalają [pozycji] na v na mecz, o d więcej / mniej niż przeciętnie (miejsce r z 30): miękki / twardy rywal” | znana pozycja i rywal | miękki (≥ +5%) działa za Over, twardy (≤ −5%) przeciw, przeciętny jest neutralny |
-| 10 | **Historia z rywalem:** średnia w meczach z tym rywalem (wszystkie sezony) | ≥ 2 mecze | średnia > linii działa za Over |
-| 11 | **Oczekiwane punkty drużyny:** „Superbet oczekuje, że drużyna zdobędzie X (zwykle Y)” | różnica ≥ 3% | więcej punktów działa za Over |
-| 12 | **Ryzyko pogromu:** „faworyt / słabszy o S: przy pogromie podstawowi siedzą w 4. kwarcie” | \|handicap\| ≥ 10 i gracz z pierwszej piątki | **zawsze przeciw Over** (za Under) |
-| 13 | **Ruch linii:** „Linia ruszyła o m od pierwszego zapisu (L₀ → L); kontekst rynku, nie powód za aktualną ofertą” | linia się ruszyła | **kontekst** (dawniej liczył się za lub przeciw) |
+| 1 | cena | **Model:** „Over wygrywa w X%; kurs K po 12% podatku od stawki wymaga Y% (przewaga ±Z pp, ±E na 100 zł stawki)” (przy promocji bez podatku osobny tekst) | gdy jest wycena i znany czas kursu |
+| 2 | cena | **Sama cena:** „Sama cena mówi Over m% (bez marży), p% po kalibracji; liczby zawodnika zmieniają to o ±x pp” | gdy znana jest szansa rynku |
+| 3 | model | **Oczekiwane dziś:** projekcja wobec linii, średnia, mediana (podsumowanie, bez kierunku) | ≥ 1 mecz |
+| 4 | model | **Nieobecni koledzy:** zmiana po ściągnięciu, najmniejsza liczba meczów bez nich, wpływ w pp („opis, nie ich wpływ”) | `lineup adj` ≠ 0 i znana liczba meczów bez nich |
+| 5 | model | **Otoczenie punktowe:** punkty drużyny oczekiwane przez Superbet wobec zwykłych, wpływ w pp | znane oba |
+| 6 | model | **Rywal:** co rywal pozwala pozycji (miejsce r z 30), wpływ w pp | znana pozycja i rywal |
+| 7 | kontekst | **Przy tej linii:** trafienia w ostatnich 10 i we wszystkich meczach, przedział Wilsona 95%, próg po podatku, skład próbki (zeszły sezon, przedsezon) | ≥ 3 mecze |
+| 8 | kontekst | **Minuty:** ostatnie 5 wobec wcześniejszych meczów **w obecnej drużynie**, zakres; krótkie mecze z 5+ faulami lub różnicą 20+ | ≥ 8 meczów w drużynie i różnica ≥ 3 min |
+| 9 | kontekst | **Rola:** ile z ostatnich 10 zaczynał (ESPN) wobec roli dziś (RotoWire) | RotoWire podaje rolę |
+| 10 | kontekst | **Rzuty:** FGA / 3PA / FTA na 36 min i celność, ostatnie 5 wobec wcześniejszych | PTS, PA, PR, PRA, 3PM; ≥ 8 meczów w drużynie |
+| 11 | kontekst | **Dom / wyjazd** | ≥ 6 meczów, ≥ 3 w danym miejscu |
+| 12 | kontekst | **Dni odpoczynku:** obu drużyn (3 = trzy lub więcej), minuty gracza w ostatnich 3 i 7 dniach | znany odpoczynek obu |
+| 13 | kontekst | **Pogrom:** handicap i minuty gracza w jego meczach rozstrzygniętych różnicą 15+ wobec wyrównanych (bez kierunku: dawniej zawsze przeciw Over) | \|handicap\| ≥ 10, pierwsza piątka, ≥ 2 mecze każdego rodzaju |
+| 14 | kontekst | **Ruch rynku:** linia od pierwszego zapisu, a przy tej samej linii zmiana kursu i szansy bez marży; godziny do meczu | linia lub kurs się zmieniły |
+| — | kontekst | **Historia z rywalem** tylko na zakładce *Historia*; wraca do panelu wyłącznie, gdy test pokaże `lift` | — |
 
-### 5.2 Ostrzeżenia (🔴): każde blokuje status *Obstaw*
+### 5.2 Warto wiedzieć (nie blokuje)
+
+| Ostrzeżenie | Warunek |
+|---|---|
+| Inna rola | dziś pierwsza piątka, a zaczynał ≤ 30% z ostatnich 10 (albo rezerwa przy ≥ 70%) |
+| Nowa drużyna | mniej niż 8 meczów w obecnej drużynie, a próbka ma mecze z innej |
+| Skład przewidywany | RotoWire: skład drużyny `expected`, nie `confirmed` |
+
+Nowe warunki są ostrzeżeniami, nie blokadami: wynik listy „Najlepsze dziś” (77 niewidzianych wieczorów) zmierzono z
+dotychczasowymi blokadami, a zmiana tego, co jest blokowane, bez dowodu zmieniałaby oceniany zbiór.
+
+### 5.3 Blokady (🔴): każda blokuje status *Obstaw*
 
 | Flaga | Warunek |
 |---|---|
 | Za mało meczów | < **8** meczów w próbce |
 | Tylko przedsezon | wszystkie mecze w próbce to przedsezon |
+| Nie zagra | RotoWire: szansa gry 0% (linia i tak była pomijana w decyzji i na liście; teraz panel to mówi) |
 | Może nie zagrać | RotoWire: szansa gry między 1% a 99% |
 | Niestabilne minuty | ≥ 5 meczów i współczynnik zmienności minut > **0,35** |
-| Linia przeciw stronie | linia ruszyła się o **≥ 1,5** w stronę przeciwną do ocenianej strony („rynek może coś wiedzieć”) |
+| Linia przeciw stronie | linia ruszyła się o **≥ 1,5** w stronę przeciwną do ocenianej strony; do oceny przy weryfikacji pod koniec listopada (wynik takich linii wobec ceny), bo w 2022/23 był jeden zapis na linię |
 
 Domyślnie ukryci są gracze, których rola z RotoWire zaczyna się od „Out” lub „OFS” (filtr `hide_out` działa po tagu
 urazu, nie po szansie gry 0%).
+
+### 5.4 Test kontekstu
+
+`python -m backtest.reason_lift` (≈ 5 min) sprawdza na stałej liście cech (trafienia w ostatnich 10, minuty, dom /
+wyjazd, odpoczynek, historia z rywalem, rzuty), czy cecha dodana do skalibrowanego modelu (logit(p1) = logit(p0) +
+β·f, β dopasowane na wcześniejszych liniach) poprawia log loss na późniejszych liniach, z przedziałem z losowania
+całych wieczorów. Wynik: `data/backtest/reason_lift.md` i `.json` (czytany przez panel). 1.11: **żadna cecha nie
+dała poprawy** (2022/23: 77 wieczorów; Superbet: 4), więc cały kontekst jest bez kierunku. Rola i pogrom są
+`nie testowane` (brak roli RotoWire i handicapu z chwili każdej linii).
 
 ---
 
