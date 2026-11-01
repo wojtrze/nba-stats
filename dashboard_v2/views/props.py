@@ -14,9 +14,9 @@ from glossary import column_config
 from i18n import t, value
 from reasons import flag_texts
 from loaders import filtered_logs, player_logs, snapshot_history
-from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits, stint_games
-from models import calibration_warning
-from reasons import prop_reasons
+from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits
+from models import calibration_warning, top_up_logs
+from reasons import offer_context, prop_reasons
 from tracking import PROP_KEY
 
 lang = language()
@@ -110,7 +110,8 @@ def lineup_banner():
 def detail(row: pd.Series, changed=None):
     """The selected line: verdict, teammates, history and line movement in tabs."""
     pid = row['player_id']
-    games = logs[logs['player_id_ESPN'] == pid].sort_values('Date')
+    # the games the line was priced from (priced_props tops a player with few games up with last season's)
+    games = top_up_logs(logs[logs['player_id_ESPN'] == pid], player_logs(), max(seasons), [pid]).sort_values('Date')
     stat, line = row['bet_type'], row['line']
     side = f"{value(row['side'], lang)} {line:g} {stat} @ {row['side odds']:.2f}"
     decision = line_decision(row)
@@ -127,28 +128,8 @@ def detail(row: pd.Series, changed=None):
         every = player_logs()
         history = every[(every['player_id_ESPN'] == pid) & every['season_type'].isin(season_types)
                         & (every['OPP'].str.lower() == (row['opp'] or ''))]
-        listed = lineups[lineups['player_id_ESPN'] == pid]
-        tip = pd.to_datetime(row['start_time']).tz_convert('US/Eastern').tz_localize(None).normalize()
         names = logs.groupby('player_id_ESPN')['player_display_name'].last()
-        out_ids = rotowire_team(lineups, row['team'])['out']
-        # the fewest games the player played without one of tonight's out teammates (the change rests on them)
-        missed = [int((~stint_games(logs, pid, o)['teammate_played']).sum()) for o in out_ids if o != pid]
-        bet = {'name': row['name'], 'stat': stat, 'side': row['side'], 'line': line, 'odds': row['side odds'],
-               'model %': row['p win %'], 'break-even %': row['break-even net %'], 'edge pp': row['edge net pp'],
-               'avg': row['avg'], 'proj avg': row['proj avg'],
-               'lineup adj': row['lineup adj'], 'status': row['RotoWire'],
-               'play_pct': listed['play_pct'].iloc[0] if len(listed) else np.nan,
-               'out_names': [str(names.get(p, p)) for p in out_ids], 'out_n': min(missed) if missed else None,
-               'team_games': row.get('team_games'), 'odds_at': superbet()['fetched_at'],
-               'lineup_at': rotowire()['fetched_at'], 'stats_through': logs['Date'].max(),
-               'open_line': row.get('open line', np.nan), 'snapshots': row.get('snapshots', np.nan),
-               'home': row['is_home'], 'rest_days': (tip - games['Date'].iloc[-1]).days if len(games) else np.nan,
-               'opp': row['opp'] or '', 'team': row['team'] or '', 'matchup': row['matchup_info'],
-               'position': games['position_group'].iloc[-1] if len(games) else None, 'implied': row['implied'],
-               'team_pts': row['team_pts'], 'spread': row['spread'],
-               'starter': row['RotoWire'].startswith('starter') if row['RotoWire'] else
-               bool(len(games) and games['starter'].tail(10).mean() > 0.5),
-               'line_move': row.get('line move', np.nan)}
+        bet = offer_context(row, games, logs, lineups, names, superbet()['fetched_at'], rotowire()['fetched_at'])
         reasons_panel(f"{value(row['side'], lang)} {line:g} {stat}", decision,
                       prop_reasons(bet, games, history, lang), games, stat, line, lang, changed)
         st.markdown(t('detail.built', lang))

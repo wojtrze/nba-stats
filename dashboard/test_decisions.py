@@ -162,7 +162,7 @@ def test_the_interface_says_what_the_range_and_the_factor_are():
     assert 'nie jest przedział pewności modelu' in i18n.tooltip('edge low', 'pl')
     assert "isn't a confidence range of the model" in i18n.tooltip('edge low', 'en')
     assert 'tempo' not in i18n.t('detail.kpi.game_help', 'pl', pace=1.0, matchup=1.0, word='x').lower()
-    assert 'opis' in i18n.t('reason.teammates', 'pl', names='B', name='A', adj=1.0, stat='PTS')
+    assert 'opis' in i18n.t('reason.teammates', 'pl', names='B', name='A', adj=1.0, stat='PTS', n=4)
     assert 'nie wpływ' in i18n.t('mates.col.change_help', 'pl', stat='PTS')
 
 

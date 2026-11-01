@@ -139,6 +139,8 @@ else:
                'above price pp': '%+.1f', 'ev net 100': '%+.1f'}
     picked = table(top, SHORTLIST, formats, key='shortlist_top', select=True)
     st.caption(t('overview.shortlist_cost', lang, top=top['ev net 100'].mean(), every=props['ev net 100'].mean()))
+    if len(top) and (top['ev net 100'] < 0).all():
+        st.caption(t('overview.shortlist_negative', lang))
     record = tier_scorecard(shortlist_record()).set_index('tier') if len(shortlist_record()) else None
     if record is not None and record.loc['top', 'bets']:
         top_record = record.loc['top']

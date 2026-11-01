@@ -87,35 +87,48 @@ def change_notice(changed: Optional[Dict], lang: str = 'en'):
 
 
 def _meta(r: Dict, lang: str) -> str:
-    return t('panel.meta', lang, n=r['n'], source=r['source'], as_of=local_time(r['as_of']))
+    when = local_time(r['as_of'])
+    if r['n'] is None or (isinstance(r['n'], float) and np.isnan(r['n'])):
+        return t('panel.meta_quote', lang, source=r['source'], as_of=when)
+    return t('panel.meta', lang, n=r['n'], source=r['source'], as_of=when)
+
+
+REASON_ICONS = {True: '✅', False: '❌', None: '➖'}
 
 
 def reasons_panel(title: str, decision: Dict, reasons: List[Dict], games: Optional[pd.DataFrame] = None,
                   stat: Optional[str] = None, line: Optional[float] = None, lang: str = 'en',
                   changed: Optional[Dict] = None):
-    """The decision (decisions.py) with when its odds and lineup were fetched, then why: the reasons for and
-    against side by side with their numbers, observations, source and time, the context and the warnings; with
-    games, a chart of the last 10 games against the line. The reasons explain the decision and don't change it.
-    Worded in `lang` (the reasons come worded already)."""
+    """The decision (decisions.py) with when its odds and lineup were fetched, then why, by kind of reason
+    (reasons.py): the price, what the model used (with how much each input moved its chance), the context the model
+    doesn't use (collapsed, with whether it was tested), what's worth knowing and the blockers; with games, a chart
+    of the last 10 games against the line. The reasons explain the decision and don't change it. Worded in `lang`
+    (the reasons come worded already); a panel with a stat is a prop's, without one a game market's."""
     with st.container(border=True):
         st.markdown(f"#### {title}")
         st.markdown(decision_text(decision, lang))
         st.caption(decision_times(decision, lang))
         change_notice(changed, lang)
-        flags = [r for r in reasons if r['flag']]
-        pros = [r for r in reasons if r['supports'] is True and not r['flag']]
-        cons = [r for r in reasons if r['supports'] is False and not r['flag']]
-        context = [r for r in reasons if r['supports'] is None]
+        of = lambda kind: [r for r in reasons if r.get('kind') == kind]
+        item = lambda r, extra='': f"- {REASON_ICONS[r['supports']]} {r['text']}  \n  :gray[{_meta(r, lang)}{extra}]"
+        block = lambda heading, rows: f"{heading}\n\n" + "\n".join(rows)
         st.markdown(f"**{t('panel.why', lang)}** · _{t('panel.why_note', lang)}_")
-        left, right = st.columns(2)
-        nothing = f"_{t('panel.nothing', lang)}_"
-        item = lambda icon, r: f"- {icon} {r['text']}  \n  :gray[{_meta(r, lang)}]"
-        left.markdown(f"**{t('panel.for', lang)}**\n\n" + ("\n".join(item('✅', r) for r in pros) or nothing))
-        right.markdown(f"**{t('panel.against', lang)}**\n\n" + ("\n".join(item('❌', r) for r in cons) or nothing))
-        if context:
-            st.markdown(f"**{t('panel.context', lang)}**\n\n" + "\n".join(item('➖', r) for r in context))
-        if flags:
-            st.markdown(f"**{t('panel.flags', lang)}**\n\n" + "\n".join(f"- ⚠️ {r['text']}" for r in flags))
+        if economics := of('economics'):
+            st.markdown(block(f"**{t('panel.economics', lang)}**", [item(r) for r in economics]))
+            st.caption(t('panel.economics_note' if stat else 'panel.economics_note_games', lang))
+        if drivers := of('driver'):
+            st.markdown(block(f"**{t('panel.drivers', lang)}** · _{t('panel.drivers_note', lang)}_",
+                              [item(r) for r in drivers]))
+        if context := of('context'):
+            with st.expander(f"{t('panel.context', lang)} ({len(context)})"):
+                st.caption(t('panel.context_note', lang))
+                st.markdown("\n".join(
+                    item(r, f" · {t('panel.validation.' + r['validation'], lang)}" if r.get('validation') else '')
+                    for r in context))
+        if warnings := of('warning'):
+            st.markdown(block(f"**{t('panel.warnings', lang)}**", [f"- ℹ️ {r['text']}" for r in warnings]))
+        if flags := [r for r in reasons if r['flag']]:
+            st.markdown(block(f"**{t('panel.flags', lang)}**", [f"- ⚠️ {r['text']}" for r in flags]))
         if games is not None and len(games) and stat:
             last = games.tail(10)
             colours = np.where(last[stat] > line, '#2ca02c', np.where(last[stat] < line, '#d62728', '#9aa5b1'))

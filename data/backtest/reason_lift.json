@@ -1,0 +1,48 @@
+{
+  "features": {
+    "hits_l10": {
+      "status": "no_lift",
+      "over_sign": -1,
+      "beta_2022": -0.09190187092676667,
+      "vs_model_2022": 4.072140387064728e-05
+    },
+    "minutes": {
+      "status": "no_lift",
+      "over_sign": -1,
+      "beta_2022": -0.05351432828075082,
+      "vs_model_2022": -0.00019239707353905686
+    },
+    "venue": {
+      "status": "no_lift",
+      "over_sign": 1,
+      "beta_2022": 0.03310073878981005,
+      "vs_model_2022": -2.193567219596345e-06
+    },
+    "rest": {
+      "status": "no_lift",
+      "over_sign": -1,
+      "beta_2022": -0.02285460868758886,
+      "vs_model_2022": 0.0002445277102785974
+    },
+    "vs_opp": {
+      "status": "no_lift",
+      "over_sign": -1,
+      "beta_2022": -0.011063341572510932,
+      "vs_model_2022": 2.3766085201962167e-05
+    },
+    "volume": {
+      "status": "no_lift",
+      "over_sign": -1,
+      "beta_2022": -0.15733740490369233,
+      "vs_model_2022": 0.00010201428760802087
+    },
+    "role": {
+      "status": "untested",
+      "why": "needs RotoWire's role as of each line"
+    },
+    "blowout": {
+      "status": "untested",
+      "why": "needs the spread as of each line (2022/23 has no game odds)"
+    }
+  }
+}
