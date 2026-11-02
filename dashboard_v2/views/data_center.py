@@ -234,7 +234,7 @@ def schedule_card():
             st.caption(t('dc.schedule_last', lang, ok="✅" if last_run['ok'] else "❌", summary=last_run['summary'],
                          when=f"{pd.Timestamp(last_run['at']).tz_convert(freshness.PL):%H:%M}"))
         if s.get('skipped'):
-            st.caption(t('dc.schedule_skipped', lang, n=s['skipped']))
+            st.warning(t('dc.schedule_skipped', lang, n=s['skipped']))
         until = blocked_until(superbet_fetcher.HOST)
         if until:
             st.warning(t('dc.schedule_blocked', lang, when=f"{pd.Timestamp(until).tz_convert(freshness.PL):%H:%M}"))

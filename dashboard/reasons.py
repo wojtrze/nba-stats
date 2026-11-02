@@ -10,8 +10,11 @@ sort of claim it is:
              beyond the model on unseen lines (backtest/reason_lift.py): 'untested', 'no_lift' or 'lift'
   warning    something to know before betting that doesn't block it
   blocker    a red flag (flag=True): it keeps the offer from OBSTAW and the shortlist
+  mispricing where Superbet's prices may contradict each other or the news (mispricing.py, hypotheses in
+             docs/hipotezy_wyceny.md); validation is the hypothesis's status: 'untested', 'admitted'
 Only economics and drivers are for or against (a driver by the sign of its impact); context is for or against only
-when it predicted results on unseen lines ('lift'), in the direction it did. A reason without its data (no value,
+when it predicted results on unseen lines ('lift'), in the direction it did; a mispricing signal only when its
+hypothesis was admitted on unseen nights (a rejected one isn't shown). A reason without its data (no value,
 no reference, no time, no source, no observations where it rests on games) isn't made.
 """
 import json
@@ -29,6 +32,7 @@ from metrics import (ACTIVE_PROFILE, alpha, calibrate, logit, no_vig, prop_proba
 MIN_GAMES = 8
 ESPN, SUPERBET, ROTOWIRE, MODEL = 'ESPN', 'Superbet', 'RotoWire', 'model'
 ECONOMICS, DRIVER, CONTEXT, WARNING, BLOCKER = 'economics', 'driver', 'context', 'warning', 'blocker'
+MISPRICING = 'mispricing'
 UNTESTED, NO_LIFT, LIFT = 'untested', 'no_lift', 'lift'
 # a driver that moves the final chance by less than this (pp) is shown without a direction
 IMPACT_MIN = 0.1
@@ -242,8 +246,47 @@ def offer_context(row, games: pd.DataFrame, logs: pd.DataFrame, lineups: pd.Data
             bool(len(games) and games['starter'].tail(10).mean() > 0.5)}
 
 
+def mispricing_reasons(signals: List[Dict], stat: str, side: str, lang: str = 'en') -> List[Dict]:
+    """mispricing.py's signals about this line (its own, or one resting on it: a combo's part, a makes line's
+    attempts) as reasons, each answering in order: did the gap clear the tax, what happened, why it may be a
+    pricing error, how long it holds, how tested (i18n 'mispricing.<hypothesis>.*'); one that clears the tax adds
+    how such signals did on the exploration nights. A gap under the hypothesis's
+    mispricing.SHOW_GAP_PP and a rejected hypothesis aren't shown."""
+    from mispricing import ADMITTED, REJECTED, SHOW_GAP_PP
+    reasons = []
+    for s in signals:
+        h = s['hypothesis']
+        if s['gap_pp'] < SHOW_GAP_PP[h] or s['status'] == REJECTED or (
+                stat != s['bet_type'] and stat not in [part for part, _ in s['parts']]):
+            continue
+        values = {k: v for k, v in s.items() if not isinstance(v, (list, dict))}
+        values.update(stat=i18n.label(s['bet_type'], lang), side=i18n.value(s['side'], lang), gap=s['gap_pp'],
+                      needed=s['needed_pp'], p_ours=100 * s['p_ours'], p_book=100 * s['p_book'],
+                      parts=' · '.join(f"{i18n.label(part, lang)} {line:g}" for part, line in s['parts']))
+        if s['parts']:
+            values.update(part=i18n.label(s['parts'][0][0], lang), part_line=s['parts'][0][1])
+        if s.get('role'):
+            values['role'] = i18n.value(s['role'], lang)
+        for rate in ('implied_rate', 'player_rate', 'league_rate', 'below'):
+            if rate in s:
+                values[rate] = 100 * s[rate]
+        key = f"mispricing.{h.lower()}."
+        lines = [i18n.t(key + ('clears' if s['clears'] else 'short'), lang, **values),
+                 i18n.t(key + 'what', lang, **values), i18n.t(key + 'why', lang),
+                 i18n.t('mispricing.expiry.' + s['expires_when'], lang),
+                 i18n.t('mispricing.status.' + s['status'], lang)]
+        if s['clears'] and s.get('exploration'):
+            lines.append(i18n.t('mispricing.exploration', lang, **s['exploration']))
+        # only a tested hypothesis argues: for this line when its side is the one the signal favours
+        supports = None if s['status'] != ADMITTED else (s['bet_type'] == stat and s['side'] == side)
+        reasons.append(_reason(supports, "  \n".join(lines), value=100 * s['p_ours'], reference=100 * s['p_book'],
+                               n=s['n'], as_of=s['as_of'], source=f"{SUPERBET} · {ESPN}", kind=MISPRICING,
+                               group=h, validation=s['status']))
+    return reasons
+
+
 def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: str = 'en',
-                 validation: Optional[Dict] = None) -> List[Dict]:
+                 validation: Optional[Dict] = None, signals: Optional[List[Dict]] = None) -> List[Dict]:
     """Reasons about one offer's evaluated side, worded in `lang` (i18n.TEXTS 'reason.*', 'warn.*' and 'flag.*').
 
     bet: offer_context's dict (name, stat, side, line, odds, model %, break-even %, edge pp after the cost
@@ -253,6 +296,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
     odds_at, stats_through, lineup_at); missing keys mean the reason isn't made.
     games: the player's games behind the numbers, oldest first. history: his games against the opponent (only
     shown when that feature predicted results: see lift_status). validation: lift_status() (default: the file).
+    signals: mispricing.combo_signals() for the player's lines of this game (mispricing_reasons).
     """
     over = bet['side'] == 'Over'
     favours = lambda higher: higher if over else not higher   # does "the number is higher" help the side?
@@ -464,6 +508,9 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                 text += i18n.t('reason.before_tip', lang, hours=hours)
             reasons.append(_reason(None, text, value=line, reference=open_line, n=bet.get('snapshots'),
                                    as_of=odds_at, source=SUPERBET, kind=CONTEXT, group='market'))
+
+    if signals:
+        reasons += mispricing_reasons(signals, stat, bet['side'], lang)
 
     if bet.get('lineup_status') == 'expected':
         reasons.append(_reason(None, i18n.t('warn.lineup_expected', lang, team=bet['team'].upper()), kind=WARNING,

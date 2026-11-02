@@ -62,9 +62,10 @@ _session.headers.update({
 _etags: Dict = {}          # url -> (ETag, response), kept for the process so an unchanged event comes back as 304
 
 
-def client(deadline: Optional[float] = RUN_DEADLINE) -> PoliteClient:
-    """A polite client for one fetch (http_polite): pauses between requests, retries, Superbet's block and budget."""
-    return PoliteClient(HOST, _session, deadline=deadline, etags=_etags)
+def client(deadline: Optional[float] = RUN_DEADLINE, trace=None) -> PoliteClient:
+    """A polite client for one fetch (http_polite): pauses between requests, retries, Superbet's block and budget.
+    trace: told each request, retry and wait (fetch_loop's watchdog reports the last one of a run that hung)."""
+    return PoliteClient(HOST, _session, deadline=deadline, etags=_etags, trace=trace)
 
 
 def _get(path: str, http: Optional[PoliteClient] = None, **params) -> dict:

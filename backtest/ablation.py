@@ -151,15 +151,16 @@ def _loss(won: np.ndarray, p: np.ndarray) -> np.ndarray:
     return -(won * np.log(p) + (1 - won) * np.log(1 - p))
 
 
-def night_bootstrap(nights: np.ndarray, diff: np.ndarray, reps: int = BOOTSTRAP, seed: int = 0):
-    """95% range of the mean of diff when whole nights are resampled (with replacement)."""
+def night_bootstrap(nights: np.ndarray, diff: np.ndarray, reps: int = BOOTSTRAP, seed: int = 0, level: float = 0.95):
+    """The `level` (95%) range of the mean of diff when whole nights are resampled (with replacement)."""
     frame = pd.DataFrame({'night': nights, 'diff': diff}).groupby('night')['diff'].agg(['sum', 'size'])
     if len(frame) < 2:
         return np.nan, np.nan
     rng = np.random.default_rng(seed)
     picks = rng.integers(0, len(frame), size=(reps, len(frame)))
     means = frame['sum'].values[picks].sum(axis=1) / frame['size'].values[picks].sum(axis=1)
-    return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
+    tail = 50 * (1 - level)
+    return float(np.percentile(means, tail)), float(np.percentile(means, 100 - tail))
 
 
 def picks(test_lines: pd.DataFrame, test_sides: pd.DataFrame, p: np.ndarray) -> pd.DataFrame:

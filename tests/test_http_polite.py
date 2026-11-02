@@ -113,3 +113,14 @@ def test_budget_counts_per_day(tmp_path):
     http_polite._count_request('host', NOW, path)
     http_polite._count_request('host', NOW + timedelta(days=1), path)
     assert http_polite.requests_today('host', NOW + timedelta(days=1), path) == 1
+
+
+def test_a_run_that_stalled_past_its_deadline_ends_at_its_next_request(tmp_path):
+    http, clock = make(FakeSession(FakeResponse(200), FakeResponse(200)), tmp_path, deadline=60)
+    seen = []
+    http.trace = seen.append
+    http.get('https://x/a')
+    clock.t += 3600                         # the process stood still for an hour
+    with pytest.raises(RunDeadline):
+        http.get('https://x/b')
+    assert seen == ['GET https://x/a']

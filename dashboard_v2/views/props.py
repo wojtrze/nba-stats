@@ -15,6 +15,7 @@ from i18n import t, value
 from reasons import flag_texts
 from loaders import filtered_logs, player_logs, snapshot_history
 from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits
+from mispricing import offer_signals
 from models import calibration_warning, top_up_logs
 from reasons import offer_context, prop_reasons
 from tracking import PROP_KEY
@@ -129,9 +130,13 @@ def detail(row: pd.Series, changed=None):
         history = every[(every['player_id_ESPN'] == pid) & every['season_type'].isin(season_types)
                         & (every['OPP'].str.lower() == (row['opp'] or ''))]
         names = logs.groupby('player_id_ESPN')['player_display_name'].last()
-        bet = offer_context(row, games, logs, lineups, names, superbet()['fetched_at'], rotowire()['fetched_at'])
+        odds_at = superbet()['fetched_at']
+        bet = offer_context(row, games, logs, lineups, names, odds_at, rotowire()['fetched_at'])
+        # where Superbet's prices of this player's lines may be wrong (docs/hipotezy_wyceny.md: H1, H2, H6)
+        player_lines = table_all[(table_all['player_id'] == pid) & (table_all['event_id'] == row['event_id'])]
+        signals = offer_signals(player_lines, games, logs, odds_at)
         reasons_panel(f"{value(row['side'], lang)} {line:g} {stat}", decision,
-                      prop_reasons(bet, games, history, lang), games, stat, line, lang, changed)
+                      prop_reasons(bet, games, history, lang, signals=signals), games, stat, line, lang, changed)
         st.markdown(t('detail.built', lang))
         kpis([{'label': t('detail.kpi.avg', lang), 'value': f"{row['avg']:.1f}",
                'help': t('detail.kpi.avg_help', lang, games=row['games'])},
