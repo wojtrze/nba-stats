@@ -1403,6 +1403,37 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "Dlaczego to może być błąd ceny: przy małych liczbach liczy się, jak często gracz "
                             "kończy na 0 albo 1. Cena pasuje do typowego rozrzutu; u gracza, którego wyniki wahają "
                             "się mocniej, wynik poniżej linii zdarza się częściej przy tej samej średniej."),
+    # H5: tonight's role (RotoWire) against the starts of his last games
+    'mispricing.h5.short': _w("Not enough to cover the tax: with the minutes of tonight's role, “{side} {stat} "
+                              "{line:g}” has a {gap:.1f} pp higher chance than its price, and after the tax it takes "
+                              "{needed:.1f} pp.",
+                              "Za mało, by pokryć podatek: przy minutach dzisiejszej roli zakład „{side} {stat} "
+                              "{line:g}” ma szansę o {gap:.1f} pp wyższą niż w cenie, a po podatku potrzeba "
+                              "{needed:.1f} pp."),
+    'mispricing.h5.clears': _w("With the minutes of tonight's role, “{side} {stat} {line:g}” has a {gap:.1f} pp "
+                               "higher chance than its price; after the tax it takes {needed:.1f} pp, and the gap "
+                               "covers it.",
+                               "Przy minutach dzisiejszej roli zakład „{side} {stat} {line:g}” ma szansę o "
+                               "{gap:.1f} pp wyższą niż w cenie; po podatku potrzeba {needed:.1f} pp i ta różnica to "
+                               "pokrywa."),
+    'mispricing.h5.what': _w("What happened: RotoWire tonight: {role}. He started {starts} of his last "
+                             "{last_games} games and played {usual_minutes:.0f} min in them. In this role he'd play "
+                             "about {minutes:.0f} min ({role_games} of his last {n} games in it, pulled toward the "
+                             "league's starter-bench difference). Superbet's price scaled to those minutes gives "
+                             "“{side} {stat} {line:g}” {p_ours:.0f}%; the price alone gives {p_book:.0f}% (the chance "
+                             "by the odds without the margin).",
+                             "Co się stało: według RotoWire dziś {role}. W ostatnich {last_games} meczach "
+                             "zaczynał {starts} razy i grał w nich {usual_minutes:.0f} min. W tej roli grałby około "
+                             "{minutes:.0f} min ({role_games} z ostatnich {n} meczów w tej roli, ściągnięte do "
+                             "ligowej różnicy między piątką a ławką). Cena Superbetu przeliczona na te minuty daje "
+                             "zakładowi „{side} {stat} {line:g}” {p_ours:.0f}%; sama cena daje {p_book:.0f}% (szansa "
+                             "według kursu bez marży)."),
+    'mispricing.h5.why': _w("Why it may be a pricing error: a price set on the minutes he has been playing may not "
+                            "have caught up with a new role. On the exploration nights it had: the side the role "
+                            "change points to won less often than its price.",
+                            "Dlaczego to może być błąd ceny: cena ustawiona pod minuty, które grał dotąd, mogła "
+                            "nie nadążyć za nową rolą. Na nocach rozpoznania nadążała: strona, na którą wskazuje "
+                            "zmiana roli, wygrywała rzadziej, niż mówiła cena."),
     'mispricing.expiry.line_or_odds_change': _w("Holds for these odds only: it's gone when any of these lines or "
                                                 "odds changes.",
                                                 "Aktualne tylko dla tych kursów: znika, gdy zmieni się którakolwiek "

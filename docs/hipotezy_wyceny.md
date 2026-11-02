@@ -200,6 +200,56 @@ werdykt przez wiele tygodni (ok. 1 sygnał na 2 noce).
 
 ---
 
+## H5: Zmiana roli (mechanizm C)
+
+**Data D: 2026-11-01** (zapisane 2.11, przed wynikami nocy 2.11). Ocena na nocach od 2.11. Kod:
+`dashboard/mispricing.py` (`role_signals`).
+
+**Mechanizm:** gdy gracz dostaje nową rolę (wchodzi do pierwszej piątki albo z niej wypada), jego linie mogą być
+ustawione pod minuty, które grał dotąd.
+
+**Definicja** (kurs z jednego pobrania, rola z ostatniej wersji RotoWire zapisanej przed tym pobraniem, mecze gracza
+sprzed tego meczu):
+1. **Awans:** RotoWire podaje go w pierwszej piątce, a w ostatnich 5 meczach zaczynał najwyżej raz.
+   **Degradacja:** jego drużyna jest na liście RotoWire, on nie (ławka), a w ostatnich 5 meczach zaczynał 4 lub 5 razy.
+   Gracz z niepewnym występem nie daje sygnału. Co najmniej 8 meczów.
+2. Minuty w nowej roli: jego średnia z meczów w tej roli spośród ostatnich 40, ściągnięta do „minuty z ostatnich 5
+   meczów ± ligowa różnica między piątką a ławką” z wagą 3 meczów. Ligowa różnica to mediana po graczach, którzy
+   mieli co najmniej 3 mecze w każdej roli.
+3. Średnią z ceny każdej linii (`market_mean`, z rozrzutem gracza ściągniętym do ligowego) mnożymy przez stosunek
+   minut nowej roli do minut z ostatnich 5 meczów. Z tej średniej liczymy szansę linii (`count_over`).
+
+Zmiana wobec planu: bez warunku „skok minut ≥ 25% w 3 meczach”. Ostatnie minuty to nie nowa wiadomość, model i ceny
+je już widzą. Dodana degradacja, symetryczna do awansu.
+
+**Testy:**
+- **H5a (ekonomiczny):** jak H2a.
+- **H5b (mechanizm):** czy strona, na którą wskazuje zmiana roli (awans: Over, degradacja: Under), wygrywała częściej,
+  niż mówi jej cena, ponad przechylenie tej samej statystyki i strony na całym rynku. Raport podaje też test „b” dla
+  `g` ≥ 4 pp, jak przy innych hipotezach.
+
+**Rozpoznanie na nocach ≤ D** (13 nocy 20.10–1.11, ostatni kurs przed meczem, rozliczone wynikami ESPN):
+- RotoWire trafnie podaje awanse: 89% graczy z awansem naprawdę zaczęło mecz i grało średnio o 6,2 min dłużej niż
+  w ostatnich 5 meczach (75 przypadków, także bez linii).
+- Z liniami: 54 awanse i 60 degradacji (gracz × noc), 1265 linii.
+- **Strona zmiany roli przegrywała z ceną:** awans (Over) wygrał 45,1% przy cenie 49,6%, ponad przechylenie rynku
+  −2,8 pp [−10,4; +3,7]; degradacja (Under) 48,1% przy 50,7%, −4,0 pp [−6,9; +6,3] (przedziały 95%).
+- Przy `g` ≥ 4 pp (1215 z 1265 linii, bo przeliczenie minut daje duże różnice prawie zawsze): −3,8 pp [−11,8; +1,0]
+  (99%).
+- **H5a:** 462 sygnały do postawienia, wygrało 50%, ROI po podatku **−18,5%** [−40,7; +4,8] (99%).
+
+Wniosek: linie Superbetu już uwzględniają rolę podaną przez RotoWire. Przeliczenie minut liczy ją drugi raz.
+Pytanie, czy Superbet reaguje na zmianę roli z opóźnieniem, to pytanie o czas reakcji, czyli H4.
+
+**Przewidywanie zapisane przed oceną:** H5a ❌ odrzucona; H5b ≤ 0.
+
+**W aplikacji:** nie pokazujemy. Detektor dawałby duże różnice prawie przy każdej linii gracza ze zmianą roli,
+i to w kierunku, który w rozpoznaniu przegrywał. Działa tylko w ocenie (`backtest/mispricing_eval.py`).
+`offer_signals` przyjmuje rolę (`role`), ale strona zawodników jej nie przekazuje. Teksty komunikatu są gotowe
+(`mispricing.h5.*`), na wypadek gdyby ocena wyszła inaczej niż rozpoznanie.
+
+---
+
 ## H3–H9: definicje do uzupełnienia przed ich testem
 
 Każda dostanie tu własną datę D, progi i wynik rozpoznania, zanim jej detektor trafi do aplikacji.
@@ -208,12 +258,11 @@ Każda dostanie tu własną datę D, progi i wynik rozpoznania, zanim jej detekt
 |---|---|---|---|---|
 | **H3** | B | Zawodnicy a drużyna: suma median PTS graczy wobec sumy drużyny; drabinki meczowe (suma, handicap, sumy drużyn) między sobą | zamknięcie po podatku | ok. 7 graczy z linią PTS na drużynę, więc potrzebna poprawka na brakujących |
 | **H4** | A | Opóźnienie po wiadomości z RotoWire (gracz z ≥ 20 min: nie zagra, zmiana piątki, powrót). Etap 1 opisuje wielkość ruchu i opóźnienie; etap 2 to detektor, tylko gdy typowy ruch ≥ próg po podatku | zamknięcie po podatku i czy kurs był do wzięcia | archiwum: mediana 3 zapisy na mecz, najbliższy ok. 2,9 h przed startem, więc opóźnienia nie zmierzymy; potrzebne kursy z harmonogramu (od 1.11) |
-| **H5** | C | Zmiana roli: dziś starter, a ≤ 1 start w ostatnich 5 meczach, albo skok minut ≥ 25% w 3 meczach; linia wobec projekcji z minutami nowej roli | zamknięcie po podatku | archiwum i RotoWire |
 | **H7** | D | Dryf wczesnych linii (statystyki poboczne, rezerwowi, kurs > 6 h przed meczem): czy linia idzie do zamknięcia w stronę naszej oceny w > 50% przypadków | odsetek ruchu w stronę oceny i zamknięcie po podatku | archiwum i harmonogram |
 | **H8** | D | Ruchy bez wiadomości (zmiana linii bez zmiany w RotoWire w ciągu 60 min przed nią: gramy stronę, która zyskała) oraz Overy PTS u graczy z największym udziałem w akcjach | tylko ROI po podatku (zamknięcie może być skrzywione) | ok. 33 nocy lub więcej |
 | **H9** | D | Under na trafionych rzutach (3PM, FGM, FTM): Superbet może przesuwać te linie pod graczy grających Over. Zauważone w rozpoznaniu H2: Under wygrywał częściej, niż mówi cena (3PM +3,0 pp, FGM +2,5 pp, FTM +4,1 pp, 12 nocy). Na razie bez detektora w aplikacji, bo dotyczyłby każdej takiej linii | wynik po podatku na wszystkich takich liniach; ponieważ +3–4 pp to za mało na podatek, ważne głównie przy promocji bez podatku | archiwum i kolejne noce |
 
-**Kolejność:** H4 etap 1, H5 i H7, potem H3, H8 i H9 (koniec listopada, razem z weryfikacją modelu zliczeń).
+**Kolejność:** H4 etap 1 i H7 (H5 opisana wyżej), potem H3, H8 i H9 (koniec listopada, razem z weryfikacją modelu zliczeń).
 
 **Ocena:** `python -m backtest.mispricing_eval` zapisuje raport w `data/backtest/mispricing.md`. Używa tych samych
 detektorów co aplikacja i rozlicza wynikami z ESPN. Przedziały mają 99% i pochodzą z losowania całych nocy. Ustalone
@@ -227,7 +276,13 @@ przed oceną, 1.11:
   (`tracking.add_clv`, tylko ważne zamknięcia) i ROI po podatku. Główną miarą jest zamknięcie, gdy ma je większość
   sygnałów.
 - **Testy „b” i kontrolę metody H1** liczymy na ostatnim kursie każdej linii przed meczem, jak w rozpoznaniu.
-  Raport odtwarza liczby rozpoznania: H2b +2,8 pp, H6b +5,5 pp, średnie `g` H1 +0,3 pp.
+  Raport odtwarza liczby rozpoznania (12 nocy): H2b +2,8 pp, H6b +5,5 pp, średnie `g` H1 +0,3 pp.
+- **Przechylenie (2.11, przed oceną):** liczone na wszystkich liniach rynku tej samej statystyki i strony, a nie
+  tylko na liniach hipotezy. Tak mówią zasady wspólne, a H5 tego wymaga: jej linie to prawie same zmiany roli,
+  więc przechylenie z nich samych zjadłoby efekt. Z 13 nocami rozpoznania (z 1.11) i tym przechyleniem: H2b
+  +2,5 pp, ponad przechylenie +2,2 pp [−1,3; +5,1]; H6b +4,4 pp, ponad przechylenie +3,4 pp [−2,5; +9,0]
+  (przedziały 99%). H6 słabnie głównie przez BLK: na całym rynku Under wygrywał tam o 5,6 pp częściej, niż mówi
+  cena.
 - **Werdykt podaje raport, status ustawiamy ręcznie** w `data/backtest/mispricing_status.json`.
 
 Na nocach rozpoznania test „a” liczony tą zasadą daje mniej sygnałów niż liczby w sekcjach wyżej (liczone na ostatnim

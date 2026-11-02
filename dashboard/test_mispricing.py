@@ -6,7 +6,7 @@ import i18n
 from metrics import count_over
 from mispricing import (ADMITTED, REJECTED, UNTESTED, combo_over_from_parts, combo_signals, hypothesis_status,
                         league_rates, league_spreads, market_mean, offer_signals, pooled_correlations,
-                        shooting_signals, spread_signals)
+                        role_signals, role_uplift, shooting_signals, spread_signals)
 from reasons import MISPRICING, prop_reasons
 from test_reasons import _bet, _games
 
@@ -114,7 +114,7 @@ def test_only_an_admitted_hypothesis_argues_for_or_against():
 
 
 def test_the_signal_texts_are_in_both_languages():
-    keys = [f'mispricing.{h}.{part}' for h in ('h1', 'h2', 'h6') for part in ('short', 'clears', 'what', 'why')]
+    keys = [f'mispricing.{h}.{part}' for h in ('h1', 'h2', 'h5', 'h6') for part in ('short', 'clears', 'what', 'why')]
     for key in keys + ['mispricing.expiry.line_or_odds_change', 'mispricing.status.untested',
                        'mispricing.status.admitted', 'panel.mispricing', 'panel.mispricing_note']:
         assert set(i18n.TEXTS[key]) == set(i18n.LANGS)
@@ -214,3 +214,43 @@ def test_the_status_file_feeds_the_signal():
     status = {'H1': {'status': ADMITTED, 'exploration': {'signals': 1}}}
     s = combo_signals(_lines(), _player(), pooled_correlations(_player()), status=status)[0]
     assert s['status'] == ADMITTED and s['exploration'] == {'signals': 1}
+
+
+def _bench_player(starts, n=20, bench_min=18.0, start_min=30.0):
+    """n games off the bench at bench_min, the last `starts` of them starts at start_min; PTS one per minute."""
+    starter = [False] * (n - starts) + [True] * starts
+    minutes = [start_min if s else bench_min for s in starter]
+    return pd.DataFrame({'starter': starter, 'MIN': minutes, 'PTS': minutes, 'player_id_ESPN': 1,
+                         'Date': pd.date_range('2026-10-01', periods=n)})
+
+
+def test_a_bench_player_starting_tonight_favours_over_his_price():
+    lines = pd.DataFrame([{'bet_type': 'PTS', 'line': 17.5, 'over_odds': 1.87, 'under_odds': 1.87}])
+    [s] = role_signals(lines, _bench_player(0), 'starter', 10.0, {}, status={})
+    assert s['hypothesis'] == 'H5' and s['side'] == 'Over' and s['gap_pp'] > 0 and s['minutes'] > s['usual_minutes']
+    starter = _bench_player(5)
+    [d] = role_signals(lines, starter, 'bench', 10.0, {}, status={})
+    assert d['side'] == 'Under' and d['minutes'] < d['usual_minutes']
+
+
+def test_no_role_signal_when_tonight_matches_his_last_games_or_the_role_is_unknown():
+    lines = pd.DataFrame([{'bet_type': 'PTS', 'line': 17.5, 'over_odds': 1.87, 'under_odds': 1.87}])
+    assert role_signals(lines, _bench_player(0), 'bench', 10.0, {}, status={}) == []
+    assert role_signals(lines, _bench_player(2), 'starter', 10.0, {}, status={}) == []     # 2 of 5: no change
+    assert role_signals(lines, _bench_player(0), None, 10.0, {}, status={}) == []
+    assert role_signals(lines, _bench_player(0), 'Ques 50%', 10.0, {}, status={}) == []
+
+
+def test_role_uplift_is_the_starter_minus_bench_minutes():
+    logs = pd.concat([_bench_player(5).assign(player_id_ESPN=1), _bench_player(10).assign(player_id_ESPN=2)])
+    assert role_uplift(logs) == 12.0
+
+
+def test_the_role_message_says_the_role_and_the_minutes():
+    games = _games([25.0] * 12)
+    h5 = _signal(hypothesis='H5', bet_type='PTS', line=17.5, parts=[], side='Over', gap_pp=8.0, role='starter',
+                 starts=0, last_games=5, usual_minutes=18.0, minutes=27.6, role_games=0)
+    [r] = [r for r in prop_reasons(_bet(stat='PTS', line=17.5), games, _games([]), 'pl', validation={},
+                                   signals=[h5]) if r['kind'] == MISPRICING]
+    assert 'według RotoWire dziś pierwsza piątka. W ostatnich 5 meczach zaczynał 0 razy i grał w nich 18 min' in r['text']
+    assert 'około 28 min' in r['text']

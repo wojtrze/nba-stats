@@ -265,6 +265,8 @@ def mispricing_reasons(signals: List[Dict], stat: str, side: str, lang: str = 'e
                       parts=' · '.join(f"{i18n.label(part, lang)} {line:g}" for part, line in s['parts']))
         if s['parts']:
             values.update(part=i18n.label(s['parts'][0][0], lang), part_line=s['parts'][0][1])
+        if s.get('role'):
+            values['role'] = i18n.value(s['role'], lang)
         for rate in ('implied_rate', 'player_rate', 'league_rate', 'below'):
             if rate in s:
                 values[rate] = 100 * s[rate]

@@ -1,19 +1,20 @@
-"""Evaluating the mispricing hypotheses of docs/hipotezy_wyceny.md: H1, H2 and H6 on the nights after D.
+"""Evaluating the mispricing hypotheses of docs/hipotezy_wyceny.md: H1, H2, H5 and H6 on the nights after D.
 
     python -m backtest.mispricing_eval [--d YYYY-MM-DD]
 
 Uses the app's own detectors (dashboard/mispricing.py) on every Superbet offer saved before tip-off. A game read
 by the schedule (superbet_event_fetches) is rebuilt from superbet_prop_quotes, which hold only changes: at every
 read, each line is its last quote so far. Older games come from the dashboard's superbet_props snapshots. The
-detectors see only the player's games before that night and league numbers from the games before it.
+detectors see only the player's games before that night and league numbers from the games before it; H5 sees
+RotoWire's lineup as it was saved before each read (rotowire_lineups).
 
   a. Does the signal pay (decides the verdict): a signal is a side whose chance clears its after-tax break-even,
      counted once per game, player, bet and side, at its first read where it could be taken (the next read still
      had the same line and odds not worse; a signal at a game's last read can't be checked and isn't counted).
      Measured by the after-tax CLV (tracking.add_clv, valid closes only) and the after-tax ROI settled with ESPN.
   b. Does the mechanism work (descriptive): at each line's last quote before tip-off, by how much the signal's
-     side won more often than its margin-free price, beyond the tilt of the same stat and side on all of the
-     hypothesis's lines, for a gap of at least MECHANISM_GAP_PP. H1b instead asks whether the combo's price moved
+     side won more often than its margin-free price, beyond the tilt of the same stat and side on every line
+     offered in the same period (market_tilt), for a gap of at least MECHANISM_GAP_PP. H1b instead asks whether the combo's price moved
      toward its parts by the close in more than half of the cases (gap ≥ H1B_GAP_PP).
 
 Verdicts follow the registry's rules on the nights after D (at least MIN_NIGHTS): admitted when the low end of the
@@ -35,8 +36,8 @@ import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.ablation import night_bootstrap
 from backtest.run import OUT_DIR, markdown
 from metrics import COST_PROFILES, SUPERBET_STANDARD, no_vig
-from mispricing import (COMBOS, combo_signals, league_rates, league_spreads, pooled_correlations,
-                        shooting_signals, spread_signals)
+from mispricing import (COMBOS, combo_signals, league_rates, league_spreads, pooled_correlations, role_signals,
+                        role_uplift, shooting_signals, spread_signals)
 from safe_io import atomic_write_text
 from tracking import PROP_KEY
 
@@ -44,7 +45,7 @@ log = logging.getLogger(__name__)
 
 REPORT_FILE = os.path.join(OUT_DIR, 'mispricing.md')
 D = '2026-11-01'
-HYPOTHESES = ('H1', 'H2', 'H6')
+HYPOTHESES = ('H1', 'H2', 'H5', 'H6')
 LEVEL = 0.99
 MIN_NIGHTS = 10
 MIN_SIGNALS = 60
@@ -104,13 +105,37 @@ def player_ids(offered: pd.DataFrame, props: pd.DataFrame, logs: pd.DataFrame) -
     return pid.fillna(offered['name_ESPN'].map(by_name)).astype('Int64')
 
 
-def detect(offered: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
-    """Every detector's output (not only the signals: all compared lines) at each read where a player's lines
-    changed (the same lines give the same output until the next change). One row per read and output: night, at,
-    event_id, name_ESPN, player_id_ESPN, hypothesis, bet_type, line, side, odds, over_odds, under_odds, p_ours,
-    p_book, gap_pp, clears."""
+def lineup_versions(lineups: pd.DataFrame) -> Dict:
+    """RotoWire's saved versions (rotowire_lineups with player_id_ESPN) per night (game_date): a list of (saved at,
+    that version's rows), oldest first."""
+    if lineups is None or lineups.empty:
+        return {}
+    rw = lineups.assign(at=_utc(lineups['fetched_at']), night=pd.to_datetime(lineups['game_date']),
+                        player_id_ESPN=pd.to_numeric(lineups['player_id_ESPN'], errors='coerce'))
+    return {night: [(at, v) for at, v in day.groupby('at')] for night, day in rw.groupby('night')}
+
+
+def rotowire_role(versions: Dict, night, team, pid, at) -> Optional[str]:
+    """The player's role per the last RotoWire version saved by `at` for that night: 'starter', 'bench' (his team
+    is listed and he isn't), None when the team isn't listed, there's no version yet or he may not play."""
+    before = [v for saved, v in versions.get(night, []) if saved <= at]
+    if not before or team not in set(before[-1]['team']):
+        return None
+    him = before[-1][before[-1]['player_id_ESPN'] == pid]
+    if him.empty:
+        return 'bench'
+    return 'starter' if him['role'].iloc[0] == 'starter' else None
+
+
+def detect(offered: pd.DataFrame, logs: pd.DataFrame, lineups: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    """Every detector's output (not only the signals: all compared lines) at each read where a player's lines or
+    RotoWire role changed (the same input gives the same output until the next change). One row per read and
+    output: night, at, event_id, name_ESPN, player_id_ESPN, hypothesis, bet_type, line, side, odds, over_odds,
+    under_odds, p_ours, p_book, gap_pp, clears, role (H5's). lineups: rotowire_lineups with player_id_ESPN (H5)."""
     offered = offered.assign(night=_night(offered['tip']))
     by_player = dict(tuple(logs.groupby('player_id_ESPN')))
+    versions = lineup_versions(lineups)
+    stats = tuple(offered['bet_type'].dropna().unique())
     league: Dict = {}
     rows: List[Dict] = []
     for (night, event, pid), player in offered.dropna(subset=['player_id_ESPN']).groupby(
@@ -120,22 +145,26 @@ def detect(offered: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
         games = by_player[pid][by_player[pid]['Date'] < night].sort_values('Date')
         if night not in league:
             before = logs[logs['Date'] < night]
-            league[night] = (pooled_correlations(before), league_rates(before), league_spreads(before))
-        prior, rates, spreads = league[night]
+            league[night] = (pooled_correlations(before), league_rates(before), league_spreads(before),
+                             role_uplift(before), league_spreads(before, stats=stats))
+        prior, rates, spreads, uplift, all_spreads = league[night]
+        team = games['team'].iloc[-1] if len(games) and 'team' in games else None
         last = None
         for at, lines in player.groupby('at'):
             lines = lines.sort_values('bet_type')
-            fingerprint = tuple(map(tuple, lines[LINE].values))
+            role = rotowire_role(versions, night, team, pid, at)
+            fingerprint = (role, tuple(map(tuple, lines[LINE].values)))
             if fingerprint == last:
                 continue
             last = fingerprint
             for s in (combo_signals(lines, games, prior, at, status={}) +
                       shooting_signals(lines, games, rates, at, status={}) +
-                      spread_signals(lines, games, spreads, at, status={})):
+                      spread_signals(lines, games, spreads, at, status={}) +
+                      role_signals(lines, games, role, uplift, all_spreads, at, status={})):
                 quote = lines[lines['bet_type'] == s['bet_type']].iloc[-1]
                 rows.append({'night': night, 'at': at, 'event_id': event, 'name_ESPN': quote['name_ESPN'],
                              'player_id_ESPN': pid, 'source': quote['source'],
-                             'over_odds': quote['over_odds'], 'under_odds': quote['under_odds'],
+                             'over_odds': quote['over_odds'], 'under_odds': quote['under_odds'], 'role': s.get('role'),
                              **{k: s[k] for k in ('hypothesis', 'bet_type', 'line', 'side', 'odds', 'p_ours',
                                                   'p_book', 'gap_pp', 'clears')}})
     return pd.DataFrame(rows)
@@ -257,14 +286,26 @@ def last_quotes(outputs: pd.DataFrame) -> pd.DataFrame:
                                                      keep='last')
 
 
-def mechanism(last: pd.DataFrame, gap_pp: float = MECHANISM_GAP_PP) -> Dict:
+def market_tilt(offered: pd.DataFrame, logs: pd.DataFrame) -> pd.DataFrame:
+    """Every offered line at its last read before tip-off, settled for Under: night, bet_type and under edge
+    (Under won, 1/0, minus its margin-free price), for the tilt of a stat on the whole market."""
+    last = offered.dropna(subset=['player_id_ESPN']).sort_values('at').drop_duplicates(
+        ['event_id', 'player_id_ESPN', 'bet_type'], keep='last')
+    last = last[last['line'] % 1 != 0]
+    p_under = 1 - np.array([no_vig(o, u)[0] for o, u in zip(last['over_odds'], last['under_odds'])])
+    rows = last.assign(night=_night(last['tip']), side='Under', p_book=p_under)
+    rows = settle(rows[['night', 'player_id_ESPN', 'bet_type', 'line', 'side', 'p_book']], logs)
+    rows = rows[rows['won'].notna()]
+    return rows.assign(**{'under edge': rows['won'] - rows['p_book']})[['night', 'bet_type', 'under edge']]
+
+
+def mechanism(last: pd.DataFrame, market: pd.DataFrame, gap_pp: float = MECHANISM_GAP_PP) -> Dict:
     """Test b on one hypothesis's settled last quotes: how much the signal's side (gap ≥ gap_pp) won more often
-    than its price, plain and beyond the tilt of the same stat and side on all of its lines; with the tilt itself
-    (Under's wins minus its price, pp, by stat)."""
+    than its price, plain and beyond the tilt of the same stat and side on the whole market (market_tilt of the
+    same nights); with the tilt itself (Under's wins minus its price, pp, by stat)."""
     x = last[last['won'].notna()].copy()
     x['edge'] = x['won'] - x['p_book']
-    x['under edge'] = np.where(x['side'] == 'Under', x['edge'], -x['edge'])
-    tilt = x.groupby('bet_type')['under edge'].mean()
+    tilt = market.groupby('bet_type')['under edge'].mean().reindex(sorted(set(x['bet_type']))).fillna(0.0)
     x['beyond'] = x['edge'] - np.where(x['side'] == 'Under', 1, -1) * x['bet_type'].map(tilt)
     y = x[x['gap_pp'] >= gap_pp]
     low, high = night_bootstrap(y['night'].values, 100 * y['edge'].values, level=LEVEL) if len(y) else (np.nan,) * 2
@@ -315,6 +356,7 @@ def evaluate(outputs: pd.DataFrame, offered: pd.DataFrame, logs: pd.DataFrame, d
     outputs = outputs[outputs['night'].isin(settled_nights)]
     sig = signals(outputs, offered, logs, closing)
     last = settle(last_quotes(outputs), logs)
+    market = market_tilt(offered, logs)
     result = {}
     for period, keep in (('exploration', lambda n: n <= d), ('evaluation', lambda n: n > d)):
         out_p = outputs[keep(outputs['night'])]
@@ -322,7 +364,7 @@ def evaluate(outputs: pd.DataFrame, offered: pd.DataFrame, logs: pd.DataFrame, d
         for h in HYPOTHESES:
             s = sig[(sig['hypothesis'] == h) & keep(sig['night'])] if len(sig) else sig
             lq = last[(last['hypothesis'] == h) & keep(last['night'])]
-            entry = {'a': economic(s, nights), 'b': mechanism(lq)}
+            entry = {'a': economic(s, nights), 'b': mechanism(lq, market[keep(market['night'])])}
             if h == 'H1':
                 entry['h1b'] = combo_drift(out_p, last[keep(last['night'])])
             result.setdefault(period, {})[h] = entry
@@ -367,7 +409,10 @@ def main():
     offered = offers(props, quotes, fetches)
     offered['player_id_ESPN'] = player_ids(offered, props, logs)
     log.info("%d lines offered at %d reads", len(offered), offered[['event_id', 'at']].drop_duplicates().shape[0])
-    outputs = detect(offered, logs)
+    from name_resolver import NameResolver
+    lineups = read('rotowire_lineups')
+    lineups = NameResolver(logs).add_ids(lineups) if len(lineups) else lineups
+    outputs = detect(offered, logs, lineups)
     result = evaluate(outputs, offered, logs, args.d, closing_props(quotes, fetches))
     text = report(result, args.d)
     atomic_write_text(REPORT_FILE, text)

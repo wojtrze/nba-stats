@@ -105,3 +105,17 @@ def test_verdict_follows_the_registry():
     assert verdict(_r(**{'CLV low': 0.5, 'ROI high': -1.0}))['verdict'] == 'wait'     # the ranges disagree
     no_close = _r(**{'with a close': 0, 'CLV low': np.nan, 'CLV high': np.nan, 'CLV after tax %': np.nan})
     assert verdict(no_close | {'signals': 150, 'ROI after tax %': -2.0})['verdict'] == 'rejected'
+
+
+def test_rotowire_role_is_the_last_version_saved_before_the_read():
+    from backtest.mispricing_eval import lineup_versions, rotowire_role
+    rw = pd.DataFrame({'fetched_at': ['2026-11-02T18:00:00Z'] * 2 + ['2026-11-02T22:00:00Z'] * 2,
+                       'game_date': '2026-11-02', 'team': 'bos', 'role': ['starter', 'starter', 'starter', 'may_not_play'],
+                       'player_id_ESPN': [1, 2, 3, 2]})
+    v = lineup_versions(rw)
+    night, early, late = pd.Timestamp('2026-11-02'), pd.Timestamp('2026-11-02T20:00Z'), pd.Timestamp('2026-11-02T23:00Z')
+    assert rotowire_role(v, night, 'bos', 2, early) == 'starter'
+    assert rotowire_role(v, night, 'bos', 2, late) is None                 # may not play
+    assert rotowire_role(v, night, 'bos', 1, late) == 'bench'              # his team is listed, he isn't
+    assert rotowire_role(v, night, 'nyk', 1, late) is None                 # his team isn't listed
+    assert rotowire_role(v, night, 'bos', 1, pd.Timestamp('2026-11-02T17:00Z')) is None   # nothing saved yet

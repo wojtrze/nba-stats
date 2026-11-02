@@ -11,6 +11,10 @@ A detector doesn't forecast the result better than the price; it looks for a kno
   H6 the spread of small counts: Superbet's price of a small line (≤ 2.5 blocks, steals, threes, turnovers, fouls)
      fits a count as spread as a Poisson. A player whose results spread more ends below the line
      more often at the same average.
+  H5 a role change: RotoWire has him in tonight's starting five after at most one start in his last five games (or
+     on the bench after four or five starts). His price fits the minutes he has been playing; the minutes of the
+     new role (his own games in it, pulled toward his recent minutes plus the league's starter-bench difference)
+     scale the price's average.
 
 Every signal is {'hypothesis', 'mechanism', 'status', 'bet_type', 'line', 'parts' [(stat, line)], 'side',
 'p_ours', 'p_book', 'gap_pp', 'needed_pp', 'clears', 'odds', 'n', 'as_of', 'expires_when'} plus what its message
@@ -55,7 +59,12 @@ PRIOR_ATTEMPTS = 200
 PRIOR_SPREAD_GAMES = 20
 # the smallest gap a page shows per hypothesis (docs/hipotezy_wyceny.md): below it the prices agree as often as
 # not, and H2's typical gap is 3 pp
-SHOW_GAP_PP = {'H1': 3.0, 'H2': 6.0, 'H6': 4.0}
+SHOW_GAP_PP = {'H1': 3.0, 'H2': 6.0, 'H6': 4.0, 'H5': 4.0}
+# H5: tonight's role against the starts of his last ROLE_GAMES games; the minutes he'll play in the new role are his
+# own in it, pulled toward his recent minutes ± the league's starter-bench difference as if that were worth
+# ROLE_PRIOR_GAMES games
+ROLE_GAMES = 5
+ROLE_PRIOR_GAMES = 3
 
 
 def hypothesis_status(path: str = STATUS_FILE) -> Dict[str, Dict]:
@@ -92,13 +101,23 @@ def league_rates(logs: pd.DataFrame) -> Dict[str, float]:
             if made in logs and att in logs and logs[att].sum() > 0}
 
 
-def league_spreads(logs: pd.DataFrame, min_games: int = 10) -> Dict[str, float]:
-    """The typical spread (variance / mean) of each small count: the median over players with min_games games."""
+def stat_values(games: pd.DataFrame, stat: str) -> Optional[pd.Series]:
+    """A stat per game, a combo summed from its parts; None when the games don't have it."""
+    parts = COMBOS.get(stat, (stat,))
+    if not set(parts) <= set(games.columns):
+        return None
+    return games[list(parts)].astype(float).sum(axis=1)
+
+
+def league_spreads(logs: pd.DataFrame, min_games: int = 10, stats=SMALL_STATS) -> Dict[str, float]:
+    """The typical spread (variance / mean) of each stat (SMALL_STATS by default): the median over players with
+    min_games games."""
     spreads = {}
-    for stat in SMALL_STATS:
-        if stat not in logs or 'player_id_ESPN' not in logs:
+    for stat in stats:
+        values = stat_values(logs, stat) if 'player_id_ESPN' in logs else None
+        if values is None:
             continue
-        per = logs.groupby('player_id_ESPN')[stat].agg(['mean', 'var', 'size'])
+        per = values.groupby(logs['player_id_ESPN']).agg(['mean', 'var', 'size'])
         per = per[(per['size'] >= min_games) & (per['mean'] > 0)]
         if len(per):
             spreads[stat] = float((per['var'] / per['mean']).median())
@@ -257,11 +276,69 @@ def spread_signals(lines: pd.DataFrame, games: pd.DataFrame, spreads: Dict[str, 
     return signals
 
 
+def role_uplift(logs: pd.DataFrame, min_each: int = 3) -> float:
+    """How many more minutes a player plays when he starts than off the bench: the median, over players with at
+    least min_each games of each in their last RECENT games, of the difference of their averages."""
+    if not {'starter', 'MIN', 'player_id_ESPN'} <= set(logs.columns):
+        return 0.0
+    recent = logs.sort_values('Date').groupby('player_id_ESPN').tail(RECENT) if 'Date' in logs else logs
+    per = recent.assign(start=recent['starter'].astype(bool)).groupby(['player_id_ESPN', 'start'])['MIN'].agg(
+        ['mean', 'size']).unstack('start')
+    if True not in per['size'] or False not in per['size']:
+        return 0.0
+    both = per[(per['size'][True] >= min_each) & (per['size'][False] >= min_each)]
+    return float((both['mean'][True] - both['mean'][False]).median()) if len(both) else 0.0
+
+
+def role_signals(lines: pd.DataFrame, games: pd.DataFrame, role: Optional[str], uplift: float,
+                 spreads: Dict[str, float], as_of=None, status: Optional[Dict[str, Dict]] = None,
+                 profile: str = ACTIVE_PROFILE) -> List[Dict]:
+    """H5 for one player's lines of one game from one fetch: when tonight's role (RotoWire: 'starter' or 'bench';
+    anything else gives nothing) differs from his last ROLE_GAMES games (promoted: at most one start in them;
+    demoted: on the bench after all but one were starts), a signal per line. Each price's average (market_mean
+    with his spread: variance / mean over his last RECENT games, pulled toward the league's `spreads`) is scaled
+    by the new role's minutes over his recent ones. games: his games before the game, oldest first."""
+    if role not in ('starter', 'bench') or len(games) < MIN_GAMES or not {'starter', 'MIN'} <= set(games.columns):
+        return []
+    last = games.tail(ROLE_GAMES)
+    starts = int(last['starter'].astype(bool).sum())
+    promoted = role == 'starter' and starts <= 1
+    if not promoted and not (role == 'bench' and starts >= ROLE_GAMES - 1):
+        return []
+    recent = games.tail(RECENT)
+    usual = float(last['MIN'].mean())
+    if not usual > 0:
+        return []
+    in_role = recent[recent['starter'].astype(bool) == promoted]['MIN']
+    guess = max(usual + (uplift if promoted else -uplift), 1.0)
+    minutes = (in_role.sum() + ROLE_PRIOR_GAMES * guess) / (len(in_role) + ROLE_PRIOR_GAMES)
+    verdict, quoted, n = _verdict(status, 'H5'), _quoted(lines), len(recent)
+    signals = []
+    for stat in quoted.index:
+        values = stat_values(recent, stat)
+        if values is None or not values.mean() > 0:
+            continue
+        own = values.var() / values.mean()
+        spread = max((n * own + PRIOR_SPREAD_GAMES * spreads.get(stat, own)) / (n + PRIOR_SPREAD_GAMES), 1.0)
+        line = float(quoted.loc[stat, 'line'])
+        p_book_over = no_vig(quoted.loc[stat, 'over_odds'], quoted.loc[stat, 'under_odds'])[0]
+        mean = market_mean(line, p_book_over, 1.0, spread) * minutes / usual
+        signals.append(_signal('H5', 'C', verdict, quoted, stat, count_over(mean, spread * mean, line), [], n,
+                               as_of, profile, role=role, starts=starts, last_games=len(last),
+                               usual_minutes=usual, minutes=minutes, role_games=len(in_role)))
+    return signals
+
+
 def offer_signals(lines: pd.DataFrame, games: pd.DataFrame, logs: pd.DataFrame, as_of=None,
-                  status: Optional[Dict[str, Dict]] = None, profile: str = ACTIVE_PROFILE) -> List[Dict]:
-    """Every detector's signals for one player's lines of one game: H1, H2 and H6. logs: every player's games of
-    the same scope (the league's correlations, shooting rates and spreads)."""
+                  status: Optional[Dict[str, Dict]] = None, profile: str = ACTIVE_PROFILE,
+                  role: Optional[str] = None) -> List[Dict]:
+    """Every detector's signals for one player's lines of one game: H1, H2, H5 and H6. logs: every player's games
+    of the same scope (the league's correlations, shooting rates, spreads and starter-bench minutes). role:
+    tonight's per RotoWire ('starter' or 'bench'), for H5."""
     status = hypothesis_status() if status is None else status
     return (combo_signals(lines, games, pooled_correlations(logs), as_of, status, profile)
             + shooting_signals(lines, games, league_rates(logs), as_of, status, profile)
-            + spread_signals(lines, games, league_spreads(logs), as_of, status, profile))
+            + spread_signals(lines, games, league_spreads(logs), as_of, status, profile)
+            + role_signals(lines, games, role, role_uplift(logs),
+                           league_spreads(logs, stats=tuple(lines['bet_type'].dropna().unique())), as_of, status,
+                           profile))
