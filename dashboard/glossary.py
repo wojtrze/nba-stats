@@ -201,20 +201,6 @@ GAME_SIGNAL_TIP = ("🔴 a reason to pass whatever the numbers say (see red flag
                    "research, not a betting signal")
 
 
-def signal_legend(lang: Optional[str] = None) -> str:
-    """What 🟢 / 🟡 / 🔴 mean on the props pages, with the current 🟢 threshold; in `lang` (dashboard v2)."""
-    from models import load_green_edge
-    green = load_green_edge()
-    if lang:
-        first = i18n.t('legend.green', lang, edge=green) if green is not None else i18n.t('legend.no_green', lang)
-        return f"{first} {i18n.t('legend.rest', lang)}"
-    return ((f"🟢 = an edge of +{green:g} pp or more (the smallest threshold whose picks beat break-even on 10+ "
-             f"unseen Superbet nights, even at the low end of their range); " if green is not None else
-             "No 🟢 for now: no edge threshold has clearly beaten break-even on 10+ unseen Superbet nights yet; ")
-            + "🟡 = a positive estimated edge, not a validated one; 🔴 = a reason to pass whatever the numbers say (red flag), listed "
-              "last.")
-
-
 def source_legend(keys=tuple(SOURCES)) -> str:
     """Markdown legend of the sources, coloured like the column tints: put it in st.caption above a table."""
     return "  ".join(f"{SOURCES[k][0]} :{SOURCES[k][2]}-background[{SOURCES[k][1]}]" for k in keys)

@@ -13,7 +13,6 @@ from glossary import column_config, tinted
 from i18n import label, t, value
 from loaders import filtered_logs, games, player_logs, snapshot_history
 import night_view
-from glossary import signal_legend
 from tracking import (EVERY_LINE, RECOMPUTED, RECORDED, calibration, edge_bucket, paper_accumulators,
                       results_table, settle_games, star_scorecard, threshold_table)
 from decisions import star_text
@@ -27,7 +26,7 @@ RATE_FORMATS = {'lines': '%d', 'bets': '%d', 'expected %': '%.0f', 'hit %': '%.0
                 'nights': '%d', 'price said %': '%.0f', 'won − price pp': '%+.1f'}
 
 
-def rates(df: pd.DataFrame, words=('signal', 'pick', 'market')):
+def rates(df: pd.DataFrame, words=('pick', 'market')):
     """A rates table (results_table / threshold_table) as shown: its group words in the chosen language, headers
     and tooltips from i18n."""
     shown = df.assign(**{c: df[c].map(lambda v: value(v, lang)) for c in words if c in df})
@@ -169,15 +168,14 @@ with saved_tab:
                   {'label': t('results.kpi.vs_last', lang), 'value': f"{picks_done['odds vs last %'].mean():+.1f}%"
                    if picks_done['odds vs last %'].notna().any() else "–",
                    'help': t('results.kpi.vs_last_help', lang)}])
-            picks = picks.assign(**{'edge bucket': edge_bucket(picks['edge_pp']),
-                                    'signal': picks['signal'].replace('', 'none')})
+            picks = picks.assign(**{'edge bucket': edge_bucket(picks['edge_pp'])})
             st.markdown(t('results.efficiency', lang))
             efficiency = threshold_table(picks)
             if efficiency.empty:
                 st.caption(t('results.no_edge_yet', lang))
             else:
                 rates(efficiency)
-            st.caption(signal_legend(lang))
+            st.caption(t('results.picks_note', lang))
             left, right = st.columns(2)
             with left:
                 curve = picks.sort_values('game_date').assign(cum=lambda d: d['profit'].fillna(0).cumsum())
@@ -199,8 +197,8 @@ with saved_tab:
                                           yaxis=dict(title=t('results.calibration_y', lang), range=[0, 100])),
                             key='res_cal')
                 st.caption(t('results.calibration_caption', lang))
-            for i, (title, by) in enumerate([('results.by_signal', 'signal'), ('results.by_edge', 'edge bucket'),
-                                             ('results.by_stat', 'bet_type'), ('results.by_side', 'pick')]):
+            for i, (title, by) in enumerate([('results.by_edge', 'edge bucket'), ('results.by_stat', 'bet_type'),
+                                             ('results.by_side', 'pick')]):
                 if i % 2 == 0:
                     cols = st.columns(2)
                 with cols[i % 2]:

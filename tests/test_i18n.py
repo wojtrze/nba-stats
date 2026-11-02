@@ -47,7 +47,7 @@ def test_edge_tooltip_explains_with_an_example():
     en, pl = i18n.tooltip('edge pp', 'en'), i18n.tooltip('edge pp', 'pl')
     assert '52.6%' in en and '+2.4 pp' in en and 'break even' in en
     assert '52.6%' in pl and '+2.4 pp' in pl
-    assert i18n.label('edge pp', 'pl') == "przewaga (pp)"
+    assert i18n.label('edge pp', 'pl') == "przewaga przed podatkiem (pp)"
     assert i18n.label('edge pp', 'en', context='games') == "edge (pp), estimate"      # the games page's own
     assert i18n.label('not a column', 'pl') == 'not a column' and i18n.tooltip('not a column', 'pl') is None
 

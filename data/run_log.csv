@@ -111,3 +111,7 @@ started_at,job,command,exit_code,seconds,summary
 2026-11-02T10:00:00Z,snapshot,scheduled hourly,0,114.1,"15 games read, 957 prop and 598 game quotes changed; 17 requests (200×15, 304×1), 1 retries, 1 unchanged, 2 s HTTP; RotoWire: unchanged; snapshot: 2301 lines, 2128 game odds"
 2026-11-02T11:00:00Z,quotes,scheduled hourly,0,82.9,"15 games read, 996 prop and 490 game quotes changed; 17 requests (200×16), 1 retries, 0 unchanged, 2 s HTTP; RotoWire: unchanged"
 2026-11-02T12:00:00Z,snapshot,scheduled hourly,0,111.8,"15 games read, 981 prop and 457 game quotes changed; 17 requests (200×16), 1 retries, 0 unchanged, 2 s HTTP; RotoWire: unchanged; snapshot: 2441 lines, 2128 game odds"
+2026-11-02T13:00:00Z,quotes,scheduled hourly,0,85.9,"15 games read, 646 prop and 512 game quotes changed; 17 requests (200×14, 304×2), 1 retries, 2 unchanged, 2 s HTTP; RotoWire: unchanged"
+2026-11-02T14:00:00Z,snapshot,scheduled hourly,0,113.4,"15 games read, 1340 prop and 1507 game quotes changed; 17 requests (200×16), 1 retries, 0 unchanged, 2 s HTTP; RotoWire: unchanged; snapshot: 2565 lines, 2126 game odds"
+2026-11-02T14:53:10Z,lineups,RotoWire lineups (dashboard),0,1.1,saved 243 players for Nov 02: 18 changes – Peyton Watson (CLE): starter → starter; Aaron Nesmith (IND): starter → starter; Ivica Zubac (IND): Out 0% → Doubt 25%; …and 15 more
+2026-11-02T15:00:00Z,quotes,scheduled hourly,0,81.7,"15 games read, 1460 prop and 1461 game quotes changed; 17 requests (200×16), 1 retries, 0 unchanged, 3 s HTTP; RotoWire: unchanged"

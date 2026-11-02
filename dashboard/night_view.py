@@ -10,18 +10,20 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from decisions import MAX_STARS, star_text
 from glossary import column_config, tinted
 from i18n import t, value
 from loaders import games, name_resolver, player_logs, snapshot_history
 from metrics import grouped_rates
 from nightly import (GROUP_AXES, pre_tip, group_outcomes, lineups_before_tip, night_games, night_props,
                      night_summary, nights, recompute_projection, recompute_props)
+from tracking import PROP_KEY, settle_stars
 
 WIN, LOSS, PUSH, OVER, UNDER = '#16a34a', '#dc2626', '#9aa5b1', '#2563eb', '#f59e0b'
 # Superbet's two prices on a line usually sum to about 105%, so a side needs about 52.5% to break even
 BREAK_EVEN = 52.5
 BREAK_EVEN_STD = round(BREAK_EVEN / 0.88, 1)   # the same odds after Superbet's 12% stake tax (metrics.COST_PROFILES)
-LINE_COLUMNS = ['night', 'name', 'game', 'bet_type', 'line', 'proj_avg', 'actual', 'pick', 'model_pct', 'signal',
+LINE_COLUMNS = ['night', 'name', 'game', 'bet_type', 'line', 'proj_avg', 'actual', 'pick', 'model_pct', 'stars',
                 'result', 'proj error', 'closer than line', 'open line', 'pick at open', 'red_flag', 'recomputed']
 LINE_FORMATS = {'line': '%g', 'proj_avg': '%.1f', 'actual': '%g', 'model_pct': '%.0f', 'proj error': '%+.1f',
                 'open line': '%g'}
@@ -34,7 +36,8 @@ LINE_TIPS = {'proj_avg': "Our projected average at the last fetch before tip-off
              'pick at open': "Our pick at the first fetch", 'red_flag': "The red flags at the fetch (saved from "
              "Oct 22 on; recomputed lines get them recomputed)",
              'recomputed': "✔ = the fetch was saved without our numbers (before Oct 21): pick and projection are "
-                           "recomputed from the games before that night", 'night': "Game date (US)"}
+                           "recomputed from the games before that night", 'night': "Game date (US)",
+             'stars': "The line's rating at the last fetch before tip-off (Results → Ratings judges its side)"}
 GROUP_FORMATS = {'lines': '%d', 'over %': '%.0f', 'over ROI %': '%+.1f', 'under %': '%.0f', 'under ROI %': '%+.1f',
                  'best side %': '%.1f', 'ci low %': '%.0f', 'ci high %': '%.0f', 'best side ROI %': '%+.1f',
                  'best side ROI % std': '%+.1f', 'our picks': '%d', 'our hit %': '%.0f', 'our ROI %': '%+.1f',
@@ -85,6 +88,26 @@ def _night(night: str):
     game_part = night_games(odds_snapshots, games(), night, recompute_game)
     stamp = lambda df: df.assign(night=pd.Timestamp(night).strftime('%b %d')) if len(df) else df
     return stamp(props), {'games': stamp(game_part['games']), 'outcomes': game_part['outcomes']}
+
+
+@st.cache_data(ttl=600, show_spinner="Rating the nights...")
+def _rated() -> pd.DataFrame:
+    """Every line's stars and the starred side's result (tracking.settle_stars), the same record as Results →
+    Ratings."""
+    return settle_stars(snapshot_history('superbet_props'), player_logs(), games())
+
+
+def _with_stars(props: pd.DataFrame, rated: pd.DataFrame) -> pd.DataFrame:
+    """props with 'stars' (star_text of the rated record; '–' = no rating)."""
+    if props.empty:
+        return props
+    found = rated[PROP_KEY + ['stars']].drop_duplicates(PROP_KEY) if len(rated) else \
+        pd.DataFrame(columns=PROP_KEY + ['stars'])
+    stars = props[PROP_KEY].merge(found, on=PROP_KEY, how='left')['stars']
+    return props.assign(stars=[star_text(n) for n in stars])
+
+
+STAR_CHOICES = [star_text(n) for n in range(MAX_STARS, -1, -1)] + [star_text(None)]
 
 
 def _combined(chosen: List[str]):
@@ -144,9 +167,12 @@ def render(update_stats: Optional[Callable] = None, key: str = 'night', lang: st
     if not chosen:
         return
     props, game_part = _combined(chosen)
+    rated = _rated()
+    rated = rated[rated['game_date'].dt.strftime('%Y-%m-%d').isin(chosen)] if len(rated) else rated
+    props = _with_stars(props, rated)
     if len(props) and props['recomputed'].any():
         st.caption(t('night.recomputed', lang, n=int(props['recomputed'].sum())))
-    s = night_summary(props, game_part)
+    s = night_summary(props, game_part, rated)
     if s.get('lines'):
         c = st.columns(5)
         _kpi(c[0], t('night.kpi.settled', lang), f"{s['settled']:,}", t('night.kpi.settled_help', lang),
@@ -155,30 +181,42 @@ def render(update_stats: Optional[Callable] = None, key: str = 'night', lang: st
         _kpi(c[1], t('night.kpi.picks', lang), _rate(s['picks']), t('night.kpi.picks_help', lang),
              t('night.kpi.roi', lang, roi=s['picks']['ROI %'], std=s['picks'].get('ROI % std', np.nan))
              if s['picks']['picks'] else None)
-        _kpi(c[2], t('night.kpi.edge', lang), _rate(s['edge picks']), t('night.kpi.edge_help', lang),
-             t('night.kpi.n_picks', lang, n=s['edge picks']['picks']))
-        _kpi(c[3], t('night.kpi.red', lang), _rate(s['red picks']), t('night.kpi.red_help', lang),
-             t('night.kpi.n_picks', lang, n=s['red picks']['picks']))
+        _kpi(c[2], t('night.kpi.top', lang), _rate(s['top bets']), t('night.kpi.top_help', lang),
+             t('night.kpi.n_bets', lang, n=s['top bets']['picks']))
+        _kpi(c[3], t('night.kpi.zero', lang), _rate(s['zero bets']), t('night.kpi.zero_help', lang),
+             t('night.kpi.n_bets', lang, n=s['zero bets']['picks']))
         _kpi(c[4], t('night.kpi.closer', lang), f"{s['closer than line %']:.0f}%"
              if pd.notna(s['closer than line %']) else "–", t('night.kpi.closer_help', lang),
              t('night.kpi.closer_note', lang, proj=s['median proj miss'], line=s['median line miss']))
     props_tab, groups_tab, games_tab = st.tabs([t('night.tab.props', lang), t('night.tab.groups', lang),
                                                 t('night.tab.games', lang)])
     with props_tab:
-        _props(props, key, lang, v1)
+        _props(props, rated, key, lang, v1)
     with groups_tab:
         _groups(props, key, lang, v1)
     with games_tab:
         _games(game_part, s, lang, v1)
 
 
-def _props(props: pd.DataFrame, key: str, lang: str = 'en', v1: bool = True):
+def _by_stars(rated: pd.DataFrame) -> pd.DataFrame:
+    """grouped_rates of the rated record's won and lost bets per star level, 5★ first, '–' (no rating) last."""
+    decided = rated[rated['result'].isin(['win', 'loss'])] if len(rated) else rated
+    if decided.empty:
+        return pd.DataFrame()
+    level = pd.to_numeric(decided['stars'], errors='coerce').fillna(-1).astype(int)
+    # the saved model % is of the best-edge side, not always the starred one: no 'expected %' here
+    rates = grouped_rates(decided.drop(columns='model_pct', errors='ignore')
+                          .assign(is_hit=decided['result'] == 'win', stars=level), 'stars')
+    rates = rates.sort_values('stars', ascending=False)
+    return rates.assign(stars=[star_text(None if n < 0 else n) for n in rates['stars']])
+
+
+def _props(props: pd.DataFrame, rated: pd.DataFrame, key: str, lang: str = 'en', v1: bool = True):
     if props.empty:
         st.caption(t('night.no_props', lang))
         return
     settled = props[props['status'] == 'settled']
-    picks = settled[settled['result'].isin(['win', 'loss'])].assign(
-        is_hit=lambda d: d['result'] == 'win', signal=lambda d: d['signal'].replace('', 'none'))
+    picks = settled[settled['result'].isin(['win', 'loss'])].assign(is_hit=lambda d: d['result'] == 'win')
     left, right = st.columns([3, 2])
     with left:
         stats = sorted(settled['bet_type'].unique(), key=lambda t: (t not in ('PTS', 'REB', 'AST', 'ARP'), t))
@@ -203,10 +241,10 @@ def _props(props: pd.DataFrame, key: str, lang: str = 'en', v1: bool = True):
                           xaxis=dict(title=t('night.x', lang)), yaxis=dict(title=t('night.y', lang)))
         st.plotly_chart(fig, width='stretch', key=f'{key}_scatter', config={'displayModeBar': False})
     with right:
-        for title, by in ((t('night.by_signal', lang), 'signal'), (t('night.by_stat', lang), 'bet_type')):
+        for title, rates in ((t('night.by_stars', lang), _by_stars(rated)),
+                             (t('night.by_stat', lang), grouped_rates(picks, 'bet_type') if len(picks) else None)):
             st.markdown(f"**{title}**")
-            if len(picks):
-                rates = _words(grouped_rates(picks, by), ['signal'], lang)
+            if rates is not None and len(rates):
                 st.dataframe(tinted(rates, RATE_FORMATS), hide_index=True, width='stretch',
                              column_config=_config(rates.columns, RATE_FORMATS, None, lang, v1=v1))
     st.markdown(t('night.every_line', lang))
@@ -217,8 +255,8 @@ def _props(props: pd.DataFrame, key: str, lang: str = 'en', v1: bool = True):
                               placeholder=t('night.all', lang))
     result = f[2].multiselect(t('night.result', lang), ['win', 'loss', 'push', 'void'], key=f'{key}_results',
                               placeholder=t('night.all', lang), format_func=lambda v: value(v, lang))
-    signal = f[3].multiselect(t('night.signal', lang), ['🟢', '🟡', '🔴', 'none'], key=f'{key}_signals',
-                              placeholder=t('night.all', lang), format_func=lambda v: value(v, lang))
+    stars = f[3].multiselect(t('night.stars', lang), STAR_CHOICES, key=f'{key}_stars',
+                             placeholder=t('night.all', lang))
     shown = props
     if game:
         shown = shown[shown['game'].isin(game)]
@@ -226,8 +264,8 @@ def _props(props: pd.DataFrame, key: str, lang: str = 'en', v1: bool = True):
         shown = shown[shown['bet_type'].isin(stat_f)]
     if result:
         shown = shown[shown['result'].isin(result)]
-    if signal:
-        shown = shown[shown['signal'].replace('', 'none').isin(signal)]
+    if stars:
+        shown = shown[shown['stars'].isin(stars)]
     shown = shown.sort_values(['night', 'game', 'name', 'bet_type']).assign(
         recomputed=lambda d: d['recomputed'].map({True: '✔', False: ''}))
     st.dataframe(_words(shown[LINE_COLUMNS], ['pick', 'pick at open', 'result'], lang), hide_index=True,
@@ -252,13 +290,12 @@ def _groups(props: pd.DataFrame, key: str, lang: str = 'en', v1: bool = True):
     if not axes:
         st.info(t('night.pick_axis', lang))
         return
-    lines = props.assign(bet_type=props['bet_type'].replace({'ARP': 'PRA'}),
-                         signal=props['signal'].replace('', 'none'))
+    lines = props.assign(bet_type=props['bet_type'].replace({'ARP': 'PRA'}))
     g = group_outcomes(lines, axes, min_lines)
     if g.empty:
         st.info(t('night.no_group', lang))
         return
-    g = _words(g, [a for a in axes if a in ('venue', 'pick', 'signal')] + ['best side'], lang)
+    g = _words(g, [a for a in axes if a in ('venue', 'pick')] + ['best side'], lang)
     g['group'] = g[axes].astype(str).agg(' · '.join, axis=1)
     top = g.head(25).iloc[::-1]
     fig = go.Figure(go.Bar(x=top['best side %'], y=top['group'], orientation='h',

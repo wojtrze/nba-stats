@@ -45,7 +45,7 @@ def backtest_lines(mtime: float) -> pd.DataFrame:
 
 def _rates(rates: pd.DataFrame):
     lang = language()
-    shown = rates.assign(**{c: rates[c].map(lambda v: value(v, lang)) for c in ('signal', 'bet side') if c in rates})
+    shown = rates.assign(**{c: rates[c].map(lambda v: value(v, lang)) for c in ('bet side',) if c in rates})
     st.dataframe(tinted(shown, RATE_FORMATS), hide_index=True, width='stretch',
                  column_config=column_config(shown.columns, RATE_FORMATS, lang=lang, context='backtest'))
 
@@ -99,7 +99,7 @@ def summary_view(every: pd.DataFrame):
     lang = language()
     lines = every[every['main'] & (every['games'] >= MIN_GAMES)]
     st.caption(t('bt.lines_caption', lang, n=len(lines), games=MIN_GAMES, dates=lines['game_date'].nunique()))
-    # the 🟢 / 🟡 strategies stay in backtest.run's report (the earlier threshold); the page rates by stars
+    # the green / yellow strategies stay in backtest.run's report (the earlier threshold); the page rates by stars
     tested = {name: s for name, s in strategies(lines).items() if '🟢' not in name}
     pick, odds = tested["Model pick (every line)"]
     tested |= {TOP_STARS: (pick.where(lines['stars'] == 4), odds), SOME_STARS: (pick.where(lines['stars'] >= 3), odds)}
@@ -270,7 +270,7 @@ def render():
 
 def calibration_view():
     """The report of python -m backtest.calibrate: fitted on the earlier 2022/23 and Superbet lines, scored on the
-    later ones, with the 🟢 threshold (the earlier name of the threshold a 5★ needs)."""
+    later ones, with its 'green' threshold (the earlier name of the admission threshold a 5★ needs)."""
     if not os.path.exists(CALIBRATION_REPORT):
         st.info(t('bt.no_calibration', language()))
         return
