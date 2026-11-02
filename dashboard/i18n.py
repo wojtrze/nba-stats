@@ -1033,7 +1033,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
     # navigation and the language switch
     'nav.tonight': _w("Tonight", "Dziś"), 'nav.research': _w("Research", "Analiza"),
     'nav.review': _w("Review", "Wyniki"), 'nav.data': _w("Data", "Dane"),
-    'nav.overview': _w("Overview", "Przegląd"), 'nav.props': _w("Props", "Zakłady na zawodników"),
+    'nav.overview': _w("Overview", "Przegląd"), 'nav.slate': _w("Tonight's games", "Dzisiejsze mecze"), 'nav.props': _w("Props", "Zakłady na zawodników"),
     'nav.games': _w("Games", "Mecze"), 'nav.help': _w("How to read this", "Jak to czytać"),
     'nav.player': _w("Player history", "Historia zawodnika"), 'nav.team': _w("Team history", "Historia drużyny"),
     'nav.lineup': _w("Lineup lab", "Laboratorium składów"), 'nav.results': _w("Results", "Wyniki"),
@@ -2559,10 +2559,56 @@ TEXTS: Dict[str, Dict[str, str]] = {
 
     # Overview
     'overview.title': _w("Overview", "Przegląd"),
-    'overview.purpose': _w("The games in the next 36 hours: one decision for each game's team markets and one for its "
-                           "players, with the time of the odds and lineups behind them.",
-                           "Mecze w najbliższych 36 godzinach: jedna decyzja dla rynków drużynowych każdego meczu i "
-                           "jedna dla jego zawodników, z czasem kursów i składów, na których się opierają."),
+    'overview.purpose': _w("Tonight's decisions and best rated lines, how last night's lines, bets and games resolved, "
+                           "its curiosities, and tonight's players on a streak against Superbet's lines.",
+                           "Dzisiejsze decyzje i najwyżej ocenione linie, jak rozliczyły się linie, zakłady i mecze "
+                           "ostatniego wieczoru, jego ciekawostki oraz dzisiejsi zawodnicy z serią wobec linii "
+                           "Superbetu."),
+    'slate.title': _w("Tonight's games", "Dzisiejsze mecze"),
+    'slate.purpose': _w("The games in the next 36 hours: one decision for each game's team markets and one for its "
+                        "players, with the time of the odds and lineups behind them.",
+                        "Mecze w najbliższych 36 godzinach: jedna decyzja dla rynków drużynowych każdego meczu i "
+                        "jedna dla jego zawodników, z czasem kursów i składów, na których się opierają."),
+    'overview.tonight': _w("Tonight", "Dziś"),
+    'overview.all_games_link': _w("All of tonight's games, with odds, decisions and lineups",
+                                  "Wszystkie dzisiejsze mecze: kursy, decyzje i składy"),
+    'overview.last_night': _w("Last night: {night}", "Ostatni wieczór: {night}"),
+    'overview.games_note': _w("Games: winner called in {n} of {total}; total points missed by {miss:.1f} on average.",
+                              "Mecze: zwycięzca trafiony w {n} z {total}; suma punktów chybiona średnio o "
+                              "{miss:.1f}."),
+    'overview.night_link': _w("Every line of that night", "Każda linia tego wieczoru"),
+    'overview.curiosities': _w("Curiosities of {night}", "Ciekawostki: {night}"),
+    'overview.surprises': _w("Biggest surprises", "Największe niespodzianki"),
+    'overview.surprises_help': _w("Per stat, the line where the result was furthest from what we expected before "
+                                  "tip-off", "W każdej statystyce linia, w której wynik był najdalej od tego, czego "
+                                             "oczekiwaliśmy przed startem"),
+    'overview.spot_on': _w("Spot on", "W punkt"),
+    'overview.spot_on_help': _w("The lines and games where our expectation was closest to the result",
+                                "Linie i mecze, w których nasze oczekiwanie było najbliżej wyniku"),
+    'overview.said': _w("**{name}** {stat}: {actual:g}, we expected {proj:.1f} (line {line:g})",
+                        "**{name}** {stat}: {actual:g}, oczekiwaliśmy {proj:.1f} (linia {line:g})"),
+    'overview.line_miss': _w("Superbet's line furthest from the result: {name} {stat} {actual:g} against {line:g}.",
+                             "Linia Superbetu najdalej od wyniku: {name} {stat} {actual:g} wobec {line:g}."),
+    'overview.best_total': _w("**{game}**: total {actual:.0f} points, we expected {proj:.1f}",
+                              "**{game}**: suma {actual:.0f} pkt, oczekiwaliśmy {proj:.1f}"),
+    'overview.best_margin': _w("**{game}**: margin {home} {actual:+.0f}, we expected {proj:+.1f}",
+                               "**{game}**: różnica {home} {actual:+.0f}, oczekiwaliśmy {proj:+.1f}"),
+    'overview.streaks': _w("Streaks against Superbet's line", "Serie wobec linii Superbetu"),
+    'overview.streaks_help': _w("Tonight's players whose latest saved Superbet lines in a stat all went the same way "
+                                "(4 or more in a row), judged at the last line before tip-off; a push ends a streak. "
+                                "Lines are saved since Oct 21, so streaks are short. A streak isn't a reason to bet: "
+                                "Superbet sees it too. Click one to open tonight's line.",
+                                "Dzisiejsi zawodnicy, których ostatnie zapisane linie Superbetu w danej statystyce "
+                                "kończyły się tak samo (4 lub więcej z rzędu), oceniane przy ostatniej linii przed "
+                                "startem; zwrot przerywa serię. Linie zapisujemy od 21.10, więc serie są krótkie. Seria "
+                                "to nie powód do gry: Superbet też ją widzi. Kliknij, by otworzyć dzisiejszą linię."),
+    'overview.streak': _w("**{name}**: {stat} {side} Superbet's line {n} games in a row · tonight {line:g}",
+                          "**{name}**: {stat} {side} linii Superbetu {n} {n|mecz|mecze|meczów} z rzędu · dziś "
+                          "{line:g}"),
+    'overview.side.Over': _w("over", "powyżej"), 'overview.side.Under': _w("under", "poniżej"),
+    'overview.streaks_none': _w("No player with a line tonight has 4 or more in a row on the same side.",
+                                "Żaden zawodnik z dzisiejszą linią nie ma 4 lub więcej z rzędu po tej samej stronie."),
+    'overview.streaks_more': _w("{n} more streaks", "Więcej serii: {n}"),
     'overview.kpi.games': _w("Games", "Mecze"), 'overview.kpi.lines': _w("Player lines", "Linie zawodników"),
     'overview.kpi.lines_help': _w("Superbet's Over / Under lines on players in these games",
                                   "Linie Superbetu Powyżej / Poniżej na zawodników w tych meczach"),
