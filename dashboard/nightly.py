@@ -167,7 +167,7 @@ def recompute_props(rows: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
 
 def model_columns(table: pd.DataFrame) -> pd.DataFrame:
     """MODEL_COLUMNS from price_props + flag_props output, rounded as saved. pick is the best side even without an
-    edge (so every line can be judged); the dashboards' bet is pick where the signal is 🟢 / 🟡."""
+    edge (so every line can be judged); signal is the saved legacy column (the pages rate lines by stars)."""
     return pd.DataFrame({'pick': table['best side'], 'model_pct': table['model %'].round(1),
                          'edge_pp': table['edge pp'].round(1), 'edge_low': table['edge low'].round(1),
                          'proj_avg': table['proj avg'].round(2), 'signal': table['signal'],
@@ -180,7 +180,7 @@ def model_columns(table: pd.DataFrame) -> pd.DataFrame:
 
 # what the group analysis can split the lines by
 GROUP_AXES = {'bet_type': "Stat", 'position': "Position", 'venue': "Home / away", 'pick': "Our pick (Over / Under)",
-              'signal': "Signal", 'team': "Team", 'game': "Game"}
+              'stars': "Stars", 'team': "Team", 'game': "Game"}
 
 
 def group_outcomes(props: pd.DataFrame, by, min_lines: int = 1) -> pd.DataFrame:
@@ -317,18 +317,20 @@ def _rate(part: pd.DataFrame) -> Dict:
     return out
 
 
-def night_summary(props: pd.DataFrame, games: Dict[str, pd.DataFrame]) -> Dict:
-    """The night in numbers: how many lines settled, how the picks did (all, 🟢🟡, 🔴, no signal), how close the
-    projected averages were compared with the lines, and how the game projections did."""
+def night_summary(props: pd.DataFrame, games: Dict[str, pd.DataFrame], rated: Optional[pd.DataFrame] = None) -> Dict:
+    """The night in numbers: how many lines settled, how the picks did, how the rated lines did (rated:
+    tracking.settle_stars of the same nights, the starred side; 'top bets' = 4★ or more, 'zero bets' = 0★), how
+    close the projected averages were compared with the lines, and how the game projections did."""
     out = {}
     if len(props):
         settled = props[props['status'] == 'settled']
         picks = props[props['pick'].notna()]
+        rated = rated if rated is not None and len(rated) else pd.DataFrame(columns=['stars', 'result', 'profit'])
+        stars = pd.to_numeric(rated['stars'], errors='coerce')
         out.update({
             'lines': len(props), 'settled': len(settled), 'pending': int((props['status'] == 'pending').sum()),
             'void': int((props['status'] == 'void').sum()), 'unresolved': int((props['status'] == 'unresolved').sum()),
-            'picks': _rate(picks), 'edge picks': _rate(picks[picks['signal'].isin(['🟢', '🟡'])]),
-            'red picks': _rate(picks[picks['signal'] == '🔴']), 'plain picks': _rate(picks[picks['signal'] == '']),
+            'picks': _rate(picks), 'top bets': _rate(rated[stars >= 4]), 'zero bets': _rate(rated[stars == 0]),
             'median proj miss': settled['proj error'].abs().median() if len(settled) else np.nan,
             'median line miss': settled['line error'].abs().median() if len(settled) else np.nan,
             'closer than line %': 100 * settled['closer than line'].dropna().astype(float).mean()

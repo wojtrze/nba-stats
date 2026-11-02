@@ -102,10 +102,13 @@ def test_night_summary():
                           'profit': [0.9, -1.0, 0.9, 0.0], 'proj error': [1.0, -3.0, 2.0, np.nan],
                           'line error': [2.0, -1.0, 4.0, np.nan], 'closer than line': [True, False, True, np.nan],
                           'actual': [22, 18, 30, np.nan], 'line': [20.5, 19.5, 26.5, 20.5]})
-    s = night_summary(props, {})
+    rated = pd.DataFrame({'stars': pd.array([4, 5, 0, 2, pd.NA], dtype='Int64'),
+                          'result': ['win', 'loss', 'win', 'win', 'loss'], 'profit': [0.9, -1.0, 0.8, 0.9, -1.0]})
+    s = night_summary(props, {}, rated)
     assert (s['settled'], s['void'], s['picks']['picks']) == (3, 1, 3)
-    assert s['edge picks'] == {'picks': 1, 'hit %': 100.0, 'ROI %': pytest.approx(90.0)}
-    assert s['red picks']['picks'] == 1 and s['plain picks']['hit %'] == 0
+    assert s['top bets'] == {'picks': 2, 'hit %': 50.0, 'ROI %': pytest.approx(-5.0)}
+    assert s['zero bets']['picks'] == 1 and s['zero bets']['hit %'] == 100
+    assert night_summary(props, {})['top bets']['picks'] == 0             # nothing rated yet
     assert s['median proj miss'] == 2.0 and s['median line miss'] == 2.0
     assert s['closer than line %'] == pytest.approx(200 / 3) and s['over %'] == pytest.approx(200 / 3)
 

@@ -27,5 +27,5 @@ RESULTS_ALL = ['game_date', 'name', 'game', 'bet_type', 'line', 'pre avg', 'pre 
 RESULTS_BY_TYPE = ['bet_type', 'lines', 'over %', 'line error', 'line − avg', 'toward avg hit %', 'toward avg ROI %',
                    'toward proj hit %']
 RATE_COLUMNS = ['stars', 'bets', 'expected %', 'hit %', 'ci low %', 'ci high %', 'ROI %', 'ROI % std', 'break-even %',
-                'break-even % std', 'avg odds', 'avg odds vs last %', 'edge ≥ pp', 'signal', 'edge bucket', 'pick',
+                'break-even % std', 'avg odds', 'avg odds vs last %', 'edge ≥ pp', 'edge bucket', 'pick',
                 'market']

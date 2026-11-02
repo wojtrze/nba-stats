@@ -57,26 +57,14 @@ TERMS: Dict[str, Term] = {
                     "Linia 20.5 punktu: 21 lub więcej = wygrywa Powyżej, 20 lub mniej = wygrywa Poniżej.")),
 
     # --- the decision ---
-    'bet': Term(_w("our pick", "nasz typ"),
-                _w("**Over** or **Under** when our numbers say the odds pay more than the risk (a positive edge, "
-                   "🟢 or 🟡). **pass** = don't bet: on most lines the odds are fair or too low.",
-                   "**Powyżej** lub **Poniżej**, gdy nasze liczby mówią, że kurs płaci więcej niż wynosi ryzyko "
-                   "(dodatnia przewaga, 🟢 lub 🟡). **odpuść** = nie graj: na większości linii kurs jest uczciwy "
-                   "albo za niski.")),
-    'signal': Term(_w("signal", "sygnał"),
-                   _w("How much to trust the pick. 🟢 = the edge is big enough that such picks have actually won "
-                      "money on 10+ evenings we didn't use to build the model (none so far). 🟡 = a positive "
-                      "edge on paper, not yet proven. 🔴 = a warning: pass, whatever the numbers say. Empty = no "
-                      "edge.",
-                      "Na ile ufać typowi. 🟢 = przewaga jest na tyle duża, że takie typy rzeczywiście zarabiały "
-                      "przez 10+ wieczorów, których nie użyliśmy do budowy modelu (na razie żaden). 🟡 = przewaga "
-                      "na papierze, jeszcze nie potwierdzona. 🔴 = ostrzeżenie: odpuść, cokolwiek mówią liczby. "
-                      "Puste = brak przewagi.")),
-    'edge pp': Term(_w("edge (pp)", "przewaga (pp)"),
+    'edge pp': Term(_w("edge before tax (pp)", "przewaga przed podatkiem (pp)"),
                     _w("Our chance that the pick wins **minus** the chance the odds need just to break even, in "
-                       "percentage points (pp). It answers: do the odds pay enough for the risk?",
+                       "percentage points (pp), before Superbet's 12% stake tax (the pages that decide use the edge "
+                       "after the tax). It answers: do the odds pay enough for the risk?",
                        "Nasza szansa, że typ wygra, **minus** szansa potrzebna, żeby przy tym kursie wyjść na zero, "
-                       "w punktach procentowych (pp). Odpowiada na pytanie: czy kurs płaci wystarczająco za ryzyko?"),
+                       "w punktach procentowych (pp), przed 12% podatkiem Superbetu od stawki (strony, które "
+                       "decydują, używają przewagi po podatku). Odpowiada na pytanie: czy kurs płaci wystarczająco "
+                       "za ryzyko?"),
                     _w("Above 0: the odds pay more than the risk, a value bet. +3 = about 3 more wins per 100 such "
                        "bets than needed to break even. Around 0 = a fair price.",
                        "Więcej niż 0: kurs płaci więcej niż ryzyko, zakład z wartością. +3 = ok. 3 wygrane więcej na 100 "
@@ -280,11 +268,12 @@ TERMS: Dict[str, Term] = {
                     "only: on its own it hasn't beaten Superbet's odds.",
                     "W którą stronę wskazuje 'oczekiwane dziś', gdy różni się od linii o co najmniej 10%. Tylko "
                     "informacja: samo w sobie nie pokonało kursów Superbetu.")),
-    'red flag': Term(_w("warning", "ostrzeżenie"),
+    'red flag': Term(_w("⚠️ warning", "⚠️ ostrzeżenie"),
                      _w("A reason to pass whatever the numbers say: too few games, preseason only, may not play, "
-                        "minutes swinging, the line moving against the pick.",
+                        "minutes swinging, the line moving against the pick. A line with a warning gets 0★.",
                         "Powód, żeby odpuścić, cokolwiek mówią liczby: za mało meczów, tylko przedsezon, może nie "
-                        "zagrać, wahające się minuty, linia ruszyła przeciw typowi.")),
+                        "zagrać, wahające się minuty, linia ruszyła przeciw typowi. Linia z ostrzeżeniem dostaje "
+                        "0★.")),
     'RotoWire': Term(_w("tonight's role", "rola dziś"),
                      _w("From RotoWire: starter (✔ = lineup confirmed), bench, or the injury tag with the chance to "
                         "play (Out 0%, Doubt 25%, Ques 50%, Prob 75%). Empty = RotoWire doesn't list the game yet.",
@@ -488,10 +477,11 @@ TERMS: Dict[str, Term] = {
                           "rzetelny, 'wygrane %' wypada blisko tej liczby."),
                        _w("The model was more confident.", "Model był bardziej pewny."),
                        _w("The model was less confident.", "Model był mniej pewny.")),
-    'edge ≥ pp': Term(_w("edge at least (pp)", "przewaga co najmniej (pp)"),
-                      _w("Every pick whose edge reached this many points (0 = any positive edge), so the rows "
-                         "overlap.", "Każdy typ, którego przewaga osiągnęła tyle punktów (0 = dowolna dodatnia), więc "
-                                     "wiersze się nakładają."),
+    'edge ≥ pp': Term(_w("edge before tax at least (pp)", "przewaga przed podatkiem co najmniej (pp)"),
+                      _w("Every pick whose edge before tax, as the fetch saved it, reached this many points (0 = any "
+                         "positive edge), so the rows overlap.",
+                         "Każdy typ, którego przewaga przed podatkiem, zapisana przy pobraniu, osiągnęła tyle punktów "
+                         "(0 = dowolna dodatnia), więc wiersze się nakładają."),
                       _w("Only picks with a bigger edge: fewer bets.", "Tylko typy z większą przewagą: mniej "
                                                                        "zakładów."),
                       _w("More picks, smaller edges.", "Więcej typów, mniejsze przewagi.")),
@@ -591,7 +581,8 @@ TERMS: Dict[str, Term] = {
     'pick at open': Term(_w("our pick at first", "nasz typ na początku"),
                          _w("Our pick when we first saw the line.", "Nasz typ, gdy zobaczyliśmy linię po raz "
                                                                     "pierwszy.")),
-    'red_flag': Term(_w("warning", "ostrzeżenie"), _w("The warnings at the fetch.", "Ostrzeżenia w chwili pobrania.")),
+    'red_flag': Term(_w("⚠️ warning", "⚠️ ostrzeżenie"), _w("The warnings at the fetch (a warning gives 0★).",
+                                                           "Ostrzeżenia w chwili pobrania (ostrzeżenie daje 0★).")),
     'recomputed': Term(_w("recomputed", "przeliczone"),
                        _w("✔ = this fetch was saved before our numbers were (before Oct 21): the pick and the "
                           "expectation were recomputed from the games before that night.",
@@ -648,13 +639,11 @@ TERMS: Dict[str, Term] = {
                               _w("Our expectation pointed the right way more often.",
                                  "Nasze oczekiwanie częściej wskazywało dobrze."),
                               _w("It pointed the wrong way more often.", "Częściej wskazywało źle.")),
-    'edge bucket': Term(_w("edge (pp)", "przewaga (pp)"), _w("Picks grouped by their edge.",
-                                                             "Typy pogrupowane według przewagi.")),
+    'edge bucket': Term(_w("edge before tax (pp)", "przewaga przed podatkiem (pp)"),
+                        _w("Picks grouped by their edge before tax, as the fetch saved it.",
+                           "Typy pogrupowane według przewagi przed podatkiem, zapisanej przy pobraniu.")),
     'results:pick': Term(_w("our pick then", "nasz typ wtedy"), _w("Our pick when the snapshot was saved.",
                                                                     "Nasz typ w chwili zapisu.")),
-    'results:signal': Term(_w("signal then", "sygnał wtedy"), _w("The signal the pick had then (none = no edge).",
-                                                                 "Sygnał typu w tamtej chwili (none = brak "
-                                                                 "przewagi).")),
     'proj score': Term(_w("expected score", "oczekiwany wynik"), _w("Our expected score, away – home.",
                                                                     "Nasz oczekiwany wynik, gość – gospodarz.")),
     'score': Term(_w("score", "wynik"), _w("The final score, away – home.", "Wynik końcowy, gość – gospodarz.")),
@@ -831,8 +820,6 @@ TERMS: Dict[str, Term] = {
     'backtest:games': Term(_w("games before", "mecze przed"), _w("Games before the line.", "Mecze przed linią.")),
     'backtest:best side': Term(_w("model pick", "typ modelu"), _w("The model's pick.", "Typ modelu.")),
     'backtest:team': Term(_w("team", "drużyna"), _w("The player's team.", "Drużyna zawodnika.")),
-    'backtest:signal': Term(_w("signal", "sygnał"), _w("The model's signal on the line (none = no edge).",
-                                                       "Sygnał modelu na linii (brak = bez przewagi).")),
 
     # --- game markets (Overview's biggest game edges; the Games page) ---
     'start (PL)': Term(_w("tip-off", "start"), _w("Tip-off, Polish time; ⏰ = within the next hour.",
@@ -918,13 +905,7 @@ TERMS: Dict[str, Term] = {
                              "skalibrowana na wynikach: była zbyt pewna siebie."),
                           _w("The model thinks it's more likely.", "Model uważa to za bardziej prawdopodobne."),
                           _w("The model thinks it's less likely.", "Model uważa to za mniej prawdopodobne.")),
-    'games:signal': Term(_w("signal", "sygnał"),
-                         _w("🔴 = a reason to pass whatever the numbers say (see warning). Game bets never get 🟢 / "
-                            "🟡: their model isn't calibrated, so its edge is an estimate for research.",
-                            "🔴 = powód, żeby odpuścić, cokolwiek mówią liczby (zob. ostrzeżenie). Zakłady na mecze "
-                            "nigdy nie dostają 🟢 / 🟡: ich model nie jest skalibrowany, więc przewaga to szacunek do "
-                            "analizy.")),
-    'games:red flag': Term(_w("warning", "ostrzeżenie"),
+    'games:red flag': Term(_w("⚠️ warning", "⚠️ ostrzeżenie"),
                            _w("A reason to pass: early season, no RotoWire lineup yet, or an edge too big to be true.",
                               "Powód, żeby odpuścić: początek sezonu, brak składu z RotoWire albo przewaga zbyt duża, "
                               "żeby była prawdziwa.")),
@@ -1060,15 +1041,6 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                                                                           "Centrum danych"),
     'language': _w("Language", "Język"),
     'source': _w("Source: {name}", "Źródło: {name}"),
-    'legend.green': _w("🟢 = an edge of +{edge:g} pp or more: picks like that have won money on 10+ evenings the model "
-                       "never saw.", "🟢 = przewaga +{edge:g} pp lub więcej: takie typy zarabiały przez 10+ "
-                                     "wieczorów, których model nie widział."),
-    'legend.no_green': _w("No 🟢 for now: no edge size has proven itself on 10+ unseen evenings yet.",
-                          "Na razie brak 🟢: żadna wielkość przewagi nie sprawdziła się jeszcze przez 10+ "
-                          "nieznanych modelowi wieczorów."),
-    'legend.rest': _w("🟡 = a positive edge on paper, not yet proven. 🔴 = a warning: pass, whatever the numbers say "
-                      "(listed last).", "🟡 = dodatnia przewaga na papierze, jeszcze niepotwierdzona. 🔴 = "
-                                        "ostrzeżenie: odpuść, cokolwiek mówią liczby (na końcu listy)."),
 
     # Props page
     'props.title': _w("Props", "Zakłady na zawodników"),
@@ -1119,7 +1091,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                 "których nie użyto do jego wyboru. Żadna nie może, dopóki taki próg nie istnieje."),
     'props.hide_red': _w("Hide lines with a warning", "Ukryj linie z ostrzeżeniem"),
     'props.kpi.games': _w("Games", "Mecze"),
-    'props.kpi.red': _w("🔴 Warnings", "🔴 Ostrzeżenia"),
+    'props.kpi.red': _w("⚠️ Warnings", "⚠️ Ostrzeżenia"),
     'props.kpi.red_help': _w("Lines with a reason to pass whatever the numbers say", "Linie z powodem, żeby "
                                                                                      "odpuścić, cokolwiek mówią "
                                                                                      "liczby"),
@@ -1781,7 +1753,14 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                    "last is an early sign of a real edge",
                                    "Nasze kursy wobec ostatnich przed startem: lepsze ceny niż ostatnie rynkowe to "
                                    "wczesny znak prawdziwej przewagi"),
-    'results.efficiency': _w("**Does a bigger edge win more?**", "**Czy większa przewaga częściej wygrywa?**"),
+    'results.efficiency': _w("**Does a bigger edge (before tax) win more?**",
+                             "**Czy większa przewaga (przed podatkiem) częściej wygrywa?**"),
+    'results.picks_note': _w("These are the side with the bigger edge at each fetch, judged with the edge before tax "
+                             "that the fetch saved: research into the model. How the star levels did (the evaluated "
+                             "side, after tax) is under Ratings: the record.",
+                             "To strona z większą przewagą przy każdym pobraniu, oceniana przewagą przed podatkiem "
+                             "zapisaną przy pobraniu: analiza modelu. Jak wypadły poziomy gwiazdek (oceniana strona, "
+                             "po podatku), pokazuje zakładka Oceny: wyniki."),
     'results.no_edge_yet': _w("No settled pick has had a positive edge yet.",
                               "Żaden rozliczony typ nie miał jeszcze dodatniej przewagi."),
     'results.curve': _w("Running result, 1 unit per model pick (plain odds)", "Narastający wynik, 1 jednostka na typ modelu (kurs bez podatku)"),
@@ -1793,8 +1772,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                       "60% of the time. Dots below it = we were too confident.",
                                       "Kropki na linii przerywanej = nasze szanse były rzetelne: typy z szansą 60% "
                                       "wygrywały w ok. 60% przypadków. Kropki poniżej = byliśmy zbyt pewni."),
-    'results.by_signal': _w("**By signal**", "**Wg sygnału**"), 'results.by_edge': _w("**By edge (pp)**",
-                                                                                     "**Wg przewagi (pp)**"),
+    'results.by_edge': _w("**By edge before tax (pp)**", "**Wg przewagi przed podatkiem (pp)**"),
     'results.by_stat': _w("**By stat**", "**Wg statystyki**"), 'results.by_side': _w("**By side**",
                                                                                       "**Wg strony**"),
     'results.by_market': _w("**By bet type**", "**Wg rodzaju zakładu**"),
@@ -1837,11 +1815,14 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'night.kpi.picks_help': _w("Every line's pick at our last fetch before tip-off",
                                "Typ każdej linii z ostatniego pobrania przed startem"),
     'night.kpi.roi': _w("return per 100 {roi:+.1f}, after tax {std:+.1f}", "zwrot na 100 {roi:+.1f}, po podatku {std:+.1f}"),
-    'night.kpi.edge': _w("🟢🟡 picks: won", "Typy 🟢🟡: wygrane"),
-    'night.kpi.edge_help': _w("Picks with a positive edge", "Typy z dodatnią przewagą"),
-    'night.kpi.n_picks': _w("{n} picks", "{n} {n|typ|typy|typów}"),
-    'night.kpi.red': _w("🔴 picks: won", "Typy 🔴: wygrane"),
-    'night.kpi.red_help': _w("Picks with a warning", "Typy z ostrzeżeniem"),
+    'night.kpi.top': _w("4–5★ bets: won", "Zakłady 4–5★: wygrane"),
+    'night.kpi.top_help': _w("The night's best rated lines, the starred side at the last fetch before tip-off (as in "
+                             "Ratings: the record)", "Najwyżej ocenione linie wieczoru, oceniana strona przy ostatnim "
+                                                     "pobraniu przed startem (jak w Oceny: wyniki)"),
+    'night.kpi.n_bets': _w("{n} bets", "{n} {n|zakład|zakłady|zakładów}"),
+    'night.kpi.zero': _w("0★ bets: won", "Zakłady 0★: wygrane"),
+    'night.kpi.zero_help': _w("Lines with a ⚠️ warning or a player who might not play",
+                              "Linie z ⚠️ ostrzeżeniem albo z graczem, który może nie zagrać"),
     'night.kpi.closer': _w("We beat the line", "Byliśmy bliżej niż linia"),
     'night.kpi.closer_help': _w("How often our expectation was closer to the result than Superbet's line",
                                 "Jak często nasze oczekiwanie było bliżej wyniku niż linia Superbetu"),
@@ -1860,12 +1841,12 @@ TEXTS: Dict[str, Dict[str, str]] = {
                               "%{customdata[0]} (%{customdata[4]}): oczekiwane %{x:.1f}, było %{y}<br>linia "
                               "%{customdata[1]}, typ %{customdata[2]} → %{customdata[3]}"),
     'night.x': _w("expected", "oczekiwane"), 'night.y': _w("result", "wynik"),
-    'night.by_signal': _w("Our picks by signal", "Nasze typy wg sygnału"),
+    'night.by_stars': _w("Bets by stars", "Zakłady wg gwiazdek"),
     'night.by_stat': _w("Our picks by stat", "Nasze typy wg statystyki"),
     'night.every_line': _w("**Every line**", "**Każda linia**"),
     'night.games': _w("Games", "Mecze"), 'night.all_games': _w("All games", "Wszystkie mecze"),
     'night.stats': _w("Stats", "Statystyki"), 'night.all': _w("All", "Wszystkie"),
-    'night.result': _w("Result", "Rezultat"), 'night.signal': _w("Signal", "Sygnał"),
+    'night.result': _w("Result", "Rezultat"), 'night.stars': _w("Stars", "Gwiazdki"),
     'night.groups_caption': _w("Every settled line, grouped. For each group: how often betting Over and betting Under "
                                "won and paid at the lines' odds, and how our picks did. The groups where a bet was most "
                                "likely to win come first; the dashed line is break-even at the plain odds (about {be}%; {be_std}% after the 12% stake tax). One night is a "
@@ -1893,7 +1874,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'night.axis.bet_type': _w("Stat", "Statystyka"), 'night.axis.position': _w("Position", "Pozycja"),
     'night.axis.venue': _w("Home / away", "Dom / wyjazd"), 'night.axis.pick': _w("Our pick (Over / Under)",
                                                                                  "Nasz typ (Powyżej / Poniżej)"),
-    'night.axis.signal': _w("Signal", "Sygnał"), 'night.axis.team': _w("Team", "Drużyna"),
+    'night.axis.stars': _w("Stars", "Gwiazdki"), 'night.axis.team': _w("Team", "Drużyna"),
     'night.axis.game': _w("Game", "Mecz"),
     'night.no_games': _w("No game odds were saved for these nights.", "Dla tych wieczorów nie zapisano kursów na "
                                                                       "mecze."),
@@ -2163,11 +2144,11 @@ TEXTS: Dict[str, Dict[str, str]] = {
                         "lines by the model's expected return, whatever you bet on. None picked = all",
                         "Gwiazdki linii tej nocy, według zasad dzisiejszych: miejsce wśród głównych linii nocy wg "
                         "oczekiwanego zwrotu modelu, niezależnie od tego, co grasz. Nic nie wybrane = wszystkie"),
-    'bt.unrated': _w("no rating", "bez oceny"),
-    'bt.green_is_admission': _w("🟢 below is the earlier name of the admission threshold: a 5★ needs one that held "
-                                "up on nights not used to choose it, and none has yet.",
-                                "🟢 poniżej to dawna nazwa progu dopuszczenia: 5★ wymaga progu sprawdzonego na "
-                                "nocach, których nie użyto do jego wyboru, a takiego jeszcze nie ma."),
+    'bt.unrated': _w("– no rating", "– bez oceny"),
+    'bt.green_is_admission': _w("The report's 'green' threshold is the earlier name of the admission threshold: a 5★ "
+                                "needs one that held up on nights not used to choose it, and none has yet.",
+                                "Próg 'green' w raporcie to dawna nazwa progu dopuszczenia: 5★ wymaga progu "
+                                "sprawdzonego na nocach, których nie użyto do jego wyboru, a takiego jeszcze nie ma."),
     'bt.bet_on': _w("Strategy tested", "Testowana strategia"), 'bt.side': _w("Side", "Strona"),
     'bt.side_help': _w("Only the bets on this side; none picked = both", "Tylko zakłady na tę stronę; nic = obie"),
     'bt.more': _w("More filters", "Więcej filtrów"),
@@ -2228,9 +2209,9 @@ TEXTS: Dict[str, Dict[str, str]] = {
                      "Linie Unibetu z sezonu 2022/23, każda wyceniona dzisiejszym modelem tylko z meczów sprzed jej "
                      "daty. Brak historycznych kursów na mecze, więc czynnik oczekiwanych punktów drużyny jest "
                      "wyłączony. Szczegóły: data/backtest/2022_summary.md."),
-    'bt.in_sample': _w(" Our chance, edges and signals are calibrated with coefficients fitted on this same season, so "
+    'bt.in_sample': _w(" Our chance, edges and stars are calibrated with coefficients fitted on this same season, so "
                        "these numbers are in-sample: the honest check on unseen games is under Calibration.",
-                       " Nasza szansa, przewagi i sygnały są skalibrowane współczynnikami dopasowanymi na tym samym "
+                       " Nasza szansa, przewagi i gwiazdki są skalibrowane współczynnikami dopasowanymi na tym samym "
                        "sezonie, więc te liczby są 'w próbie': rzetelny test na nieznanych meczach jest w "
                        "Kalibracji."),
     'bt.no_calibration': _w("No calibration yet. Run `python -m backtest.calibrate` after the backtest.",
@@ -2509,6 +2490,23 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "**Czekaj**: czegoś brakuje (świeżego kursu, składu drużyny, niepewnego zawodnika) albo "
                             "dwie oferty remisują. **Niedostępne**: model nie jest dopuszczony; rynki drużynowe są "
                             "takie zawsze, model meczów przewidywał gorzej niż kurs."),
+    'help.stars.title': _w("6. Stars: tonight's ranking", "6. Gwiazdki: ranking wieczoru"),
+    'help.stars.body': _w("Every priced line gets a rating by its place among the night's lines, ranked by expected "
+                          "return after the stake tax: **4★** the best 5% (one per game, the player's best line), "
+                          "**3★** up to 20%, **2★** up to 50%, **1★** the rest. **0★**: a warning or a player who "
+                          "might not play. **5★** only for a 'Bet' offer, which needs an edge threshold confirmed on "
+                          "nights not used to choose it: there is none yet. **–**: no rating (the model isn't "
+                          "admitted). Stars are a ranking, not advice: even 4★ lines lose on average after the tax. "
+                          "Whether more stars won more often than the price said is tracked in Results → Ratings: "
+                          "the record.",
+                          "Każda wyceniona linia dostaje ocenę według miejsca wśród linii wieczoru, uszeregowanych "
+                          "według oczekiwanego zwrotu po podatku od stawki: **4★** najlepsze 5% (jedna na mecz, "
+                          "najlepsza linia zawodnika), **3★** do 20%, **2★** do 50%, **1★** reszta. **0★**: "
+                          "ostrzeżenie albo gracz, który może nie zagrać. **5★** tylko dla oferty 'Obstaw', która "
+                          "wymaga progu przewagi potwierdzonego na nocach niewykorzystanych do jego wyboru: takiego "
+                          "jeszcze nie ma. **–**: brak oceny (model niedopuszczony). Gwiazdki to ranking, nie rada: "
+                          "nawet linie 4★ po podatku średnio tracą. Czy więcej gwiazdek wygrywało częściej, niż mówił "
+                          "kurs, pokazuje Wyniki → Oceny: wyniki."),
     'help.allpass.title': _w("When nothing qualifies", "Gdy nic się nie kwalifikuje"),
     'help.allpass.body': _w("Most days, and for now every day, no offer qualifies: the right move is not to bet. The "
                             "tables stay for research. Their order doesn't say what to bet: the line with the highest "
@@ -2516,14 +2514,15 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "Najczęściej, a na razie codziennie, nic się nie kwalifikuje: właściwy ruch to nie grać. "
                             "Tabele zostają do analizy. Ich kolejność nie mówi, co grać: linia z najwyższym "
                             "oczekiwanym zwrotem po podatku i tak średnio traci."),
-    'help.flags.title': _w("6. Warnings", "6. Ostrzeżenia"),
+    'help.flags.title': _w("7. Warnings", "7. Ostrzeżenia"),
     'help.flags.body': _w("A warning (the 'warning' column) keeps an offer from ever getting 'Bet': fewer than 8 games "
                           "behind the numbers, only preseason games, the player may not play (RotoWire), his minutes "
-                          "swing a lot, or the line moved 1.5+ against the evaluated side.",
+                          "swing a lot, or the line moved 1.5+ against the evaluated side. Such a line also gets 0★.",
                           "Ostrzeżenie (kolumna 'ostrzeżenie') sprawia, że oferta nigdy nie dostanie 'Obstaw': mniej "
                           "niż 8 meczów za liczbami, tylko mecze przedsezonowe, zawodnik może nie zagrać (RotoWire), "
-                          "jego minuty bardzo się wahają albo linia ruszyła o 1.5+ przeciw ocenianej stronie."),
-    'help.verdict.title': _w("7. Why: the reasons", "7. Dlaczego: powody"),
+                          "jego minuty bardzo się wahają albo linia ruszyła o 1.5+ przeciw ocenianej stronie. Taka linia "
+                          "dostaje też 0★."),
+    'help.verdict.title': _w("8. Why: the reasons", "8. Dlaczego: powody"),
     'help.verdict.body': _w("Pick a row to see **why**: ✅ for and ❌ against the evaluated side, ➖ context, ⚠️ warnings. "
                             "Each reason says its value, what it's compared with, how many observations it rests on, "
                             "when and where it comes from. A reason without data isn't shown. The reasons explain the "
@@ -2533,7 +2532,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "obserwacjach się opiera, z kiedy i skąd pochodzi. Powód bez danych nie jest pokazywany. "
                             "Powody objaśniają decyzję; nie głosują, więc dodanie lub usunięcie powodu nigdy jej nie "
                             "zmienia."),
-    'help.player.title': _w("8. The player's numbers", "8. Liczby zawodnika"),
+    'help.player.title': _w("9. The player's numbers", "9. Liczby zawodnika"),
     'help.player.body': _w("**Expected tonight** is our estimate of the stat tonight: above the line points to Over, "
                            "below to Under. **Won, last 10 %** shows how often the side would have won lately; compare "
                            "it with **needed to win %**. 10 games is a small sample, so treat it as a hint.",
@@ -2588,12 +2587,12 @@ TEXTS: Dict[str, Dict[str, str]] = {
                              "Dzisiejsze oceny: 4★ = najlepsze dziś, nie: opłacalne"),
     'overview.shortlist_help': _w(
         "If you bet tonight anyway, these are the lines the model ranks best by expected return after the tax: 4★ "
-        "the night's best 5% (one per game), 3★ up to 20%. No 🔴, no doubtful players. They still lose on average "
+        "the night's best 5% (one per game), 3★ up to 20%. No ⚠️ warnings, no doubtful players (they get 0★). They still lose on average "
         "after Superbet's 12% stake tax. 5★ would be an offer whose edge was confirmed on nights not used to choose "
         "its threshold: there's none. On 2022/23 lines 4★ and 3★ won more often than the price said, 2★ and 1★ "
         "didn't; whether that holds on Superbet is tracked in Results → Ratings.",
         "Jeśli i tak grasz dziś, to te linie model stawia najwyżej według oczekiwanego zwrotu po podatku: 4★ "
-        "najlepsze 5% wieczoru (jedna na mecz), 3★ do 20%. Bez 🔴, bez niepewnych graczy. Po 12% podatku od stawki "
+        "najlepsze 5% wieczoru (jedna na mecz), 3★ do 20%. Bez ⚠️ ostrzeżeń, bez niepewnych graczy (dostają 0★). Po 12% podatku od stawki "
         "dalej średnio tracą. 5★ byłaby oferta, której przewagę potwierdzono na nocach niewykorzystanych do wyboru "
         "progu: takiej nie ma. Na liniach 2022/23 4★ i 3★ wygrywały częściej, niż mówił kurs, 2★ i 1★ nie; czy tak "
         "jest na Superbecie, śledzą Wyniki → Oceny."),
@@ -2637,16 +2636,16 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "Superbet nie ma jeszcze zakładów na zawodników w tych meczach."),
     'overview.no_games': _w("No game could be priced.", "Nie udało się wycenić żadnego meczu."),
     'calibration.missing': _w("No calibration (data/backtest/calibration.json): 'our chance %' is the raw model's "
-                              "chance, which was overconfident on past lines. No 🟢 / 🟡 picks until `python -m "
+                              "chance, which was overconfident on past lines. No stars and no 'Bet' until `python -m "
                               "backtest.calibrate` has been run.",
                               "Brak kalibracji (data/backtest/calibration.json): 'nasza szansa %' to surowa szansa "
-                              "modelu, która na dawnych liniach była zbyt pewna siebie. Brak typów 🟢 / 🟡, dopóki "
+                              "modelu, która na dawnych liniach była zbyt pewna siebie. Brak gwiazdek i 'Obstaw', dopóki "
                               "nie zostanie uruchomione `python -m backtest.calibrate`."),
-    'calibration.mismatch': _w("The calibration was fitted for another model version (now {version}). No 🟢 / 🟡 picks "
-                               "until it's refitted: `python daily_snapshot.py --reprice`, then `python -m "
+    'calibration.mismatch': _w("The calibration was fitted for another model version (now {version}). No stars and no "
+                               "'Bet' until it's refitted: `python daily_snapshot.py --reprice`, then `python -m "
                                "backtest.calibrate`.",
-                               "Kalibracja została dopasowana do innej wersji modelu (teraz {version}). Brak typów "
-                               "🟢 / 🟡 do ponownego dopasowania: `python daily_snapshot.py --reprice`, potem "
+                               "Kalibracja została dopasowana do innej wersji modelu (teraz {version}). Brak gwiazdek "
+                               "i 'Obstaw' do ponownego dopasowania: `python daily_snapshot.py --reprice`, potem "
                                "`python -m backtest.calibrate`."),
 }
 

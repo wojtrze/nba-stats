@@ -497,7 +497,7 @@ def settle_stars(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     if lines.empty:
         return pd.DataFrame()
     settled = settle_props(snapshots, logs, games, bets=lines, closing=closing)  # keeps the bets' order
-    for col in ['stars', 'night_rank', 'side market %', 'origin', 'event_id']:
+    for col in ['stars', 'night_rank', 'side market %', 'origin', 'event_id', 'name_ESPN']:
         settled[col] = lines[col].values
     return settled
 

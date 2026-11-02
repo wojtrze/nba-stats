@@ -85,7 +85,7 @@ def _priced_props(seasons, season_types, props_, lineups_, odds) -> pd.DataFrame
     logs = top_up_logs(filtered_logs(list(seasons), list(season_types)), player_logs(), max(seasons),
                        props_['player_id_ESPN'].dropna().unique())
     table = price_props(props_, logs, lineups_, odds, g, adjust=_adjustments)
-    # 🔴 + 'red flag' for lines with a reason to pass whatever the numbers say
+    # 'red flag' (the ⚠️ warning, 0★) for lines with a reason to pass whatever the numbers say
     table = flag_props(prop_movement(snapshot_history('superbet_props'), table), logs, lineups_)
     # ESPN's "Bam Adebayo" reads better than Superbet's "Adebayo, Bam"; unmatched names stay as Superbet has them
     display = player_logs().groupby('player_id_ESPN')['player_display_name'].last()
