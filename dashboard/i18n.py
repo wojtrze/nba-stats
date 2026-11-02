@@ -1320,6 +1320,107 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'panel.validation.untested': _w("not tested", "nie testowane"),
     'panel.validation.no_lift': _w("tested: no gain beyond the model", "testowane: nic ponad model"),
     'panel.validation.lift': _w("tested: predicted beyond the model", "testowane: przewidywało ponad model"),
+    'panel.mispricing': _w("Where Superbet may have priced it wrong", "Gdzie Superbet może się mylić"),
+    'panel.mispricing_note': _w("Superbet's own prices that don't fit together. Each says whether the gap would "
+                                "cover the tax, what happened, why it may be a pricing error, how long it holds "
+                                "and how tested it is (docs/hipotezy_wyceny.md).",
+                                "Ceny Superbetu, które do siebie nie pasują. Każdy sygnał mówi, czy różnica "
+                                "pokryłaby podatek, co się stało, dlaczego to może być błąd ceny, jak długo jest "
+                                "aktualny i na ile go sprawdzono (docs/hipotezy_wyceny.md)."),
+    # mispricing signals (reasons.mispricing_reasons): what each hypothesis says, in the order of its five questions
+    # H1: a combo against its parts
+    'mispricing.h1.short': _w("Not enough to cover the tax: {stat} {line:g} differs from its parts' lines by "
+                              "{gap:.1f} pp, and after the tax it takes {needed:.1f} pp.",
+                              "Za mało, by pokryć podatek: {stat} {line:g} różni się od linii składowych o "
+                              "{gap:.1f} pp, a po podatku potrzeba {needed:.1f} pp."),
+    'mispricing.h1.clears': _w("{stat} {line:g} differs from its parts' lines by {gap:.1f} pp; after the tax it "
+                               "takes {needed:.1f} pp, and the gap covers it.",
+                               "{stat} {line:g} różni się od linii składowych o {gap:.1f} pp; po podatku potrzeba "
+                               "{needed:.1f} pp i ta różnica to pokrywa."),
+    'mispricing.h1.what': _w("What happened: the lines {parts} (with how this player's numbers go together over "
+                             "{n} games) give the bet “{side} {stat} {line:g}” a {p_ours:.0f}% chance; Superbet's "
+                             "own price gives it {p_book:.0f}% (the chance by the odds without the margin).",
+                             "Co się stało: z linii {parts} (i z tego, jak u tego gracza te liczby idą razem w {n} "
+                             "meczach) wynika dla zakładu „{side} {stat} {line:g}” szansa {p_ours:.0f}%; cena "
+                             "Superbetu daje mu {p_book:.0f}% (szansa według kursu bez marży)."),
+    'mispricing.h1.why': _w("Why it may be a pricing error: Superbet prices the sum apart from its parts; when one "
+                            "of those prices lags, they stop fitting together.",
+                            "Dlaczego to może być błąd ceny: Superbet wycenia sumę osobno od jej składowych; gdy "
+                            "jedna z tych cen nie nadąża, przestają do siebie pasować."),
+    # H2: a makes line against its attempts line and the player's shooting
+    'mispricing.h2.short': _w("Not enough to cover the tax: {stat} {line:g} differs by {gap:.1f} pp from what the "
+                              "{part} line and the player's shooting give, and after the tax it takes {needed:.1f} "
+                              "pp.",
+                              "Za mało, by pokryć podatek: {stat} {line:g} różni się o {gap:.1f} pp od tego, co "
+                              "wynika z linii {part} i skuteczności gracza, a po podatku potrzeba {needed:.1f} pp."),
+    'mispricing.h2.clears': _w("{stat} {line:g} differs by {gap:.1f} pp from what the {part} line and the player's "
+                               "shooting give; after the tax it takes {needed:.1f} pp, and the gap covers it.",
+                               "{stat} {line:g} różni się o {gap:.1f} pp od tego, co wynika z linii {part} "
+                               "i skuteczności gracza; po podatku potrzeba {needed:.1f} pp i ta różnica to pokrywa."),
+    'mispricing.h2.what': _w("What happened: the lines {part} {part_line:g} and {stat} {line:g} together assume "
+                             "he makes {implied_rate:.0f}% of his shots; he makes {player_rate:.0f}% ({made:.0f} of "
+                             "{attempted:.0f} in {games_all:.0f} games, pulled toward the league's "
+                             "{league_rate:.0f}% while the sample is small). At his rate the bet “{side} {stat} {line:g}” has a "
+                             "{p_ours:.0f}% chance; Superbet's price gives it {p_book:.0f}% (the chance by the odds "
+                             "without the margin).",
+                             "Co się stało: linie {part} {part_line:g} i {stat} {line:g} razem zakładają, że trafi "
+                             "{implied_rate:.0f}% rzutów; trafia {player_rate:.0f}% ({made:.0f} z {attempted:.0f} w "
+                             "{games_all:.0f} meczach, przy małej próbie ściągnięte do średniej ligi "
+                             "{league_rate:.0f}%). Przy jego skuteczności zakład „{side} {stat} {line:g}” ma szansę "
+                             "{p_ours:.0f}%; cena Superbetu daje mu {p_book:.0f}% (szansa według kursu bez marży)."),
+    'mispricing.h2.why': _w("Why it may be a pricing error: Superbet prices made and attempted shots as separate "
+                            "lines; when one moves without the other, the shooting they assume stops fitting the "
+                            "player.",
+                            "Dlaczego to może być błąd ceny: Superbet wycenia trafione i oddane rzuty jako osobne "
+                            "linie; gdy jedna się przesuwa bez drugiej, zakładana skuteczność przestaje pasować do "
+                            "gracza."),
+    # H6: a small line against how much the player's results spread
+    'mispricing.h6.short': _w("Not enough to cover the tax: with how this player's results spread, “{side} {stat} "
+                              "{line:g}” has a {gap:.1f} pp higher chance than its price, and after the tax it takes "
+                              "{needed:.1f} pp.",
+                              "Za mało, by pokryć podatek: przy rozrzucie wyników tego gracza zakład „{side} {stat} "
+                              "{line:g}” ma szansę o {gap:.1f} pp wyższą niż w cenie, a po podatku potrzeba "
+                              "{needed:.1f} pp."),
+    'mispricing.h6.clears': _w("With how this player's results spread, “{side} {stat} {line:g}” has a {gap:.1f} pp "
+                               "higher chance than its price; after the tax it takes {needed:.1f} pp, and the gap "
+                               "covers it.",
+                               "Przy rozrzucie wyników tego gracza zakład „{side} {stat} {line:g}” ma szansę "
+                               "o {gap:.1f} pp wyższą niż w cenie; po podatku potrzeba {needed:.1f} pp i ta różnica "
+                               "to pokrywa."),
+    'mispricing.h6.what': _w("What happened: in his last {n} games he ended below {line:g} {stat} {below:.0f}% of "
+                             "the time. His results swing more than usual for his average: spread {spread:.1f}× "
+                             "(1.0× = evenly scattered, the league's typical {league_spread:.1f}×). Superbet's "
+                             "price with that spread gives “{side} {stat} {line:g}” {p_ours:.0f}%; the price alone "
+                             "gives {p_book:.0f}% (the chance by the odds without the margin).",
+                             "Co się stało: w ostatnich {n} meczach kończył poniżej {line:g} ({stat}) w "
+                             "{below:.0f}% meczów. Jego wyniki wahają się mocniej niż zwykle przy takiej średniej: "
+                             "rozrzut {spread:.1f}× (1.0× = równomiernie, typowo w lidze {league_spread:.1f}×). Cena "
+                             "Superbetu z takim rozrzutem daje zakładowi „{side} {stat} {line:g}” {p_ours:.0f}%; "
+                             "sama cena daje {p_book:.0f}% (szansa według kursu bez marży)."),
+    'mispricing.h6.why': _w("Why it may be a pricing error: with small numbers what counts is how often he ends "
+                            "on 0 or 1. The price fits a typical spread; a player whose results swing more ends "
+                            "below the line more often at the same average.",
+                            "Dlaczego to może być błąd ceny: przy małych liczbach liczy się, jak często gracz "
+                            "kończy na 0 albo 1. Cena pasuje do typowego rozrzutu; u gracza, którego wyniki wahają "
+                            "się mocniej, wynik poniżej linii zdarza się częściej przy tej samej średniej."),
+    'mispricing.expiry.line_or_odds_change': _w("Holds for these odds only: it's gone when any of these lines or "
+                                                "odds changes.",
+                                                "Aktualne tylko dla tych kursów: znika, gdy zmieni się którakolwiek "
+                                                "z tych linii lub kursów."),
+    'mispricing.exploration': _w("On the exploration nights ({nights} nights to {through}) there were {signals} such "
+                                "signals that cleared the tax: {won:.0f}% won, {roi:+.1f} per 100 staked after the "
+                                "tax.",
+                                "Na nocach rozpoznania ({nights} nocy do {through}) takich sygnałów, które "
+                                "pokrywały podatek, było {signals}: wygrało {won:.0f}%, wynik {roi:+.1f} zł na 100 zł "
+                                "stawki po podatku."),
+    'mispricing.status.untested': _w("🧪 Observation, not tested. It's an observation, not a hint to bet: the test on "
+                                     "nights it hasn't seen hasn't been run yet.",
+                                     "🧪 Obserwacja, niesprawdzona. To obserwacja, nie wskazówka do gry: test na "
+                                     "nocach, których nie widział, jeszcze się nie odbył."),
+    'mispricing.status.admitted': _w("✅ Tested on nights the test hadn't seen: the results are on the Backtest "
+                                     "page.",
+                                     "✅ Sprawdzona na nocach, których test wcześniej nie widział: wyniki są na "
+                                     "stronie Backtest."),
     'panel.warnings': _w("Worth knowing (doesn't block a bet)", "Warto wiedzieć (nie blokuje zakładu)"),
     'panel.flags': _w("Blockers (an offer with one can't get 'Bet')", "Blokady (oferta z blokadą nie dostanie "
                                                                      "'Obstaw')"),
@@ -2252,8 +2353,11 @@ TEXTS: Dict[str, Dict[str, str]] = {
                              "{minutes} min before tip-off)",
                              "Noc {night}: ważne zamknięcie dla {n} z {games} rozpoczętych meczów (odczyt najpóźniej "
                              "{minutes} min przed startem)"),
-    'dc.schedule_skipped': _w("{n} slots missed (the computer slept or the dashboard started late)",
-                              "{n} terminów pominiętych (komputer spał albo dashboard ruszył później)"),
+    'dc.schedule_skipped': _w("{n} slots missed (the computer slept, the dashboard was off or a fetch hung): those "
+                              "games have fewer quotes and may have no closing price. The Recent runs tab says which.",
+                              "{n} terminów pominiętych (komputer spał, dashboard był wyłączony albo pobranie się "
+                              "zawiesiło): te mecze mają mniej kursów i mogą nie mieć zamknięcia. Które, widać w "
+                              "zakładce Ostatnie uruchomienia."),
     'dc.state.waiting': _w("waiting", "czeka"), 'dc.state.starting': _w("starting", "startuje"),
     'dc.state.stopped': _w("off", "wyłączone"), 'dc.state.fetching': _w("fetching", "pobiera"),
     'dc.state.other': _w("another dashboard is fetching", "pobiera inny dashboard"),

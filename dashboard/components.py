@@ -100,7 +100,8 @@ def reasons_panel(title: str, decision: Dict, reasons: List[Dict], games: Option
                   stat: Optional[str] = None, line: Optional[float] = None, lang: str = 'en',
                   changed: Optional[Dict] = None):
     """The decision (decisions.py) with when its odds and lineup were fetched, then why, by kind of reason
-    (reasons.py): the price, what the model used (with how much each input moved its chance), the context the model
+    (reasons.py): the price, what the model used (with how much each input moved its chance), where Superbet's
+    prices may contradict each other (mispricing signals, with how tested), the context the model
     doesn't use (collapsed, with whether it was tested), what's worth knowing and the blockers; with games, a chart
     of the last 10 games against the line. The reasons explain the decision and don't change it. Worded in `lang`
     (the reasons come worded already); a panel with a stat is a prop's, without one a game market's."""
@@ -119,6 +120,9 @@ def reasons_panel(title: str, decision: Dict, reasons: List[Dict], games: Option
         if drivers := of('driver'):
             st.markdown(block(f"**{t('panel.drivers', lang)}** · _{t('panel.drivers_note', lang)}_",
                               [item(r) for r in drivers]))
+        if mispricing := of('mispricing'):
+            st.markdown(block(f"**{t('panel.mispricing', lang)}** · _{t('panel.mispricing_note', lang)}_",
+                              [item(r) for r in mispricing]))
         if context := of('context'):
             with st.expander(f"{t('panel.context', lang)} ({len(context)})"):
                 st.caption(t('panel.context_note', lang))

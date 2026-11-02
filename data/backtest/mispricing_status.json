@@ -1,0 +1,17 @@
+{
+  "note": "Status of each hypothesis in docs/hipotezy_wyceny.md: untested, admitted or rejected. Set by hand after reading the evaluation report, never by a script. exploration: how the signals that cleared the tax did on the nights <= D (last quote before tip-off, settled with ESPN).",
+  "hypotheses": {
+    "H1": {"status": "untested", "since": "2026-11-01",
+           "exploration": {"nights": 12, "through": "2026-10-31", "signals": 1, "won": 0.0, "roi": -100.0}},
+    "H2": {"status": "untested", "since": "2026-11-01",
+           "exploration": {"nights": 12, "through": "2026-10-31", "signals": 130, "won": 54.6, "roi": -9.8}},
+    "H3": {"status": "untested", "since": "2026-11-01"},
+    "H4": {"status": "untested", "since": "2026-11-01"},
+    "H5": {"status": "untested", "since": "2026-11-01"},
+    "H6": {"status": "untested", "since": "2026-11-01",
+           "exploration": {"nights": 12, "through": "2026-10-31", "signals": 6, "won": 50.0, "roi": 11.0}},
+    "H7": {"status": "untested", "since": "2026-11-01"},
+    "H8": {"status": "untested", "since": "2026-11-01"},
+    "H9": {"status": "untested", "since": "2026-11-01"}
+  }
+}
