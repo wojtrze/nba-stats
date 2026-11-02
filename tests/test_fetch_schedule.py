@@ -89,3 +89,49 @@ def test_one_worker_at_a_time(tmp_path, monkeypatch):
     assert fetch_loop.claim_worker('b', now + M(4))                     # a's heartbeat went stale
     fetch_loop.release_worker('a')                                      # not a's any more: kept
     assert not fetch_loop.claim_worker('a', now + M(5))
+
+
+def test_the_watchdog_abandons_a_hung_run_and_reports_where(tmp_path, monkeypatch):
+    import threading
+    monkeypatch.chdir(tmp_path)
+    release = threading.Event()
+    saved = []
+
+    def hung(slot, now, progress, cancelled):
+        progress.update(stage='Superbet: waiting 35 s', since=datetime(2026, 11, 1, 19, 1, 10, tzinfo=UTC))
+        release.wait(5)
+        if not cancelled.is_set():
+            saved.append(slot.kind)
+        return {'ok': True, 'summary': 'late', 'events': [], 'at': None}
+
+    slot = fetch_schedule.Slot(datetime(2026, 11, 1, 19, tzinfo=UTC), ('hourly',))
+    result = fetch_loop.run_guarded(slot, limit=timedelta(seconds=0.2), run=hung)
+    assert not result['ok'] and result['events'] is None
+    assert 'stuck' in result['summary'] and 'Superbet: waiting 35 s (since 19:01:10 UTC)' in result['summary']
+    release.set()
+    time_out = datetime.now() + timedelta(seconds=5)
+    while threading.active_count() > 1 and datetime.now() < time_out and not saved:
+        release.wait(0.05)
+    assert saved == []                                                  # the late run saved nothing
+    log = pd.read_csv(os.path.join('data', 'run_log.csv'))
+    assert log['summary'].str.startswith('stuck').tolist() == [True]
+
+
+def test_the_watchdog_turns_an_error_into_a_failed_run(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    def broken(slot, now, progress, cancelled):
+        raise ValueError('bad page')
+
+    result = fetch_loop.run_guarded(fetch_schedule.Slot(datetime(2026, 11, 1, 19, tzinfo=UTC), ('hourly',)),
+                                    run=broken)
+    assert not result['ok'] and 'ValueError: bad page' in result['summary']
+
+
+def test_missed_slots_are_those_between_the_last_run_and_the_start():
+    last_run = TIP - M(5 * 60)                                          # 19:00, then the dashboard was off
+    started = TIP - M(30)
+    missed = fetch_loop.missed_slots([(1, TIP), (1, TIP)], last_run, started)
+    assert [s.at for s in missed] == [TIP - M(m) for m in (240, 180, 120, 60, 40)]     # hourly, T-60, T-40
+    assert fetch_loop.missed_slots([(1, TIP)], TIP - M(40), TIP - M(38)) == []     # nothing due in between
+    assert fetch_loop.missed_slots([(1, TIP)], None, started) == []

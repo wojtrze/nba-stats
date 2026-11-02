@@ -10,6 +10,10 @@ Each slot records the quotes of the games it read (save_quotes: only what change
 plus one superbet_event_fetches row per game read, so "unchanged" is told apart from "not read"). Priced slots
 also save a full snapshot with the model (daily_snapshot.save_superbet), which the dashboards read. Every run
 is logged to data/run_log.csv.
+
+A watchdog gives each slot SLOT_LIMIT (run_guarded): a run still going after it is logged as stuck, with the last
+step it reached, and the schedule goes on. On 1.11 one run hung for 4.4 h and every slot of the night waited
+behind it. Slots nobody ran (the dashboard was off, or started late) are logged when a worker starts.
 """
 import argparse
 import json
@@ -36,6 +40,8 @@ WORKER_FILE = os.path.join('data', 'fetch_worker.json')
 SETTINGS_FILE = os.path.join('data', 'fetch_worker_settings.json')
 HEARTBEAT_STALE = timedelta(minutes=3)
 IDLE_RELIST = timedelta(hours=1)           # with no slot ahead, list the games again this often
+SLOT_LIMIT = timedelta(minutes=6)          # a slot's run, RotoWire, Superbet (RUN_DEADLINE 4 min) and saving
+MISSED_LOOKBACK = timedelta(hours=12)      # how far back a starting worker looks for slots nobody ran
 
 PROP_QUOTE_KEY = ['event_id', 'name_ESPN', 'bet_type']
 PROP_QUOTE_COLUMNS = ['fetched_at', *PROP_QUOTE_KEY, 'line', 'over_odds', 'under_odds']
@@ -123,12 +129,17 @@ def _saved_lineups() -> pd.DataFrame:
     return saved[saved['fetched_at'] == saved['fetched_at'].max()].drop(columns='fetched_at')
 
 
-def run_slot(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now) -> Dict:
-    """Fetch and save one slot. Returns a status dict (ok, summary, events: the listed games)."""
+def run_slot(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now, progress: Optional[Dict] = None,
+             cancelled: Optional[threading.Event] = None) -> Dict:
+    """Fetch and save one slot. Returns a status dict (ok, summary, events: the listed games). progress gets the
+    step it's at (stage, since); once `cancelled` is set (the watchdog gave up on it) it saves nothing."""
     import superbet_fetcher
     from daily_snapshot import claim_superbet, log_run, save_lineups_if_changed, save_superbet
     from http_polite import DAILY_REQUEST_BUDGET, Blocked, requests_today
 
+    progress = {} if progress is None else progress
+    step = lambda stage: progress.update(stage=stage, since=now())
+    abandoned = lambda: cancelled is not None and cancelled.is_set()
     started, t0 = now(), time.monotonic()
     fetched_at = _stamp(started)
     job = 'snapshot' if slot.priced else 'quotes'
@@ -147,6 +158,7 @@ def run_slot(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now) 
 
     lineups = pd.DataFrame()
     if slot.rotowire:
+        step("RotoWire")
         try:
             from lineup_fetcher import fetch_lineups
             lineups = pd.DataFrame(fetch_lineups())
@@ -156,7 +168,7 @@ def run_slot(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now) 
             log.warning("RotoWire failed: %s", e)
             parts.append(f"RotoWire failed: {e}")
             lineups = _saved_lineups()
-    http = superbet_fetcher.client()
+    http = superbet_fetcher.client(trace=lambda line: step(f"Superbet: {line}"))
     try:
         wanted = None if slot.all_events or slot.priced else slot.event_ids
         offers = superbet_fetcher.todays_offers(event_ids=wanted, http=http)
@@ -165,6 +177,9 @@ def run_slot(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now) 
     except Exception as e:
         return done(False, f"Superbet failed: {e} ({http.summary()}); " + '; '.join(parts))
     events = offers['events']
+    if abandoned():
+        return done(False, f"finished after the watchdog gave up on it: nothing saved ({offers['http']})")
+    step("saving quotes")
     counts = save_quotes(offers, fetched_at, slot.kind)
     parts.insert(0, f"{len(offers['fetched'])} games read, {counts['prop_quotes']} prop and "
                     f"{counts['game_quotes']} game quotes changed; {offers['http']}")
@@ -174,10 +189,75 @@ def run_slot(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now) 
     if slot.priced:
         if offers['incomplete']:
             parts.append("snapshot not saved (incomplete)")
+        elif abandoned():
+            parts.append("snapshot not saved (the watchdog gave up on the run)")
         else:
+            step("saving the snapshot (pricing)")
             saved = save_superbet(offers, lineups, fetched_at)
             parts.append(f"snapshot: {saved['superbet_props']} lines, {saved['superbet_game_odds']} game odds")
     return done(code == 0, '; '.join(parts))
+
+
+def run_guarded(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now,
+                limit: timedelta = SLOT_LIMIT, run: Callable = run_slot) -> Dict:
+    """run_slot in its own thread, given at most `limit`. A run still going after it is abandoned: logged as stuck
+    with the last step it reached, and told to save nothing if it ever goes on (its quotes would carry a time long
+    past). An error in the run is logged as a failed run instead of stopping the loop."""
+    from daily_snapshot import log_run
+    progress, cancelled, box = {}, threading.Event(), {}
+    started = now()
+
+    def target():
+        try:
+            box['result'] = run(slot, now, progress, cancelled)
+        except Exception as e:                 # noqa: BLE001  (one slot's failure mustn't end the schedule)
+            log.exception("scheduled %s failed", slot.kind)
+            box['error'] = e
+
+    worker = threading.Thread(target=target, name=f"fetch-{slot.kind}", daemon=True)
+    worker.start()
+    worker.join(limit.total_seconds())
+    command = f"scheduled {slot.kind}"
+    if 'result' in box:
+        return box['result']
+    if 'error' in box:
+        summary = f"failed: {type(box['error']).__name__}: {box['error']}"
+        log_run(started, 'quotes', command, 1, (now() - started).total_seconds(), summary[:300])
+        return {'ok': False, 'summary': summary, 'events': None, 'at': started}
+    cancelled.set()
+    since = progress.get('since')
+    summary = (f"stuck: abandoned after {limit.total_seconds() / 60:.0f} min at: {progress.get('stage', 'starting')}"
+               + (f" (since {since:%H:%M:%S} UTC)" if since else ""))
+    log.warning("scheduled %s %s", slot.kind, summary)
+    log_run(started, 'quotes', command, 1, limit.total_seconds(), summary[:300])
+    return {'ok': False, 'summary': summary, 'events': None, 'at': started}
+
+
+def _last_scheduled_run() -> Optional[datetime]:
+    """When the run log last saw a scheduled fetch (run, skipped or stuck)."""
+    from daily_snapshot import RUN_LOG
+    if not os.path.exists(RUN_LOG):
+        return None
+    runs = pd.read_csv(RUN_LOG, usecols=['started_at', 'command'])
+    runs = runs[runs['command'].astype(str).str.startswith('scheduled')]
+    return pd.Timestamp(runs['started_at'].max()).to_pydatetime() if len(runs) else None
+
+
+def _saved_tips() -> List:
+    """(event_id, tip-off) of the games the scheduled fetches have read, for slots of games no longer listed."""
+    path = snapshot_file(CURRENT_SEASON, 'superbet_event_fetches')
+    if not os.path.exists(path):
+        return []
+    saved = pd.read_csv(path, usecols=['event_id', 'start_time']).dropna().drop_duplicates('event_id', keep='last')
+    return [(e, pd.Timestamp(t).to_pydatetime()) for e, t in zip(saved['event_id'], saved['start_time'])]
+
+
+def missed_slots(tips, last_run: Optional[datetime], started: datetime) -> List[fetch_schedule.Slot]:
+    """The slots after the last scheduled run (at most MISSED_LOOKBACK back) that were due more than LATE before
+    this worker started: nobody ran them."""
+    since = max(last_run or started, started - MISSED_LOOKBACK)
+    tips = list({e: t for e, t in tips}.items())
+    return [s for s in fetch_schedule.night_slots(tips, since) if s.at < started - fetch_schedule.LATE]
 
 
 # --- the loop, and one worker at a time across processes ---
@@ -255,6 +335,7 @@ def loop(stop: threading.Event, status: Optional[Dict] = None, keep_awake: bool 
     status = {} if status is None else status
     owner = f"{socket.gethostname()}:{os.getpid()}:{threading.get_ident()}"
     started = now()
+    last_run = _last_scheduled_run()
     events, listed_at, done_through = None, None, None
     status.update(state='starting', started=started, last=None, skipped=0)
     if keep_awake:
@@ -271,12 +352,18 @@ def loop(stop: threading.Event, status: Optional[Dict] = None, keep_awake: bool 
                 start = fetch_schedule.Slot(current, ('start',), all_events=True,
                                             priced=_snapshot_age(current) > timedelta(hours=1))
                 status.update(state='fetching (start)')
-                result = run_slot(start, now)
+                result = run_guarded(start, now)
                 status.update(last=result)
                 if result['events'] is None:
                     stop.wait(300)                 # couldn't list the games (blocked, offline): try again later
                     continue
                 events, listed_at, done_through = result['events'], current, current
+                missed = missed_slots(_tips(events) + _saved_tips(), last_run, started)
+                if missed:
+                    log_run(current, 'quotes', 'scheduled missed', 1, 0,
+                            f"skipped: {len(missed)} slots nobody ran ({missed[0].at:%H:%M} {missed[0].kind} to "
+                            f"{missed[-1].at:%H:%M} {missed[-1].kind} UTC): the dashboard was off or busy"[:300])
+                    status['skipped'] = status.get('skipped', 0) + len(missed)
             elif current - listed_at > IDLE_RELIST and                     fetch_schedule.next_at(fetch_schedule.night_slots(_tips(events), current), current) is None:
                 # no game ahead: list them again now and then (one request), to see the next night's
                 if claim_superbet(SCHEDULED_GAP) is None:
@@ -293,7 +380,7 @@ def loop(stop: threading.Event, status: Optional[Dict] = None, keep_awake: bool 
                 done_through = max(done_through or s.at, s.at)
             if slot:
                 status.update(state=f"fetching ({slot.kind})")
-                result = run_slot(slot, now)
+                result = run_guarded(slot, now)
                 done_through = slot.at
                 if result['events'] is not None:
                     events, listed_at = result['events'], current

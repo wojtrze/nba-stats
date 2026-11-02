@@ -2,7 +2,10 @@
 
 - A random pause of REQUEST_DELAY seconds between two requests of one client, so a run never fires back-to-back.
 - Retries with exponential backoff and jitter on 429, 5xx, dropped connections and timeouts; Retry-After is
-  honoured. A wait that would run past the run's deadline ends the run instead (RunDeadline).
+  honoured. A wait that would run past the run's deadline, or a request once the deadline has passed, ends the
+  run instead (RunDeadline).
+- An optional trace (a callable taking one line) is told each request, retry and wait, so a run that hangs shows
+  where.
 - A circuit breaker: 403, or two 429 in a row, blocks the host for BACKOFF_ON_BLOCK, recorded in a state file
   shared by every process (Blocked); nothing contacts it again before then.
 - A daily request budget per host in the same state file; the scheduled fetches stop when it's used up.
@@ -108,8 +111,10 @@ class PoliteClient:
                  delay: Tuple[float, float] = REQUEST_DELAY, backoff: Tuple[float, ...] = BACKOFF,
                  state_path: str = STATE_FILE, sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic, uniform: Callable[[float, float], float] = random.uniform,
-                 now: Callable[[], datetime] = _now, etags: Optional[Dict] = None):
+                 now: Callable[[], datetime] = _now, etags: Optional[Dict] = None,
+                 trace: Optional[Callable[[str], None]] = None):
         self.host, self.session, self.delay, self.backoff = host, session, delay, backoff
+        self.trace = trace or (lambda line: None)
         self.state_path, self.sleep, self.clock, self.uniform, self.now = state_path, sleep, clock, uniform, now
         self.deadline = None if deadline is None else clock() + deadline
         self.etags = {} if etags is None else etags          # url -> (etag, response)
@@ -117,9 +122,11 @@ class PoliteClient:
         self.stats = {'requests': 0, 'retries': 0, 'not_modified': 0, 'statuses': {}, 'http_seconds': 0.0}
 
     def _wait(self, seconds: float):
-        if self.deadline is not None and self.clock() + seconds > self.deadline:
+        # max(…, 0): a run that overran (the process stalled) ends at its next pause, not only at its next wait
+        if self.deadline is not None and self.clock() + max(seconds, 0) > self.deadline:
             raise RunDeadline(f"{self.host}: the run's deadline would pass while waiting {seconds:.0f} s")
         if seconds > 0:
+            self.trace(f"waiting {seconds:.0f} s")
             self.sleep(seconds)
 
     def _pause(self):
@@ -140,6 +147,7 @@ class PoliteClient:
             self._last = t0
             _count_request(self.host, self.now(), self.state_path)
             self.stats['requests'] += 1
+            self.trace(f"GET {url}" + (f" (retry {attempt})" if attempt else ""))
             try:
                 response = self.session.get(url, params=params, headers=headers, timeout=TIMEOUT, **kwargs)
             except (requests.ConnectionError, requests.Timeout) as e:
@@ -172,6 +180,7 @@ class PoliteClient:
 
     def _retry(self, attempt: int, retry_after: Optional[float], why: str):
         self.stats['retries'] += 1
+        self.trace(f"failed ({why[:80]}), retrying")
         base = self.backoff[attempt]
         self._wait(max(retry_after or 0, base + self.uniform(0, base * 0.25)))
 
