@@ -19,7 +19,7 @@ from loaders import (clear_rotowire, fetch_rotowire, filtered_logs, games, name_
 from metrics import ACTIVE_PROFILE, absence_adjustments, absence_impact, reprice_net
 from models import GAME_DEFAULTS, GAME_TYPES, calibration_status, game_ratings, price_games, price_props, top_up_logs
 from reasons import flag_props
-from tracking import PROP_KEY, closing_props, game_odds_movement, prop_movement, settle_stars
+from tracking import PROP_KEY, closing_props, game_odds_movement, prop_movement, settle_props, settle_stars
 
 log = logging.getLogger(__name__)
 
@@ -119,6 +119,14 @@ def shortlist_record() -> pd.DataFrame:
     Results → Ratings read it."""
     closing = closing_props(snapshot_history('superbet_prop_quotes'), snapshot_history('superbet_event_fetches'))
     return settle_stars(snapshot_history('superbet_props'), player_logs(), games(), closing=closing)
+
+
+
+@st.cache_data(ttl=600, show_spinner="Settling the saved lines...")
+def settled_props() -> pd.DataFrame:
+    """tracking.settle_props of every saved line (its first fetch before tip-off, with the last line before it);
+    the Overview's streaks read it."""
+    return settle_props(snapshot_history('superbet_props'), player_logs(), games())
 
 
 def player_decisions(table: pd.DataFrame) -> Dict:

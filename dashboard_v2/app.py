@@ -32,10 +32,12 @@ def page(file, key, icon, default=False, title=None):
     return PAGES[key]
 
 
+# Overview sums up tonight and last night, so it sits above the chapters (an empty section has no header)
 navigation = st.navigation({
-    t('nav.tonight', lang): [page("overview.py", 'overview', "🏠", default=True),
+    "": [page("overview.py", 'overview', "🏠", default=True)],
+    t('nav.tonight', lang): [page("slate.py", 'slate', "🏟️"),
                              page("props.py", 'props', "🎯"),
-                             page("games.py", 'games', "🏟️"),
+                             page("games.py", 'games', "📋"),
                              page("help.py", 'help', "❓")],
     t('nav.research', lang): [page("player_history.py", 'player', "👤"),
                               page("team_history.py", 'team', "🛡️"),

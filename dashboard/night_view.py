@@ -118,6 +118,50 @@ def _combined(chosen: List[str]):
     return props, {'games': pd.concat(game_list, ignore_index=True) if game_list else pd.DataFrame()}
 
 
+def night_data(chosen: List[str]):
+    """The chosen nights (YYYY-MM-DD, settled): their lines with stars, their games ({'games': ...}), the rated
+    record of those nights (settle_stars) and night_summary of it all. The Overview's last night uses it too."""
+    props, game_part = _combined(chosen)
+    rated = _rated()
+    rated = rated[rated['game_date'].dt.strftime('%Y-%m-%d').isin(chosen)] if len(rated) else rated
+    props = _with_stars(props, rated)
+    return props, game_part, rated, night_summary(props, game_part, rated)
+
+
+def latest_night(now=None) -> Dict:
+    """{'settled': the newest night (YYYY-MM-DD) whose results are stored, 'pending': a newer started night whose
+    results aren't stored yet}; either None."""
+    available = nights(snapshot_history('superbet_props'), games(), now or datetime.now(timezone.utc))
+    if available.empty:
+        return {'settled': None, 'pending': None}
+    day = lambda rows: str(rows['night'].iloc[0].date()) if len(rows) else None
+    settled = available[available['settled']]
+    newer = available[~available['settled']]
+    if len(settled):
+        newer = newer[newer['night'] > settled['night'].iloc[0]]
+    return {'settled': day(settled), 'pending': day(newer)}
+
+
+def summary_kpis(s: Dict, lang: str = 'en'):
+    """The night's KPI row: lines settled, our picks, 4–5★ and 0★ bets, how often we beat the line."""
+    if not s.get('lines'):
+        return
+    c = st.columns(5)
+    _kpi(c[0], t('night.kpi.settled', lang), f"{s['settled']:,}", t('night.kpi.settled_help', lang),
+         t('night.kpi.settled_note', lang, lines=f"{s['lines']:,}", void=s['void'])
+         + (t('night.kpi.unresolved_note', lang, n=s['unresolved']) if s['unresolved'] else ""))
+    _kpi(c[1], t('night.kpi.picks', lang), _rate(s['picks']), t('night.kpi.picks_help', lang),
+         t('night.kpi.roi', lang, roi=s['picks']['ROI %'], std=s['picks'].get('ROI % std', np.nan))
+         if s['picks']['picks'] else None)
+    _kpi(c[2], t('night.kpi.top', lang), _rate(s['top bets']), t('night.kpi.top_help', lang),
+         t('night.kpi.n_bets', lang, n=s['top bets']['picks']))
+    _kpi(c[3], t('night.kpi.zero', lang), _rate(s['zero bets']), t('night.kpi.zero_help', lang),
+         t('night.kpi.n_bets', lang, n=s['zero bets']['picks']))
+    _kpi(c[4], t('night.kpi.closer', lang), f"{s['closer than line %']:.0f}%"
+         if pd.notna(s['closer than line %']) else "–", t('night.kpi.closer_help', lang),
+         t('night.kpi.closer_note', lang, proj=s['median proj miss'], line=s['median line miss']))
+
+
 def _kpi(col, label, value, help_=None, note=None):
     col.metric(label, value, note, delta_color='off', delta_arrow='off', help=help_, border=True)
 
@@ -166,28 +210,10 @@ def render(update_stats: Optional[Callable] = None, key: str = 'night', lang: st
     chosen = [n for n in chosen if settled[n]]
     if not chosen:
         return
-    props, game_part = _combined(chosen)
-    rated = _rated()
-    rated = rated[rated['game_date'].dt.strftime('%Y-%m-%d').isin(chosen)] if len(rated) else rated
-    props = _with_stars(props, rated)
+    props, game_part, rated, s = night_data(chosen)
     if len(props) and props['recomputed'].any():
         st.caption(t('night.recomputed', lang, n=int(props['recomputed'].sum())))
-    s = night_summary(props, game_part, rated)
-    if s.get('lines'):
-        c = st.columns(5)
-        _kpi(c[0], t('night.kpi.settled', lang), f"{s['settled']:,}", t('night.kpi.settled_help', lang),
-             t('night.kpi.settled_note', lang, lines=f"{s['lines']:,}", void=s['void'])
-             + (t('night.kpi.unresolved_note', lang, n=s['unresolved']) if s['unresolved'] else ""))
-        _kpi(c[1], t('night.kpi.picks', lang), _rate(s['picks']), t('night.kpi.picks_help', lang),
-             t('night.kpi.roi', lang, roi=s['picks']['ROI %'], std=s['picks'].get('ROI % std', np.nan))
-             if s['picks']['picks'] else None)
-        _kpi(c[2], t('night.kpi.top', lang), _rate(s['top bets']), t('night.kpi.top_help', lang),
-             t('night.kpi.n_bets', lang, n=s['top bets']['picks']))
-        _kpi(c[3], t('night.kpi.zero', lang), _rate(s['zero bets']), t('night.kpi.zero_help', lang),
-             t('night.kpi.n_bets', lang, n=s['zero bets']['picks']))
-        _kpi(c[4], t('night.kpi.closer', lang), f"{s['closer than line %']:.0f}%"
-             if pd.notna(s['closer than line %']) else "–", t('night.kpi.closer_help', lang),
-             t('night.kpi.closer_note', lang, proj=s['median proj miss'], line=s['median line miss']))
+    summary_kpis(s, lang)
     props_tab, groups_tab, games_tab = st.tabs([t('night.tab.props', lang), t('night.tab.groups', lang),
                                                 t('night.tab.games', lang)])
     with props_tab:
