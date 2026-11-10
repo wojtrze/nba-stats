@@ -282,6 +282,29 @@ TERMS: Dict[str, Term] = {
                         "tego meczu.")),
 
     # --- the player's numbers ---
+    'needed odds': Term(_w("odds needed", "potrzebny kurs"),
+                        _w("The lowest odds for this side at which its expected return after the 12% tax is above 0, "
+                           "the other side's odds unchanged. Our chance follows the price, so it is more than the "
+                           "odds that would pay for today's chance.",
+                           "Najniższy kurs tej strony, przy którym oczekiwany zwrot po 12% podatku jest powyżej 0, "
+                           "przy niezmienionym kursie drugiej strony. Nasza szansa idzie za ceną, więc to więcej niż "
+                           "kurs, który opłaciłby dzisiejszą szansę.")),
+    'return 100': Term(_w("result per 100 after tax", "wynik na 100 zł po podatku"),
+                       _w("What 100 zł staked on the side toward our expectation came back with, minus the 100, after "
+                          "Superbet kept 12% of the stake.",
+                          "Ile wróciło ze 100 zł stawki na stronę wskazaną przez naszą oczekiwaną liczbę, minus 100, "
+                          "po zatrzymaniu przez Superbet 12% stawki.")),
+    'gap sd': Term(_w("gap (spreads)", "różnica (rozrzuty)"),
+                   _w("Our expected number minus the line, divided by the player's typical game-to-game spread: "
+                      "comparable across stats. Empty with fewer than 5 games.",
+                      "Oczekiwana liczba minus linia, podzielona przez typowy rozrzut zawodnika między meczami: "
+                      "porównywalne między statystykami. Puste przy mniej niż 5 meczach."),
+                   _w("Above 0: we expect more than the line (toward Over).",
+                      "Więcej niż 0: spodziewamy się więcej niż linia (w stronę Powyżej)."),
+                   _w("Below 0: we expect less (toward Under).",
+                      "Mniej niż 0: spodziewamy się mniej (w stronę Poniżej)."),
+                   _w("Expected 30.1, line 33.5, spread 8.3 → −0.4.",
+                      "Oczekiwane 30.1, linia 33.5, rozrzut 8.3 → −0.4.")),
     'proj avg': Term(_w("expected tonight", "oczekiwane dziś"),
                      _w("What we expect the player to get tonight: his average, adjusted for teammates who are out, "
                         "how many points his team is expected to score, and how much the opponent allows to his "
@@ -2518,6 +2541,71 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "Za mało rozliczonych linii z rozrzutem."),
     'whatif.no_side': _w("This line can't be priced (a price is missing).",
                          "Tej linii nie da się wycenić (brakuje kursu)."),
+    'props.map.title': _w("Tonight's lines against break-even after tax",
+                          "Dzisiejsze linie wobec progu po podatku"),
+    'props.map.intro': _w("Each point is one line in the table below (the filters apply): across, how far our expected "
+                          "number is from the line in the player's spreads; up, how far the evaluated side is from "
+                          "break-even after tax. Click a point to open the line.",
+                          "Każdy punkt to jedna linia z tabeli poniżej (filtry działają): w poziomie, jak daleko nasza "
+                          "oczekiwana liczba jest od linii, w rozrzutach zawodnika; w pionie, jak daleko oceniana "
+                          "strona jest od progu po podatku. Kliknij punkt, żeby otworzyć linię."),
+    'props.map.chart': _w("Gap in spreads vs distance to break-even", "Różnica w rozrzutach a odległość od progu"),
+    'props.map.x': _w("our expectation − line, in the player's spreads", "oczekiwane − linia, w rozrzutach zawodnika"),
+    'props.map.y': _w("distance to break-even after tax (pp)", "odległość od progu po podatku (pp)"),
+    'props.map.zero': _w("break-even after tax", "próg po podatku"),
+    'props.map.summary': _w("{n} {n|line|lines|lines} on the chart, {above} above break-even after tax; {left} without a "
+                            "usable spread (fewer than 5 games) left out.",
+                            "{n} {n|linia|linie|linii} na wykresie, {above} powyżej progu po podatku; {left} bez "
+                            "użytecznego rozrzutu (mniej niż 5 meczów) pominięto."),
+    'props.map.nearest': _w("Nearest to break-even: {name} {stat} {side} {line:g} @ {odds:.2f}, {gap:.1f} pp short.",
+                            "Najbliżej progu: {name} {stat} {side} {line:g} @ {odds:.2f}, brakuje {gap:.1f} pp."),
+    'props.map.none': _w("No line with a usable spread to draw.", "Brak linii z użytecznym rozrzutem do narysowania."),
+    'props.sort.gap': _w("Gap in spreads", "Różnica w rozrzutach"),
+    'props.order.gap': _w("The biggest gap between our expectation and the line (in the player's spreads) first",
+                          "Najpierw największa różnica między oczekiwaną liczbą a linią (w rozrzutach zawodnika)"),
+    'overview.breakeven': _w("Tonight against break-even after tax", "Dziś wobec progu po podatku"),
+    'overview.breakeven_help': _w("Break-even after tax: the chance a side needs at its odds once Superbet keeps 12% of "
+                                  "the stake. Distance = our chance minus that.",
+                                  "Próg po podatku: szansa, jakiej strona potrzebuje przy swoim kursie, gdy Superbet "
+                                  "zatrzymuje 12% stawki. Odległość = nasza szansa minus ten próg."),
+    'overview.breakeven_none': _w("Of {n} {n|line|lines|lines} tonight, none is above break-even after tax; the nearest "
+                                  "is **{name} {stat} {side} {line:g} @ {odds:.2f}**, {gap:.1f} pp short{needs}.",
+                                  "Z {n} {n|linii|linii|linii} dziś żadna nie jest powyżej progu po podatku; najbliżej "
+                                  "jest **{name} {stat} {side} {line:g} @ {odds:.2f}**, brakuje {gap:.1f} pp{needs}."),
+    'overview.breakeven_some': _w("Of {n} {n|line|lines|lines} tonight, {above} {above|is|are|are} above break-even "
+                                  "after tax by our numbers.",
+                                  "Z {n} {n|linii|linii|linii} dziś {above} {above|jest|są|jest} powyżej progu po "
+                                  "podatku według naszych liczb."),
+    'overview.breakeven_needs': _w(" (would need odds of {need:.2f}, now {now:.2f})",
+                                   " (potrzebny kurs {need:.2f}, teraz {now:.2f})"),
+    'overview.breakeven_table': _w("The {n} lines nearest to break-even (pick one to open it on Props):",
+                                   "{n} linii najbliżej progu (wybierz, żeby otworzyć w Zakładach na zawodników):"),
+    'overview.lookback': _w("Tonight's players in their last game", "Dzisiejsi zawodnicy w ostatnim meczu"),
+    'overview.lookback_help': _w("For every line tonight, the same player's line of the same stat from his previous "
+                                 "game, betting the side toward what we expected then.",
+                                 "Dla każdej dzisiejszej linii: linia tego samego zawodnika w tej samej statystyce z "
+                                 "jego poprzedniego meczu, ze stroną, w którą wskazywała wtedy nasza oczekiwana liczba."),
+    'overview.lookback_all': _w("Their last lines: {lines} {lines|line|lines|lines} of {players} "
+                                "{players|player|players|players}; the side toward our expectation won {won:.0f}% vs "
+                                "the price's {price:.0f}% ({diff:+.1f} pp), result {ret:+.0f} per 100 zł staked after "
+                                "tax.",
+                                "Ich ostatnie linie: {lines} {lines|linia|linie|linii} {players} "
+                                "{players|zawodnika|zawodników|zawodników}; strona wskazana przez naszą oczekiwaną "
+                                "liczbę wygrała {won:.0f}% wobec {price:.0f}% z ceny ({diff:+.1f} pp), wynik "
+                                "{ret:+.0f} na 100 zł stawki po podatku."),
+    'overview.lookback_wide': _w("With a gap of 0.5 spreads or more: {lines} {lines|line|lines|lines}, won {won:.0f}% vs "
+                                 "{price:.0f}% ({diff:+.1f} pp), result {ret:+.0f} per 100 zł after tax.",
+                                 "Przy różnicy co najmniej 0.5 rozrzutu: {lines} {lines|linia|linie|linii}, wygrane "
+                                 "{won:.0f}% wobec {price:.0f}% ({diff:+.1f} pp), wynik {ret:+.0f} na 100 zł po "
+                                 "podatku."),
+    'overview.lookback_luck': _w("One game per player is mostly luck; the Props tab 'What would have to change' shows "
+                                 "every settled night by the gap.",
+                                 "Jeden mecz na zawodnika to głównie przypadek; zakładka 'Co musiałoby się zmienić' w "
+                                 "Zakładach na zawodników pokazuje wszystkie rozliczone noce według różnicy."),
+    'overview.lookback_none': _w("None of tonight's players has a settled line from an earlier game yet.",
+                                 "Żaden z dzisiejszych zawodników nie ma jeszcze rozliczonej linii z wcześniejszego "
+                                 "meczu."),
+    'overview.lookback_list': _w("The {n} biggest gaps in their last game", "{n} największych różnic w ostatnim meczu"),
     'dc.schedule_switch': _w("Fetch on schedule", "Pobieraj według harmonogramu"),
     'dc.keep_awake': _w("Keep the computer awake", "Nie usypiaj komputera"),
     'dc.keep_awake_help': _w("Windows won't sleep while the scheduled fetches run (games are at night in Poland). "

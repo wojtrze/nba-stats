@@ -33,6 +33,7 @@ if len(table_all):
     rated = stars(table_all, decided)[PROP_KEY + ['stars']].rename(columns={'stars': 'star count'})
     table_all = table_all.merge(rated, on=PROP_KEY, how='left')
     table_all['stars'] = table_all['star count'].map(star_text)
+    table_all = whatif.night_gaps(table_all)        # gap sd and distance pp: the gap sort and the whole-night chart
 if warning := calibration_warning(table_all['calibration'].iloc[0] if len(table_all) else None, lang):
     st.warning(warning, icon="⚠️")
 
@@ -42,26 +43,30 @@ FORMATS = {'raw model %': '%.0f', 'line': '%g', 'side odds': '%.2f', 'p win %': 
            'proj avg': '%.1f', 'pick % L10': '%.0f', 'pick %': '%.0f',
            'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'percentile': '%.0f',
            'over_odds': '%.2f', 'under_odds': '%.2f', 'games': '%d', 'line move': '%+g', 'open line': '%g',
-           'spread': '%+g', 'game total': '%g'}
+           'spread': '%+g', 'game total': '%g', 'gap sd': '%+.1f'}
 
 
 # how the table can be ordered (i18n 'props.sort.*'): by tip-off by default; none of them says what to bet
-SORTS = ['tip', 'stars', 'return', 'chance']
+SORTS = ['tip', 'stars', 'return', 'chance', 'gap']
 
 
 def sort_lines(rows: pd.DataFrame, how: str) -> pd.DataFrame:
     """The lines in the chosen order, warnings always last. tip: the earliest game first; return: the highest
     expected return after the tax; chance: the highest chance to win (mostly low odds); stars: the most stars
-    first (decisions.stars), then by expected return."""
+    first (decisions.stars), then by expected return; gap: the biggest gap between our expectation and the line in
+    the player's spreads first (lines without a spread after them)."""
     rows = rows.assign(warned=rows['red flag'].fillna('') != '')
+    rows = rows.assign(abs_gap=rows['gap sd'].abs() if 'gap sd' in rows else np.nan)
     if 'star count' not in rows:
         rows = rows.assign(**{'star count': pd.NA, 'stars': '–'})
     rows = rows.assign(listed=-pd.to_numeric(rows['star count'], errors='coerce').fillna(-1))
     by = {'return': ['warned', 'ev net 100'], 'chance': ['warned', 'p win %'],
-          'tip': ['warned', 'tip_at', 'game', 'ev net 100'], 'stars': ['warned', 'listed', 'ev net 100']}[how]
+          'tip': ['warned', 'tip_at', 'game', 'ev net 100'], 'stars': ['warned', 'listed', 'ev net 100'],
+          'gap': ['warned', 'abs_gap']}[how]
     ascending = {'return': [True, False], 'chance': [True, False], 'tip': [True, True, True, False],
-                 'stars': [True, True, False]}[how]
-    return rows.sort_values(by, ascending=ascending, kind='stable').drop(columns=['warned', 'listed'])
+                 'stars': [True, True, False], 'gap': [True, False]}[how]
+    return rows.sort_values(by, ascending=ascending, kind='stable', na_position='last') \
+        .drop(columns=['warned', 'listed', 'abs_gap'])
 
 
 def line_decision(row) -> dict:
@@ -351,6 +356,39 @@ def whatif_panel(row: pd.Series, games: pd.DataFrame):
                       diff=g['won − price pp'], low=g['low pp'], high=g['high pp'], ret=g['return 100']))
 
 
+def night_map(rows: pd.DataFrame):
+    """Every shown line by its gap in spreads and its distance to break-even after tax (charts.night_map); a click
+    opens the line (props_focus, as the Overview's links do)."""
+    st.caption(t('props.map.intro', lang))
+    drawn = rows[rows['gap sd'].notna() & rows['distance pp'].notna() & rows['side'].isin(['Over', 'Under'])]
+    if drawn.empty:
+        st.caption(t('props.map.none', lang))
+        return
+    drawn = drawn.reset_index(drop=True)
+    labels = {'x': t('props.map.x', lang), 'y': t('props.map.y', lang), 'zero': t('props.map.zero', lang),
+              'Over': value('Over', lang), 'Under': value('Under', lang)}
+    picked = st.plotly_chart(charts.night_map(drawn, labels, t('props.map.chart', lang)), width='stretch',
+                             key='props_map', on_select='rerun', selection_mode='points',
+                             config={'displayModeBar': False})
+    points = (picked or {}).get('selection', {}).get('points', []) if picked else []
+    if points and points[0].get('customdata') is not None:
+        r = drawn.iloc[int(points[0]['customdata'][0])]
+        key = (r['event_id'], r['name_ESPN'], r['bet_type'])
+        if st.session_state.get('props_map_opened') != key:   # the selection stays: open it once, not on every run
+            st.session_state['props_map_opened'] = key
+            st.session_state['props_focus'] = key
+            st.session_state.pop('props_open', None)
+            st.rerun()
+    above = int((drawn['distance pp'] > 0).sum())
+    st.caption(t('props.map.summary', lang, n=len(drawn), above=above, left=len(rows) - len(drawn)))
+    if above:
+        st.caption(t('whatif.caveat', lang))
+    else:
+        r = drawn.loc[drawn['distance pp'].idxmax()]
+        st.caption(t('props.map.nearest', lang, name=r['name'], stat=r['bet_type'], side=value(r['side'], lang),
+                     line=r['line'], odds=r['side odds'], gap=-r['distance pp']))
+
+
 def line_checker():
     if logs.empty:
         st.caption(t('history.none', lang))
@@ -448,6 +486,11 @@ if not any(d['status'] == OBSTAW for d in decided.values()):
     st.info(t('props.all_pass', lang), icon="⚖️")
 decisions_banner(table_all.sort_values('tip_at').drop_duplicates('event_id')['event_id']
                  [lambda e: e.isin(shown['event_id']) if len(shown) else e])
+persist('props_map_open', False)
+map_box = st.expander(t('props.map.title', lang), key='props_map_open', on_change=remember, args=('props_map_open',))
+with map_box:
+    if map_box.open:                 # drawn only while open: the table stays where it was
+        night_map(shown)
 columns = MAIN_COLUMNS + (MORE_COLUMNS if more else [])
 picked = table(display_values(shown), columns, FORMATS, key='props_table', select=True, height=420,
                legend=['superbet', 'rotowire', 'stats'])

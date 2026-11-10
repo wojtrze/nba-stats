@@ -73,6 +73,7 @@ HELP = STAT_HELP | {
     'open line': "The line when daily_snapshot.py first saw it",
     'line move': "Current line minus the opening line: + = the line went up (the market expects more), − = down. "
                  "Empty without an earlier snapshot.",
+    'gap sd': "(proj avg − line) / sd of the player's games; empty with fewer than 5 games",
     'proj avg': "adj avg × the game factors: Superbet's implied team total vs the team's usual points, and what "
                 "the opponent allows to the player's position vs the league. Each counts half and at most ±8%.",
     'matchup': "soft / tough: the opponent allows at least 5% more / less of this stat to the player's position "
@@ -182,7 +183,7 @@ COLUMN_SOURCE = {
     'pick odds': 'superbet', 'odds': 'superbet', 'implied %': 'superbet', 'start (PL)': 'superbet', 'tip-off': 'superbet',
     'market %': 'superbet', 'break-even %': 'superbet', 'edge low': 'stats', 'open line': 'superbet',
     'line move': 'superbet', 'spread': 'superbet', 'game total': 'superbet', 'odds move': 'superbet',
-    'line moves': 'superbet', 'proj avg': 'stats', 'matchup': 'stats',
+    'line moves': 'superbet', 'gap sd': 'stats', 'proj avg': 'stats', 'matchup': 'stats',
     'RotoWire': 'rotowire', 'out': 'rotowire',
     'best side': 'stats', 'bet': 'stats', 'lean': 'stats', 'signal': 'stats', 'decision': 'stats', 'side': 'stats',
     'side odds': 'superbet', 'p win %': 'stats', 'break-even net %': 'superbet', 'edge net pp': 'stats',

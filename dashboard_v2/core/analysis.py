@@ -138,6 +138,50 @@ def last_game_line(settled: pd.DataFrame, player_id, stat: str, before) -> Optio
             'return 100': 100 * r['proj_avg profit std'] if pd.notna(r['proj_avg profit std']) else np.nan}
 
 
+LAST_COLUMNS = ['last date', 'last game', 'last line', 'last proj', 'last gap sd', 'last side', 'last actual',
+                'last result', 'last return 100', 'last price %']
+
+
+def last_game_lines(settled: pd.DataFrame, tonight: pd.DataFrame) -> pd.DataFrame:
+    """last_game_line for every tonight line at once: tonight (player_id, bet_type, start_time, any other columns)
+    joined with that player's settled line of the stat from his last game before tonight's US-Eastern date
+    (LAST_COLUMNS; last price % is the margin-free chance of the side toward our expectation). Only the tonight
+    lines that have one."""
+    if settled.empty or tonight.empty:
+        return pd.DataFrame(columns=list(tonight.columns) + LAST_COLUMNS)
+    night = pd.to_datetime(tonight['start_time'], utc=True).dt.tz_convert('US/Eastern').dt.tz_localize(None)         .dt.normalize()
+    left = tonight.assign(_pid=tonight['player_id'].astype('Int64'), _night=night)
+    done = settled[settled['status'] == 'settled'].drop(columns=LAST_COLUMNS, errors='ignore')   # its own 'last line'
+    done = done.assign(_pid=done['player_id'].astype('Int64'), _date=pd.to_datetime(done['game_date']),
+                       **{'last price %': _side_price(done, done['proj_avg side'])})
+    done = done.rename(columns={'game': 'last game', 'line': 'last line', 'proj_avg': 'last proj',
+                                'gap sd': 'last gap sd', 'proj_avg side': 'last side', 'actual': 'last actual',
+                                'proj_avg result': 'last result'})
+    done['last return 100'] = 100 * done['proj_avg profit std']
+    done['last date'] = done['_date']
+    pairs = left.reset_index().merge(done[['_pid', 'bet_type', '_date'] + LAST_COLUMNS], on=['_pid', 'bet_type'])
+    pairs = pairs[pairs['_date'] < pairs['_night']].sort_values('_date', kind='stable')
+    pairs = pairs.drop_duplicates('index', keep='last').sort_values('index')
+    return pairs.drop(columns=['index', '_pid', '_night', '_date']).reset_index(drop=True)
+
+
+def lookback_summary(rows: pd.DataFrame, wide: float = 0.5) -> dict:
+    """last_game_lines output in numbers, betting the side toward our expectation each time (pushes and lines
+    without odds left out): lines, players, won %, price %, won − price pp and return 100 after tax, for all of
+    them ('all') and for those at least `wide` spreads from the line ('wide')."""
+    def numbers(d):
+        if d.empty:
+            return {'lines': 0, 'players': 0, 'won %': np.nan, 'price %': np.nan, 'won − price pp': np.nan,
+                    'return 100': np.nan}
+        won = 100.0 * (d['last result'] == 'win')
+        return {'lines': len(d), 'players': d['player_id'].nunique(), 'won %': won.mean(),
+                'price %': d['last price %'].mean(), 'won − price pp': won.mean() - d['last price %'].mean(),
+                'return 100': d['last return 100'].mean()}
+
+    d = rows[rows['last result'].isin(['win', 'loss']) & rows['last price %'].notna()] if len(rows) else rows
+    return {'all': numbers(d), 'wide': numbers(d[d['last gap sd'].abs() >= wide] if len(d) else d)}
+
+
 def _night_range(won: pd.Series, price: pd.Series, nights: pd.Series, draws: int = 1000, seed: int = 7):
     """95% range of mean(won − price) from resampling whole nights."""
     diff = (won - price).groupby(nights.values).agg(['sum', 'size'])

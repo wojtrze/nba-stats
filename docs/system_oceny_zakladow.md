@@ -390,6 +390,18 @@ punkt odniesienia; to nie jest sprawdzony próg i nie zmienia decyzji (*Obstaw* 
 
 Linia powyżej progu dostaje neutralny opis i stałe zdanie, że to szacunek, nie porada (test-strażnik słów zostaje).
 
+**Cała noc (od 10.11, krok 2).** Te same liczby dla wszystkich dzisiejszych linii naraz (`whatif.night_gaps`):
+
+- **Zakłady na zawodników:** zwijany wykres *Dzisiejsze linie wobec progu po podatku* (`charts.night_map`): każda
+  pokazana linia (filtry działają) to punkt, w poziomie różnica w rozrzutach, w pionie odległość ocenianej strony od
+  progu po podatku; kliknięcie otwiera linię. Nowe sortowanie *Różnica w rozrzutach* i kolumna `gap sd` w tabeli.
+- **Przegląd:** blok *Dziś wobec progu po podatku*: ile linii jest powyżej progu, najbliższa linia z potrzebnym
+  kursem i 5 najbliższych (`whatif.nearest`, potrzebny kurs liczony tylko dla nich); oraz *Dzisiejsi zawodnicy w
+  ostatnim meczu* (`core.analysis.last_game_lines` / `lookback_summary`): dla każdej dzisiejszej linii linia tego
+  gracza w tej statystyce z jego poprzedniego meczu, strona w kierunku naszej oczekiwanej wartości wobec ceny i wynik
+  po podatku, osobno dla różnicy ≥ 0,5 rozrzutu. 10.11: 1 067 linii 82 graczy, 50% wobec 51% z ceny, −20 zł na
+  100 zł; przy ≥ 0,5 rozrzutu 236 linii, 56% wobec 53%, −14 zł. Jeden mecz na gracza to głównie przypadek.
+
 ---
 
 ## 6. Rynki meczowe (drużyny)

@@ -111,3 +111,30 @@ def gap_check(groups, mark: Optional[str] = None, labels: Optional[dict] = None,
     low = float(np.nanmin(groups[['won %', 'price %']].values)) if len(groups) else 40
     return layout(fig, 300, title, barmode='group', yaxis=dict(title=labels.get('y', '%'),
                                                                range=[max(0, low - 10), None]))
+
+
+def night_map(rows: pd.DataFrame, labels: Optional[dict] = None, title: str = '') -> go.Figure:
+    """Tonight's lines (whatif.night_gaps rows with name, bet_type, line, side, side odds, p win %, break-even
+    net %): x the gap in the player's spreads, y the distance to break-even after costs in pp, break-even dashed at
+    0; Over green, Under red; points above break-even outlined dark (a neutral mark). Each point's customdata[0] is
+    its row position in `rows`, for selecting it. labels: 'x', 'y', 'zero', 'Over', 'Under' texts."""
+    labels = labels or {}
+    fig = go.Figure()
+    for side, colour in (('Over', OVER), ('Under', UNDER)):
+        part = rows[rows['side'] == side]
+        if part.empty:
+            continue
+        above = part['distance pp'] > 0
+        fig.add_scatter(
+            x=part['gap sd'], y=part['distance pp'], mode='markers', name=labels.get(side, side),
+            marker=dict(color=colour, size=8, opacity=0.75, line=dict(width=np.where(above, 2, 0), color='#0f172a')),
+            customdata=np.stack([np.flatnonzero(rows['side'].values == side), part['name'], part['bet_type'],
+                                 part['line'], part['side odds'], part['p win %'], part['break-even net %']], axis=1),
+            hovertemplate="%{customdata[1]} · %{customdata[2]} " + labels.get(side, side) +
+                          " %{customdata[3]} @ %{customdata[4]:.2f}<br>%{customdata[5]:.1f}% / "
+                          "%{customdata[6]:.1f}% · %{y:+.1f} pp · %{x:+.2f} sd<extra></extra>")
+    fig.add_hline(y=0, line_dash='dash', line_color='#64748b', annotation_text=labels.get('zero', 'break-even'),
+                  annotation_position='top left')
+    fig.add_vline(x=0, line_color='#cbd5e1')
+    return layout(fig, 380, title, xaxis=dict(title=labels.get('x', 'gap in spreads'), zeroline=False),
+                  yaxis=dict(title=labels.get('y', 'pp'), zeroline=False))

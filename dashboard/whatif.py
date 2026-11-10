@@ -128,3 +128,33 @@ def move_share(paths: pd.DataFrame, stat: str, side: str, ratio: float) -> Dict:
     s = 'over' if side == 'Over' else 'under'
     rose = part[f'max {s}'] >= ratio * part[f'first {s}'] - 1e-9
     return {'share': 100 * float(rose.mean()), 'lines': len(part), 'nights': int(part['night'].nunique())}
+
+
+# --- the whole night: every line's gap and distance, the lines nearest to break-even ---
+
+def night_gaps(table: pd.DataFrame) -> pd.DataFrame:
+    """The priced lines (models.price_props) with gap sd (gap_in_spreads per line: NaN without a usable spread or
+    with fewer than MIN_GAMES games) and distance pp (p win % − break-even net %: how far the evaluated side is
+    from break-even after costs; the table's edge net pp, named for these views)."""
+    sd = pd.to_numeric(table['sd'], errors='coerce')
+    usable = (sd > 0) & (pd.to_numeric(table['games'], errors='coerce') >= MIN_GAMES)
+    gap = (pd.to_numeric(table['proj avg'], errors='coerce') - pd.to_numeric(table['line'], errors='coerce')) / sd
+    return table.assign(**{'gap sd': gap.where(usable),
+                           'distance pp': table['p win %'] - table['break-even net %']})
+
+
+def nearest(table: pd.DataFrame, values_of, coef: Optional[Dict], n: int = 5,
+            profile: str = ACTIVE_PROFILE) -> pd.DataFrame:
+    """The n lines of night_gaps output with an evaluated side closest to break-even after costs (highest
+    distance pp first), with needed odds (needed_odds for that side; NaN when even MAX_ODDS isn't enough).
+    values_of(row): the player's games of the line's stat, as the table priced them."""
+    rows = table[table['side'].isin(['Over', 'Under']) & table['distance pp'].notna()]
+    rows = rows.sort_values('distance pp', ascending=False, kind='stable').head(n).copy()
+    needed = []
+    for _, r in rows.iterrows():
+        side_odds, other = (r['over_odds'], r['under_odds']) if r['side'] == 'Over' else \
+            (r['under_odds'], r['over_odds'])
+        found = needed_odds(values_of(r), float(r['line']), r['proj avg'], r['side'], float(side_odds),
+                            float(other), coef, profile)
+        needed.append(np.nan if found is None else found)
+    return rows.assign(**{'needed odds': needed}).reset_index(drop=True)

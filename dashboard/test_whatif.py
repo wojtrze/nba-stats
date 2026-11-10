@@ -65,3 +65,31 @@ def test_odds_paths_and_move_share():
     share = whatif.move_share(paths, 'PTS', 'Over', 1.15)
     assert share == {'share': 50.0, 'lines': 2, 'nights': 1}
     assert np.isnan(whatif.move_share(paths, 'REB', 'Over', 1.1)['share'])
+
+
+def _night():
+    rows = []
+    for name, line, proj, sd, games, over, under in (('A', 14.5, 15.8, 4.0, 12, 1.85, 1.95),
+                                                     ('B', 9.5, 8.0, 0.0, 12, 1.90, 1.90),
+                                                     ('C', 20.5, 22.0, 5.0, 3, 1.70, 2.10)):
+        priced = price_line(VALUES, line, proj, over, under, COEF)
+        rows.append({'name': name, 'line': line, 'proj avg': proj, 'sd': sd, 'games': games, 'over_odds': over,
+                     'under_odds': under} | priced)
+    return pd.DataFrame(rows)
+
+
+def test_night_gaps_needs_a_usable_spread():
+    g = whatif.night_gaps(_night())
+    assert np.isclose(g.loc[0, 'gap sd'], (15.8 - 14.5) / 4)
+    assert np.isnan(g.loc[1, 'gap sd']) and np.isnan(g.loc[2, 'gap sd'])     # sd 0; fewer than 5 games
+    assert np.allclose(g['distance pp'], g['edge net pp'])
+
+
+def test_nearest_orders_by_distance_and_finds_the_odds():
+    g = whatif.night_gaps(_night())
+    top = whatif.nearest(g, lambda r: VALUES, COEF, n=2)
+    assert len(top) == 2 and top['distance pp'].is_monotonic_decreasing
+    r = top.iloc[0]
+    side_odds, other = (r['over_odds'], r['under_odds']) if r['side'] == 'Over' else (r['under_odds'], r['over_odds'])
+    assert top.loc[0, 'needed odds'] == whatif.needed_odds(VALUES, r['line'], r['proj avg'], r['side'], side_odds,
+                                                           other, COEF)

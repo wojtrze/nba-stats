@@ -142,3 +142,22 @@ def test_gap_groups_compare_the_side_with_its_price():
     assert top['lines'] == 2 and top['nights'] == 2 and top['won %'] == 50 and top['price %'] == pytest.approx(50)
     assert top['return 100'] == pytest.approx(100 * (0.672 - 1.0) / 2)
     assert top['low pp'] <= top['won − price pp'] <= top['high pp']
+
+
+def test_last_game_lines_take_each_players_last_earlier_game():
+    from core.analysis import last_game_lines, lookback_summary
+    settled = _lookback([('2026-11-05', 1, 'PTS', 18.5, 21.0, 0.4, 'Over', 'win', 0.6, 1.9, 1.9),
+                        ('2026-11-08', 1, 'PTS', 19.5, 25.0, 1.2, 'Over', 'loss', -1.0, 2.0, 2.0),
+                        ('2026-11-10', 1, 'PTS', 20.5, 22.0, 0.3, 'Over', 'win', 0.6, 1.9, 1.9),
+                        ('2026-11-07', 2, 'REB', 5.5, 5.0, -0.2, 'Under', 'win', 0.6, 1.9, 1.9)])
+    settled['last line'] = 99.5                            # settle_props' own line before the first fetch
+    tonight = pd.DataFrame({'player_id': [1, 2, 3], 'bet_type': ['PTS', 'REB', 'PTS'], 'name': ['a', 'b', 'c'],
+                            'start_time': ['2026-11-11T00:30:00Z'] * 3})      # Nov 10 in New York
+    out = last_game_lines(settled, tonight)
+    assert list(out['name']) == ['a', 'b']                         # c has no earlier line
+    assert out.loc[0, 'last line'] == 19.5 and out.loc[0, 'last return 100'] == -100   # not tonight's own game
+    assert out.loc[0, 'last price %'] == pytest.approx(50)
+    s = lookback_summary(out)
+    assert s['all']['lines'] == 2 and s['all']['won %'] == 50 and s['all']['players'] == 2
+    assert s['wide']['lines'] == 1 and s['wide']['won %'] == 0
+    assert lookback_summary(out.iloc[0:0])['all']['lines'] == 0
