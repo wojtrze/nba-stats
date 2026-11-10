@@ -3,7 +3,7 @@
 # the props table, in reading order: which line, the decision for its game, the evaluated side and its price after
 # the stake tax. One side column only: no 'our pick', 'better side' and 'projection leans' next to each other
 PROPS_MAIN = ['stars', 'name', 'game', 'tip-off', 'bet_type', 'line', 'decision', 'side', 'side odds', 'p win %',
-              'break-even net %', 'edge net pp', 'ev net 100', 'proj avg', 'pick % L10', 'RotoWire', 'red flag']
+              'break-even net %', 'edge net pp', 'ev net 100', 'proj avg', 'gap sd', 'pick % L10', 'RotoWire', 'red flag']
 # Props → More → Show every column
 PROPS_MORE = ['p push %', 'line move', 'open line', 'adj avg', 'avg', 'avg L5', 'matchup', 'spread',
               'game total', 'percentile', 'pick %', 'games', 'min L5', 'raw model %', 'over_odds', 'under_odds']
@@ -13,6 +13,12 @@ OVERVIEW_PROPS = ['name', 'game', 'bet_type', 'line', 'side', 'side odds', 'p wi
 # Overview: the night's best rated lines (decisions.stars), shown while no offer is 'Bet'
 SHORTLIST = ['stars', 'name', 'game', 'tip-off', 'bet_type', 'line', 'side', 'side odds', 'p win %', 'side market %',
              'above price pp', 'ev net 100', 'wait']
+
+# Overview: the lines nearest to break-even after tax, and tonight's players' lines in their last game
+OVERVIEW_NEAREST = ['name', 'game', 'bet_type', 'line', 'side', 'side odds', 'p win %', 'break-even net %',
+                    'edge net pp', 'needed odds', 'gap sd']
+OVERVIEW_LOOKBACK = ['name', 'bet_type', 'game_date', 'line', 'proj_avg', 'gap sd', 'side', 'actual', 'result',
+                     'return 100']
 
 # Games: one row per game, then the chosen game's bets and each team's absences
 GAMES_SUMMARY = ['game', 'start (PL)', 'decision', 'players', 'proj winner', 'proj score', 'proj total', 'RotoWire']

@@ -1,22 +1,27 @@
 import pandas as pd
 import streamlit as st
 
-from core.data import (game_odds, player_decisions, priced_props, settled_props, shortlist_record, superbet)
+from core.data import (game_odds, player_decisions, priced_props, settled_lines, settled_props, shortlist_record,
+                       superbet)
+from core.analysis import last_game_lines, lookback_summary
 from decisions import CZEKAJ, actionable, offers_table, star_text, stars
 from tracking import star_scorecard
-from core.columns import OVERVIEW_PROPS, SHORTLIST
+from core.columns import OVERVIEW_LOOKBACK, OVERVIEW_NEAREST, OVERVIEW_PROPS, SHORTLIST
 from core.state import language
 from core.ui import PAGES, kpis, no_offers, page_header, pl_time, table
 from insights import line_streaks, night_curiosities, tonight_streaks
-from loaders import player_logs
-from models import calibration_warning
+from loaders import filtered_logs, player_logs
+from models import calibration_warning, load_calibration, top_up_logs
 import night_view
+import whatif
 from i18n import t, value
 
 lang = language()
 seasons, season_types = page_header(t('overview.title', lang), t('overview.purpose', lang), with_scope=True)
 STAT = lambda s: 'PRA' if s == 'ARP' else s
 TOP_STREAKS = 10
+NEAREST = 5
+LOOKBACK_LIST = 10
 
 
 def focus(event_id, name_espn, bet_type):
@@ -94,6 +99,84 @@ else:
             picked_row = top.iloc[picked]
         if picked_row is not None:
             focus(picked_row['event_id'], picked_row['name_ESPN'], picked_row['bet_type'])
+
+# --- tonight against break-even after tax: the lines nearest to it, and tonight's players in their last game ---
+def breakeven_block(props: pd.DataFrame):
+    rows = whatif.night_gaps(props)
+    priced = rows[rows['side'].isin(['Over', 'Under']) & rows['distance pp'].notna()]
+    st.markdown(f"**{t('overview.breakeven', lang)}**", help=t('overview.breakeven_help', lang))
+    if priced.empty:
+        return
+    logs = filtered_logs(seasons, season_types)
+    by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
+
+    def values_of(r):
+        # the games the line was priced from (priced_props tops a player with few games up with last season's)
+        own = by_player.get(r['player_id'], logs.iloc[0:0])
+        return top_up_logs(own, player_logs(), max(seasons), [r['player_id']]).sort_values('Date')[r['bet_type']]
+
+    near = whatif.nearest(priced, values_of, load_calibration(), n=NEAREST)
+    above = int((priced['distance pp'] > 0).sum())
+    if above:
+        st.markdown(t('overview.breakeven_some', lang, n=len(priced), above=above))
+        st.caption(t('whatif.caveat', lang))
+    else:
+        r = near.iloc[0]
+        needs = t('overview.breakeven_needs', lang, need=r['needed odds'], now=r['side odds']) \
+            if pd.notna(r['needed odds']) else ''
+        st.markdown(t('overview.breakeven_none', lang, n=len(priced), name=r['name'], stat=STAT(r['bet_type']),
+                      side=value(r['side'], lang), line=r['line'], odds=r['side odds'], gap=-r['distance pp'],
+                      needs=needs))
+    st.caption(t('overview.breakeven_table', lang, n=len(near)))
+    shown = near.assign(side=near['side'].map(lambda v: value(v, lang)))
+    picked = table(shown, OVERVIEW_NEAREST, {'line': '%g', 'side odds': '%.2f', 'p win %': '%.1f',
+                                             'break-even net %': '%.1f', 'edge net pp': '%+.1f',
+                                             'needed odds': '%.2f', 'gap sd': '%+.1f'},
+                   key='nearest_breakeven', select=True)
+    if picked is not None:
+        r = near.iloc[picked]
+        focus(r['event_id'], r['name_ESPN'], r['bet_type'])
+
+    # tonight's players in their last game: the side toward our expectation then, against its price
+    st.markdown(f"**{t('overview.lookback', lang)}**", help=t('overview.lookback_help', lang))
+    last = last_game_lines(settled_lines(tuple(seasons), tuple(season_types)),
+                           props[props['player_id'].notna()][['event_id', 'name_ESPN', 'name', 'player_id', 'bet_type',
+                                                             'start_time']])
+    summary = lookback_summary(last)
+    if not summary['all']['lines']:
+        st.caption(t('overview.lookback_none', lang))
+        return
+    a = summary['all']
+    text = t('overview.lookback_all', lang, lines=a['lines'], players=a['players'], won=a['won %'],
+             price=a['price %'], diff=a['won − price pp'], ret=a['return 100'])
+    w = summary['wide']
+    if w['lines']:
+        text += ' ' + t('overview.lookback_wide', lang, lines=w['lines'], won=w['won %'], price=w['price %'],
+                        diff=w['won − price pp'], ret=w['return 100'])
+    st.markdown(text)
+    st.caption(t('overview.lookback_luck', lang))
+    widest = last[last['last gap sd'].notna()].assign(_abs=last['last gap sd'].abs()) \
+        .sort_values('_abs', ascending=False).head(LOOKBACK_LIST).reset_index(drop=True)
+    if widest.empty:
+        return
+    with st.expander(t('overview.lookback_list', lang, n=len(widest))):
+        listed = pd.DataFrame({
+            'name': widest['name'], 'bet_type': widest['bet_type'].map(STAT),
+            'game_date': pd.to_datetime(widest['last date']).dt.strftime('%d.%m'), 'line': widest['last line'],
+            'proj_avg': widest['last proj'], 'gap sd': widest['last gap sd'],
+            'side': widest['last side'].map(lambda v: value(v, lang)), 'actual': widest['last actual'],
+            'result': widest['last result'].map(lambda v: value(v, lang) if isinstance(v, str) else v),
+            'return 100': widest['last return 100']})
+        picked = table(listed, OVERVIEW_LOOKBACK, {'line': '%g', 'proj_avg': '%.1f', 'gap sd': '%+.1f',
+                                                   'actual': '%g', 'return 100': '%+.0f'},
+                       key='lookback_list', select=True)
+        if picked is not None:
+            r = widest.iloc[picked]
+            focus(r['event_id'], r['name_ESPN'], r['bet_type'])
+
+
+if len(props):
+    breakeven_block(props)
 
 # --- last night: how the lines, the rated bets and the games resolved ---
 latest = night_view.latest_night()
