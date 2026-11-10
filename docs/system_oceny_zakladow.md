@@ -402,6 +402,16 @@ Linia powyżej progu dostaje neutralny opis i stałe zdanie, że to szacunek, ni
   po podatku, osobno dla różnicy ≥ 0,5 rozrzutu. 10.11: 1 067 linii 82 graczy, 50% wobec 51% z ceny, −20 zł na
   100 zł; przy ≥ 0,5 rozrzutu 236 linii, 56% wobec 53%, −14 zł. Jeden mecz na gracza to głównie przypadek.
 
+**Skład (od 10.11, krok 3).** W zakładce *Co musiałoby się zmienić* sekcja *Gdyby zmienił się skład*: wybór, kto nie
+gra (na start nieobecni z RotoWire, szansa gry ≤ 25%), i ta sama linia wyceniona jeszcze raz (`whatif.price_lineup`):
+`lineup adj` z `metrics.absence_adjustments` (różnica z nim / bez niego w jego okresie w drużynie, zmniejszona o
+n/(n+5)), `proj avg = (avg + lineup adj) × tempo × rywal`, a potem `models.price_line` przy **obecnych kursach i
+linii**. Z listą RotoWire daje dokładnie liczby z tabeli. *Jeszcze jeden kolega nie gra* (`whatif.single_absences`)
+liczy każdego kolegę z rotacji osobno (tylko tych, bez których gracz już grał). Cena jest trzymana w miejscu, a
+Superbet zwykle przesuwa linię, gdy nieobecność staje się znana (H4: linie kolegów ruszone w 83% przypadków), więc to
+górna granica tego, co wiadomość mogłaby zmienić. Kalibracja dodatkowo tłumi efekt: 10.11 nieobecność Embiida
+podniosłaby oczekiwane punkty Maxeya z 24,4 do 26,5, a naszą szansę tylko z 52,4% do 53,1%.
+
 ---
 
 ## 6. Rynki meczowe (drużyny)

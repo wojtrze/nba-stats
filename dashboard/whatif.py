@@ -158,3 +158,54 @@ def nearest(table: pd.DataFrame, values_of, coef: Optional[Dict], n: int = 5,
                             float(other), coef, profile)
         needed.append(np.nan if found is None else found)
     return rows.assign(**{'needed odds': needed}).reset_index(drop=True)
+
+
+# --- the lineup: a teammate sits (or plays after all) ---
+
+def lineup_projection(row: pd.Series, logs: pd.DataFrame, out_ids, stat: Optional[str] = None) -> Dict:
+    """Our expectation for the row's player with `out_ids` absent, built as price_props builds it: lineup adj =
+    metrics.absence_adjustments over the player's and those teammates' own games (logs without topped-up rows),
+    proj avg = (avg + lineup adj) × pace factor × matchup factor (the row's)."""
+    from metrics import absence_adjustments
+    stat = stat or row['bet_type']
+    pid = row['player_id']
+    out_ids = [o for o in out_ids if o != pid]
+    adj = 0.0
+    if out_ids and stat in logs:
+        part = logs[logs['player_id_ESPN'].isin(set(out_ids) | {pid})]
+        adj = float(absence_adjustments(part, [pid], tuple(sorted(out_ids)), [stat]).loc[pid, stat])
+    factors = row['pace factor'] * row['matchup factor']
+    return {'lineup adj': adj, 'proj avg': (row['avg'] + adj) * factors}
+
+
+def price_lineup(row: pd.Series, values: pd.Series, logs: pd.DataFrame, out_ids, coef: Optional[Dict],
+                 profile: str = ACTIVE_PROFILE) -> Dict:
+    """The row's line priced again (models.price_line, the side chosen as the table chooses it) with our
+    expectation for `out_ids` absent, at Superbet's current odds and line: the price_line columns plus lineup adj,
+    proj avg, gap sd and distance pp. The price is held as it is: Superbet usually moves it too when the news comes."""
+    from models import price_line
+    proj = lineup_projection(row, logs, out_ids)
+    priced = price_line(values, row['line'], proj['proj avg'], row['over_odds'], row['under_odds'], coef, profile)
+    return priced | proj | {'gap sd': gap_in_spreads(proj['proj avg'], row['line'], row['sd'], row['games']),
+                            'distance pp': priced['p win %'] - priced['break-even net %']}
+
+
+def single_absences(row: pd.Series, values: pd.Series, logs: pd.DataFrame, out_now, mates, coef: Optional[Dict],
+                    profile: str = ACTIVE_PROFILE) -> pd.DataFrame:
+    """For each of `mates` not already in out_now (nor the player): the line priced as if he also sat
+    (price_lineup with out_now + him) and the games the player played without him (inside his stint), highest
+    distance to break-even first. Columns: teammate_id, games without, proj avg, side, p win %, distance pp,
+    ev net 100."""
+    from metrics import stint_games
+    cols = ['teammate_id', 'games without', 'proj avg', 'side', 'p win %', 'distance pp', 'ev net 100']
+    rows = []
+    for mate in mates:
+        if mate in out_now or mate == row['player_id']:
+            continue
+        p = price_lineup(row, values, logs, list(out_now) + [mate], coef, profile)
+        games = stint_games(logs, row['player_id'], mate)
+        rows.append({'teammate_id': mate, 'games without': int((~games['teammate_played']).sum()),
+                     'proj avg': p['proj avg'], 'side': p['side'], 'p win %': p['p win %'],
+                     'distance pp': p['distance pp'], 'ev net 100': p['ev net 100']})
+    return pd.DataFrame(rows, columns=cols).sort_values('distance pp', ascending=False, na_position='last') \
+        .reset_index(drop=True)

@@ -2541,6 +2541,54 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "Za mało rozliczonych linii z rozrzutem."),
     'whatif.no_side': _w("This line can't be priced (a price is missing).",
                          "Tej linii nie da się wycenić (brakuje kursu)."),
+    'whatif.lineup.title': _w("**If the lineup changes**", "**Gdyby zmienił się skład**"),
+    'whatif.lineup.no_team': _w("The player's team isn't known, so there's no lineup to change.",
+                                "Nie znamy drużyny zawodnika, więc nie ma składu do zmiany."),
+    'whatif.lineup.pick': _w("Who sits", "Kto nie gra"),
+    'whatif.lineup.pick_help': _w("Starts from RotoWire's out list (25% or less to play). Remove a name: he plays after "
+                                  "all. Add one: he sits.",
+                                  "Na start lista nieobecnych z RotoWire (szansa gry 25% lub mniej). Usuń nazwisko: "
+                                  "jednak gra. Dodaj: nie gra."),
+    'whatif.lineup.nobody': _w("everyone playing", "grają wszyscy"),
+    'whatif.lineup.who': _w("{names} out", "nie grają: {names}"),
+    'whatif.lineup.result': _w("With {who}: we'd expect **{proj:.1f}** (now {proj_now:.1f}); {side} {line:g}: our "
+                               "chance {p:.1f}% (now {p_now:.1f}%), break-even after tax {be:.1f}%, **{dist:+.1f} pp**, "
+                               "result {ev:+.1f} per 100 zł staked after tax.",
+                               "Gdy {who}: spodziewalibyśmy się **{proj:.1f}** (teraz {proj_now:.1f}); {side} "
+                               "{line:g}: nasza szansa {p:.1f}% (teraz {p_now:.1f}%), próg po podatku {be:.1f}%, "
+                               "**{dist:+.1f} pp**, wynik {ev:+.1f} na 100 zł stawki po podatku."),
+    'whatif.lineup.flip': _w("With this lineup the better side would be {side}.",
+                             "Przy tym składzie lepszą stroną byłoby {side}."),
+    'whatif.lineup.needs': _w("With this lineup it would still need odds of at least {need:.2f} (now {now:.2f}).",
+                              "Przy tym składzie nadal potrzebny byłby kurs co najmniej {need:.2f} (teraz {now:.2f})."),
+    'whatif.lineup.price_held': _w("Superbet's odds and line are held as they are now. When a teammate's absence becomes "
+                                   "known Superbet usually moves this line too, so this is the most the news could "
+                                   "change for us.",
+                                   "Kursy i linia Superbetu zostają takie jak teraz. Gdy nieobecność kolegi staje się "
+                                   "znana, Superbet zwykle przesuwa też tę linię, więc to najwięcej, ile ta wiadomość "
+                                   "mogłaby dla nas zmienić."),
+    'whatif.lineup.shrunk': _w("The change per teammate is the one the price uses: the with/without difference from the games "
+                               "in the chosen seasons, shrunk by games without ÷ (games without + 5). The Teammates tab "
+                               "shows the raw difference.",
+                               "Zmiana na każdego kolegę to ta, której używa wycena: różnica z nim / bez niego z meczów "
+                               "wybranych sezonów, zmniejszona o mecze bez niego ÷ (mecze bez niego + 5). Zakładka kolegów "
+                               "pokazuje surową różnicę."),
+    'whatif.lineup.one': _w("One more teammate sitting", "Jeszcze jeden kolega nie gra"),
+    'whatif.lineup.one_none': _w("He hasn't played a game without any of the others yet, so there's nothing to compare.",
+                                 "Nie zagrał jeszcze meczu bez żadnego z pozostałych, więc nie ma czego porównać."),
+    'whatif.lineup.one_short': _w("No single teammate sitting would bring this line to break-even after tax.",
+                                  "Nieobecność żadnego pojedynczego kolegi nie doprowadziłaby tej linii do progu po "
+                                  "podatku."),
+    'whatif.lineup.one_some': _w("With {n} {n|teammate|teammates|teammates} sitting this line would be above break-even "
+                                 "after tax by our numbers.",
+                                 "Przy nieobecności {n} {n|kolegi|kolegów|kolegów} ta linia byłaby powyżej progu po "
+                                 "podatku według naszych liczb."),
+    'whatif.lineup.col.games': _w("games without him", "mecze bez niego"),
+    'whatif.lineup.col.proj': _w("expected {stat}", "oczekiwane {stat}"),
+    'whatif.lineup.col.side': _w("side", "strona"),
+    'whatif.lineup.col.p': _w("our chance %", "nasza szansa %"),
+    'whatif.lineup.col.dist': _w("distance to break-even (pp)", "odległość od progu (pp)"),
+    'whatif.lineup.col.ev': _w("result per 100 after tax", "wynik na 100 zł po podatku"),
     'props.map.title': _w("Tonight's lines against break-even after tax",
                           "Dzisiejsze linie wobec progu po podatku"),
     'props.map.intro': _w("Each point is one line in the table below (the filters apply): across, how far our expected "

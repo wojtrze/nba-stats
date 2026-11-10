@@ -93,3 +93,53 @@ def test_nearest_orders_by_distance_and_finds_the_odds():
     side_odds, other = (r['over_odds'], r['under_odds']) if r['side'] == 'Over' else (r['under_odds'], r['over_odds'])
     assert top.loc[0, 'needed odds'] == whatif.needed_odds(VALUES, r['line'], r['proj avg'], r['side'], side_odds,
                                                            other, COEF)
+
+
+def _team_logs():
+    """Player 1 scores 20 with teammate 2 and 26 without him (4 of 12 games); teammate 3 plays every game."""
+    rows = []
+    for g in range(12):
+        date = pd.Timestamp('2026-10-20') + pd.Timedelta(days=g)
+        two_plays = g >= 4 or g == 0          # 2 plays the first game (his stint starts there) and from game 4
+        for pid, pts, mins in ((1, 20 if two_plays else 26, 34), (2, 15, 30 if two_plays else 0), (3, 10, 25)):
+            rows.append({'player_id_ESPN': pid, 'game_id': g, 'team': 'bos', 'season_id': 2026, 'Date': date,
+                         'PTS': pts, 'MIN': mins})
+    return pd.DataFrame(rows)
+
+
+def _row():
+    return pd.Series({'player_id': 1, 'bet_type': 'PTS', 'line': 21.5, 'avg': 22.0, 'sd': 2.8, 'games': 12,
+                      'pace factor': 1.02, 'matchup factor': 0.98, 'over_odds': 1.85, 'under_odds': 1.95})
+
+
+def test_lineup_projection_uses_the_shrunk_absence_change():
+    from metrics import absence_adjustments
+    logs = _team_logs()
+    none = whatif.lineup_projection(_row(), logs, [])
+    assert none['lineup adj'] == 0 and np.isclose(none['proj avg'], 22.0 * 1.02 * 0.98)
+    two = whatif.lineup_projection(_row(), logs, [2])
+    expected = absence_adjustments(logs, [1], (2,), ['PTS']).loc[1, 'PTS']
+    assert np.isclose(two['lineup adj'], expected) and np.isclose(expected, 6 * 3 / (3 + 5))
+    assert two['proj avg'] > none['proj avg']
+    assert whatif.lineup_projection(_row(), logs, [1])['lineup adj'] == 0          # the player himself is skipped
+
+
+def test_price_lineup_prices_the_new_expectation_like_the_table():
+    logs, row = _team_logs(), _row()
+    values = logs.loc[logs['player_id_ESPN'] == 1, 'PTS']
+    p = whatif.price_lineup(row, values, logs, [2], COEF)
+    table = price_line(values, 21.5, p['proj avg'], 1.85, 1.95, COEF)
+    assert p['side'] == table['side'] and np.isclose(p['ev net 100'], table['ev net 100'])
+    assert np.isclose(p['distance pp'], table['edge net pp'])
+    assert np.isclose(p['gap sd'], (p['proj avg'] - 21.5) / 2.8)
+
+
+def test_single_absences_skip_the_out_and_sort_by_distance():
+    logs, row = _team_logs(), _row()
+    values = logs.loc[logs['player_id_ESPN'] == 1, 'PTS']
+    one = whatif.single_absences(row, values, logs, [], [1, 2, 3], COEF)
+    assert set(one['teammate_id']) == {2, 3} and one['distance pp'].is_monotonic_decreasing
+    two = one.set_index('teammate_id')
+    assert two.loc[2, 'games without'] == 3 and two.loc[3, 'games without'] == 0
+    assert two.loc[2, 'proj avg'] > two.loc[3, 'proj avg']     # Under is the side here, so 2 sitting hurts it
+    assert list(whatif.single_absences(row, values, logs, [2], [2, 3], COEF)['teammate_id']) == [3]

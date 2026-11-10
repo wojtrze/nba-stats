@@ -15,7 +15,7 @@ from glossary import column_config
 from i18n import t, value
 from reasons import flag_texts
 from loaders import filtered_logs, player_logs, snapshot_history
-from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits
+from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits, team_rotation
 from mispricing import offer_signals
 from models import calibration_warning, load_calibration, top_up_logs
 from reasons import offer_context, prop_reasons
@@ -325,6 +325,8 @@ def whatif_panel(row: pd.Series, games: pd.DataFrame):
     charts.show(charts.breakeven_curve(grid, ev, side_odds, odds, labels, t('whatif.chart', lang, line=chosen_line)),
                 key='whatif_curve')
 
+    lineup_whatif(row, games, coef, profile, key)
+
     # look back: his last game, then every settled line by its gap in spreads
     st.markdown(t('whatif.lookback', lang))
     settled = settled_lines(tuple(seasons), tuple(season_types))
@@ -387,6 +389,77 @@ def night_map(rows: pd.DataFrame):
         r = drawn.loc[drawn['distance pp'].idxmax()]
         st.caption(t('props.map.nearest', lang, name=r['name'], stat=r['bet_type'], side=value(r['side'], lang),
                      line=r['line'], odds=r['side odds'], gap=-r['distance pp']))
+
+
+def lineup_whatif(row: pd.Series, games: pd.DataFrame, coef, profile: str, key: str):
+    """If the lineup changes: the line priced again (whatif.price_lineup) with the teammates chosen as sitting,
+    starting from RotoWire's out list, at Superbet's current price; and each single teammate sitting
+    (whatif.single_absences), computed only while its expander is open."""
+    st.markdown(t('whatif.lineup.title', lang))
+    if not row['team'] or pd.isna(row['player_id']):
+        st.caption(t('whatif.lineup.no_team', lang))
+        return
+    pid, stat = row['player_id'], row['bet_type']
+    listed = rotowire_team(lineups, row['team'])
+    out_now = [o for o in listed['out'] if o != pid]
+    names = player_logs().groupby('player_id_ESPN')['player_display_name'].last()
+    options = [m for m in dict.fromkeys(team_rotation(logs, row['team']).index.tolist() + out_now
+                                        + listed['questionable']) if m != pid]
+    sits = st.multiselect(t('whatif.lineup.pick', lang), options, default=out_now,
+                          format_func=lambda m: names.get(m, str(m)), key=f"whatif_out_{key}",
+                          help=t('whatif.lineup.pick_help', lang))
+    values = games[stat]
+    now = whatif.price_lineup(row, values, logs, out_now, coef, profile)
+    tried = now if sorted(sits) == sorted(out_now) else whatif.price_lineup(row, values, logs, sits, coef, profile)
+    who = t('whatif.lineup.who', lang, names=', '.join(names.get(m, str(m)) for m in sits)) if sits else         t('whatif.lineup.nobody', lang)
+    if tried['side'] in ('Over', 'Under'):
+        st.markdown(t('whatif.lineup.result', lang, who=who, proj=tried['proj avg'], proj_now=now['proj avg'],
+                      side=value(tried['side'], lang), line=row['line'], p=tried['p win %'], p_now=now['p win %'],
+                      be=tried['break-even net %'], dist=tried['distance pp'], ev=tried['ev net 100']))
+        if tried['side'] != now['side']:
+            st.caption(t('whatif.lineup.flip', lang, side=value(tried['side'], lang)))
+        if tried['distance pp'] > 0:
+            st.caption(t('whatif.caveat', lang))
+        elif tried is not now:
+            side_odds, other = (row['over_odds'], row['under_odds']) if tried['side'] == 'Over' else \
+                (row['under_odds'], row['over_odds'])
+            need = whatif.needed_odds(values, row['line'], tried['proj avg'], tried['side'], float(side_odds),
+                                      float(other), coef, profile)
+            if need is not None and need > side_odds:
+                st.caption(t('whatif.lineup.needs', lang, need=need, now=side_odds))
+    st.caption(t('whatif.lineup.price_held', lang))
+    st.caption(t('whatif.lineup.shrunk', lang))
+
+    one_box = st.expander(t('whatif.lineup.one', lang), key=f"whatif_one_{key}", on_change='rerun')
+    with one_box:
+        if not one_box.open:
+            return
+        mates = [m for m in options if m not in sits]
+        one = whatif.single_absences(row, values, logs, sits, mates, coef, profile)
+        one = one[one['games without'] > 0]
+        if one.empty:
+            st.caption(t('whatif.lineup.one_none', lang))
+            return
+        above = one['distance pp'] > 0
+        st.caption(t('whatif.lineup.one_some' if above.any() else 'whatif.lineup.one_short', lang,
+                     n=int(above.sum())))
+        if above.any():
+            st.caption(t('whatif.caveat', lang))
+        shown = one.head(5).assign(teammate=lambda d: d['teammate_id'].map(lambda m: names.get(m, str(m))),
+                                   side=lambda d: d['side'].map(lambda v: value(v, lang)))
+        st.dataframe(shown[['teammate', 'games without', 'proj avg', 'side', 'p win %', 'distance pp', 'ev net 100']],
+                     hide_index=True, width='stretch', column_config={
+                         'teammate': st.column_config.Column(t('mates.col.teammate', lang)),
+                         'games without': st.column_config.NumberColumn(t('whatif.lineup.col.games', lang),
+                                                                         format='%d'),
+                         'proj avg': st.column_config.NumberColumn(t('whatif.lineup.col.proj', lang, stat=stat),
+                                                                   format='%.1f'),
+                         'side': st.column_config.Column(t('whatif.lineup.col.side', lang)),
+                         'p win %': st.column_config.NumberColumn(t('whatif.lineup.col.p', lang), format='%.1f'),
+                         'distance pp': st.column_config.NumberColumn(t('whatif.lineup.col.dist', lang),
+                                                                      format='%+.1f'),
+                         'ev net 100': st.column_config.NumberColumn(t('whatif.lineup.col.ev', lang),
+                                                                     format='%+.1f')})
 
 
 def line_checker():
