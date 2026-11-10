@@ -4,8 +4,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core import charts
-from core.analysis import GAP_LABELS, settle_lines, side_rates
-from core.data import shortlist_record
+from core.analysis import GAP_LABELS, side_rates
+from core.data import settled_lines, shortlist_record
 from core.columns import RESULTS_ALL, RESULTS_BY_TYPE
 from core.state import language
 from core.ui import PAGES, go_to_data, kpis, page_header, stop, table
@@ -34,10 +34,8 @@ def rates(df: pd.DataFrame, words=('pick', 'market')):
                  column_config=column_config(shown.columns, RATE_FORMATS, lang=lang, context='results'))
 
 
-@st.cache_data(ttl=600, show_spinner="Settling the saved lines...")
 def settled(seasons, season_types) -> pd.DataFrame:
-    return settle_lines(snapshot_history('superbet_props'), player_logs(), games(),
-                        average_logs=filtered_logs(list(seasons), list(season_types)))
+    return settled_lines(tuple(seasons), tuple(season_types))
 
 
 @st.cache_data(ttl=600, show_spinner=False)

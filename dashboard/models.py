@@ -163,6 +163,55 @@ def bet_side(best_side: pd.Series, signal: pd.Series) -> pd.Series:
     return best_side.where(signal.isin(['🟢', '🟡']), '').fillna('')
 
 
+def line_sides(values: pd.Series, line: float, proj_avg: float, over_odds: float, under_odds: float,
+               coef: Optional[Dict]):
+    """One line's chances, as price_props prices it: ({side: {'side', 'p_win' (calibrated), 'low', 'raw' (the
+    model's own), 'odds', 'market' (margin-free)}} for each side with odds, the raw columns (market over %, raw
+    over/under % and their low ends), the push chance). values: the player's games of the stat; proj_avg: the
+    projection the distribution is centred on."""
+    market = dict(zip(['Over', 'Under'], no_vig(over_odds, under_odds)))
+    raw, sides = {'market over %': 100 * market['Over']}, {}
+    for side, odds in (('Over', over_odds), ('Under', under_odds)):
+        if pd.isna(odds):
+            continue
+        chance = prop_probability(values, line, side, market[side], mean=proj_avg)
+        raw.update({f'raw {side.lower()} %': 100 * chance['p'], f'raw {side.lower()} low %': 100 * chance['low']})
+        p, low = (calibrate(chance[k], market[side], side, coef) for k in ('p', 'low'))
+        sides[side] = {'side': side, 'p_win': p, 'low': low, 'raw': chance['p'], 'odds': odds,
+                       'market': market[side]}
+    # a whole-number line can land on the line itself: the stake comes back
+    push = max(0.0, 1 - sum(v['p_win'] for v in sides.values())) \
+        if len(sides) == 2 and float(line).is_integer() else 0.0
+    return sides, raw, push
+
+
+def price_line(values: pd.Series, line: float, proj_avg: float, over_odds: float, under_odds: float,
+               coef: Optional[Dict], profile: str = ACTIVE_PROFILE) -> Dict:
+    """Every priced column of one line (price_props' pick and net columns, see there), from line_sides. Used by
+    price_props and by the what-if (whatif.py), so both price a line the same way."""
+    sides, raw, push = line_sides(values, line, proj_avg, over_odds, under_odds, coef)
+    best = None
+    for side, v in sides.items():
+        cand = {'best side': side, 'model %': 100 * v['p_win'], 'raw model %': 100 * v['raw'],
+                'market %': 100 * v['market'], 'break-even %': 100 / v['odds'],
+                'edge pp': 100 * v['p_win'] - 100 / v['odds'], 'edge low': 100 * v['low'] - 100 / v['odds'],
+                'pick odds': v['odds']}
+        if best is None or cand['edge pp'] > best['edge pp']:
+            best = cand
+    best = best or dict.fromkeys(['best side', 'model %', 'raw model %', 'market %', 'break-even %', 'edge pp',
+                                  'edge low', 'pick odds'], np.nan)
+    net = best_by_ev([v | {'p_push': push} for v in sides.values()], profile)
+    if net is None:
+        priced = dict.fromkeys(['side odds', 'p win %', 'break-even net %', 'edge net pp', 'ev net 100'], np.nan)
+        priced['side'] = ''
+    else:
+        be = 100 * float(break_even(net['odds'], profile, push))
+        priced = {'side': net['side'], 'side odds': net['odds'], 'p win %': 100 * net['p_win'],
+                  'break-even net %': be, 'edge net pp': 100 * net['p_win'] - be,
+                  'ev net 100': float(expected_return_100(net['p_win'], net['odds'], profile, push))}
+    return best | raw | priced | {'p push %': 100 * push, 'cost profile': profile}
+
+
 def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, game_odds: pd.DataFrame,
                 games: pd.DataFrame, adjust: Optional[Callable] = None,
                 calibration: Optional[Dict] = None, green_edge=FROM_FILE, profile: str = ACTIVE_PROFILE) -> pd.DataFrame:
@@ -267,38 +316,8 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     def price(row) -> pd.Series:
         games_ = by_player.get(row['player_id'], empty)
         values = games_[row['bet_type']] if len(games_) else pd.Series(dtype=float)
-        market = dict(zip(['Over', 'Under'], no_vig(row['over_odds'], row['under_odds'])))
-        raw, sides = {'market over %': 100 * market['Over']}, {}
-        for side, odds in (('Over', row['over_odds']), ('Under', row['under_odds'])):
-            if pd.isna(odds):
-                continue
-            chance = prop_probability(values, row['line'], side, market[side], mean=row['proj avg'])
-            raw.update({f'raw {side.lower()} %': 100 * chance['p'], f'raw {side.lower()} low %': 100 * chance['low']})
-            p, low = (calibrate(chance[k], market[side], side, coef) for k in ('p', 'low'))
-            sides[side] = {'side': side, 'p_win': p, 'low': low, 'raw': chance['p'], 'odds': odds,
-                           'market': market[side]}
-        # a whole-number line can land on the line itself: the stake comes back
-        push = max(0.0, 1 - sum(v['p_win'] for v in sides.values()))             if len(sides) == 2 and float(row['line']).is_integer() else 0.0
-        best = None
-        for side, v in sides.items():
-            cand = {'best side': side, 'model %': 100 * v['p_win'], 'raw model %': 100 * v['raw'],
-                    'market %': 100 * v['market'], 'break-even %': 100 / v['odds'],
-                    'edge pp': 100 * v['p_win'] - 100 / v['odds'], 'edge low': 100 * v['low'] - 100 / v['odds'],
-                    'pick odds': v['odds']}
-            if best is None or cand['edge pp'] > best['edge pp']:
-                best = cand
-        best = best or dict.fromkeys(['best side', 'model %', 'raw model %', 'market %', 'break-even %', 'edge pp',
-                                      'edge low', 'pick odds'], np.nan)
-        net = best_by_ev([v | {'p_push': push} for v in sides.values()], profile)
-        if net is None:
-            priced = dict.fromkeys(['side odds', 'p win %', 'break-even net %', 'edge net pp', 'ev net 100'], np.nan)
-            priced['side'] = ''
-        else:
-            be = 100 * float(break_even(net['odds'], profile, push))
-            priced = {'side': net['side'], 'side odds': net['odds'], 'p win %': 100 * net['p_win'],
-                      'break-even net %': be, 'edge net pp': 100 * net['p_win'] - be,
-                      'ev net 100': float(expected_return_100(net['p_win'], net['odds'], profile, push))}
-        return pd.Series(best | raw | priced | {'p push %': 100 * push, 'cost profile': profile})
+        return pd.Series(price_line(values, row['line'], row['proj avg'], row['over_odds'], row['under_odds'],
+                                    coef, profile))
 
     table = pd.concat([table, table.apply(price, axis=1)], axis=1)
     # what 100 staked on the better side returns on average by our chance at the plain odds (legacy): 0 =

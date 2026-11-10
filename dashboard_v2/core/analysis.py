@@ -16,9 +16,9 @@ GAP_LABELS = ['line 15%+ under avg', '5–15% under', 'within 5%', '5–15% over
 
 def pregame_average(logs: pd.DataFrame, rows: pd.DataFrame) -> pd.DataFrame:
     """rows (player_id, game_date, bet_type) with the player's average of that stat over the games played
-    strictly before game_date: 'pre avg', 'pre avg L10' and 'pre games'. logs: prepare_logs output, already cut
-    to the seasons and game types to average over."""
-    out = rows.assign(**{'pre avg': np.nan, 'pre avg L10': np.nan, 'pre games': 0})
+    strictly before game_date: 'pre avg', 'pre avg L10', 'pre sd' (the spread of those games) and 'pre games'.
+    logs: prepare_logs output, already cut to the seasons and game types to average over."""
+    out = rows.assign(**{'pre avg': np.nan, 'pre avg L10': np.nan, 'pre sd': np.nan, 'pre games': 0})
     if rows.empty or logs.empty:
         return out
     logs = logs.assign(player_id=logs['player_id_ESPN'].astype('Int64')).sort_values('Date')
@@ -27,6 +27,7 @@ def pregame_average(logs: pd.DataFrame, rows: pd.DataFrame) -> pd.DataFrame:
         by_player = logs.groupby('player_id')[stat]
         through['pre avg'] = by_player.transform(lambda s: s.expanding().mean())
         through['pre avg L10'] = by_player.transform(lambda s: s.rolling(10, min_periods=1).mean())
+        through['pre sd'] = by_player.transform(lambda s: s.expanding().std())
         through['pre games'] = logs.groupby('player_id').cumcount() + 1
         mask = (rows['bet_type'] == stat) & rows['player_id'].notna() & rows['game_date'].notna()
         part = rows.loc[mask, ['player_id', 'game_date']].astype({'player_id': 'Int64'})
@@ -37,7 +38,7 @@ def pregame_average(logs: pd.DataFrame, rows: pd.DataFrame) -> pd.DataFrame:
         merged = pd.merge_asof(part.reset_index().sort_values('game_date'),
                                through.sort_values('Date'), left_on='game_date', right_on='Date', by='player_id',
                                allow_exact_matches=False, direction='backward').set_index('index')
-        for col in ['pre avg', 'pre avg L10', 'pre games']:
+        for col in ['pre avg', 'pre avg L10', 'pre sd', 'pre games']:
             out.loc[merged.index, col] = merged[col]
     out['pre games'] = out['pre games'].fillna(0).astype(int)
     return out
@@ -94,7 +95,80 @@ def settle_lines(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
         settled[f'{reference} profit std'] = side_profit(settled, reference, SUPERBET_STANDARD)
     settled['line error'] = (settled['actual'] - settled['line']).where(settled['status'] == 'settled')
     settled['gap'] = gap_bucket(settled['line'], settled['pre avg'])
+    # our expectation's distance from the line in the player's spreads (whatif.gap_in_spreads)
+    usable = (settled['pre games'] >= GAP_MIN_GAMES) & (settled['pre sd'] > 0)
+    settled['gap sd'] = ((settled['proj_avg'] - settled['line']) / settled['pre sd']).where(usable)
     return settled
+
+
+# --- the look-back of the what-if tab: lines by their gap in the player's spreads ---
+
+GAP_MIN_GAMES = 5
+SD_EDGES = [-np.inf, -1.0, -0.5, 0.5, 1.0, np.inf]
+SD_LABELS = ['≤ −1', '−1 … −0.5', '−0.5 … +0.5', '+0.5 … +1', '≥ +1']
+
+
+def sd_group(gap_sd: pd.Series) -> pd.Series:
+    """The gap in spreads as one of SD_LABELS."""
+    return pd.cut(gap_sd, SD_EDGES, labels=SD_LABELS)
+
+
+def _side_price(df: pd.DataFrame, side: pd.Series) -> pd.Series:
+    """The margin-free chance (%) of `side` from each row's over/under odds."""
+    over, under = 1 / df['over_odds'], 1 / df['under_odds']
+    p_over = 100 * over / (over + under)
+    return pd.Series(np.where(side == 'Over', p_over, 100 - p_over), index=df.index)
+
+
+def last_game_line(settled: pd.DataFrame, player_id, stat: str, before) -> Optional[dict]:
+    """The player's settled line of `stat` from his last game before `before` (a date): line, proj_avg, gap sd,
+    side (toward our expectation), actual, result and return per 100 staked after tax at that line's odds (the
+    toward-side's profit, SUPERBET_STANDARD). None when there's no such line."""
+    if settled.empty:
+        return None
+    mine = settled[(settled['player_id'].astype('Int64') == int(player_id)) & (settled['bet_type'] == stat)
+                   & (settled['status'] == 'settled')
+                   & (pd.to_datetime(settled['game_date']) < pd.Timestamp(before).normalize())]
+    if mine.empty:
+        return None
+    r = mine.sort_values('game_date').iloc[-1]
+    return {'game_date': r['game_date'], 'game': r.get('game'), 'line': r['line'], 'proj_avg': r['proj_avg'],
+            'gap sd': r['gap sd'], 'side': r['proj_avg side'], 'actual': r['actual'],
+            'result': r['proj_avg result'],
+            'return 100': 100 * r['proj_avg profit std'] if pd.notna(r['proj_avg profit std']) else np.nan}
+
+
+def _night_range(won: pd.Series, price: pd.Series, nights: pd.Series, draws: int = 1000, seed: int = 7):
+    """95% range of mean(won − price) from resampling whole nights."""
+    diff = (won - price).groupby(nights.values).agg(['sum', 'size'])
+    if len(diff) < 2:
+        return np.nan, np.nan
+    rng = np.random.default_rng(seed)
+    pick = rng.integers(0, len(diff), size=(draws, len(diff)))
+    sums, sizes = diff['sum'].values[pick].sum(axis=1), diff['size'].values[pick].sum(axis=1)
+    est = sums / sizes
+    return float(np.percentile(est, 2.5)), float(np.percentile(est, 97.5))
+
+
+def gap_groups(settled: pd.DataFrame) -> pd.DataFrame:
+    """Settled lines by their gap in spreads (SD_LABELS), betting the side toward our expectation: lines, nights,
+    won % (pushes left out), price % (that side's margin-free chance at the line's odds), won − price pp with a 95%
+    range from resampling whole nights, and the return per 100 staked after tax."""
+    cols = ['group', 'lines', 'nights', 'won %', 'price %', 'won − price pp', 'low pp', 'high pp', 'return 100']
+    d = settled[settled['proj_avg result'].isin(['win', 'loss']) & settled['gap sd'].notna()
+                & settled['over_odds'].notna() & settled['under_odds'].notna()]
+    if d.empty:
+        return pd.DataFrame(columns=cols)
+    d = d.assign(group=sd_group(d['gap sd']), won=100.0 * (d['proj_avg result'] == 'win'),
+                 price=_side_price(d, d['proj_avg side']))
+    rows = []
+    for group, part in d.groupby('group', observed=True):
+        low, high = _night_range(part['won'], part['price'], part['game_date'])
+        rows.append({'group': group, 'lines': len(part), 'nights': part['game_date'].nunique(),
+                     'won %': part['won'].mean(), 'price %': part['price'].mean(),
+                     'won − price pp': part['won'].mean() - part['price'].mean(), 'low pp': low, 'high pp': high,
+                     'return 100': 100 * part['proj_avg profit std'].mean()})
+    return pd.DataFrame(rows, columns=cols)
 
 
 def side_rates(settled: pd.DataFrame, by, reference: str) -> pd.DataFrame:

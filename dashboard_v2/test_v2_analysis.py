@@ -100,3 +100,45 @@ def test_team_game_log():
     assert log['opp'].tolist() == ['bos', 'bos'] and log['location'].tolist() == ['home', 'away']
     assert log['margin'].tolist() == [10, 5] and log['win'].all()
     assert log['off_rtg'].iloc[0] == pytest.approx(100 * 110 / (90 + 0.44 * 25 + 12 - 10))
+
+
+def test_pregame_spread_uses_only_earlier_games():
+    logs = _logs([(1, '2026-10-01', 10, 'a'), (1, '2026-10-03', 20, 'b'), (1, '2026-10-05', 90, 'c')])
+    rows = pd.DataFrame({'player_id': [1, 1], 'bet_type': 'PTS',
+                         'game_date': pd.to_datetime(['2026-10-05', '2026-10-06'])})
+    out = pregame_average(logs, rows)
+    assert out['pre sd'].iloc[0] == pytest.approx(np.std([10, 20], ddof=1))
+    assert out['pre sd'].iloc[1] == pytest.approx(np.std([10, 20, 90], ddof=1))
+
+
+def _lookback(rows):
+    """rows: (night, player_id, bet_type, line, proj_avg, gap sd, side, result, profit std, over, under)."""
+    df = pd.DataFrame(rows, columns=['game_date', 'player_id', 'bet_type', 'line', 'proj_avg', 'gap sd',
+                                     'proj_avg side', 'proj_avg result', 'proj_avg profit std', 'over_odds',
+                                     'under_odds'])
+    return df.assign(game_date=pd.to_datetime(df['game_date']), status='settled', game='A @ B', actual=20.0)
+
+
+def test_last_game_line_is_the_latest_one_before_tonight():
+    from core.analysis import last_game_line
+    settled = _lookback([('2026-11-05', 1, 'PTS', 18.5, 21.0, 0.4, 'Over', 'win', 0.6, 1.9, 1.9),
+                        ('2026-11-08', 1, 'PTS', 19.5, 18.0, -0.2, 'Under', 'loss', -1.0, 1.9, 1.9),
+                        ('2026-11-10', 1, 'PTS', 20.5, 22.0, 0.3, 'Over', 'win', 0.6, 1.9, 1.9),
+                        ('2026-11-08', 1, 'REB', 5.5, 6.0, 0.2, 'Over', 'win', 0.6, 1.9, 1.9)])
+    last = last_game_line(settled, 1, 'PTS', pd.Timestamp('2026-11-10 19:00'))
+    assert last['line'] == 19.5 and last['result'] == 'loss' and last['return 100'] == -100
+    assert last_game_line(settled, 2, 'PTS', '2026-11-10') is None
+
+
+def test_gap_groups_compare_the_side_with_its_price():
+    from core.analysis import gap_groups
+    settled = _lookback([('2026-11-01', 1, 'PTS', 18.5, 25.0, 1.5, 'Over', 'win', 0.672, 2.0, 2.0),
+                        ('2026-11-02', 2, 'PTS', 18.5, 25.0, 1.2, 'Over', 'loss', -1.0, 2.0, 2.0),
+                        ('2026-11-02', 3, 'PTS', 18.5, 18.6, 0.1, 'Over', 'win', 0.672, 2.0, 2.0),
+                        ('2026-11-02', 4, 'PTS', 18.5, 18.6, np.nan, 'Over', 'win', 0.672, 2.0, 2.0)])
+    groups = gap_groups(settled).set_index('group')
+    assert list(groups.index) == ['−0.5 … +0.5', '≥ +1']                 # the line without a spread is left out
+    top = groups.loc['≥ +1']
+    assert top['lines'] == 2 and top['nights'] == 2 and top['won %'] == 50 and top['price %'] == pytest.approx(50)
+    assert top['return 100'] == pytest.approx(100 * (0.672 - 1.0) / 2)
+    assert top['low pp'] <= top['won − price pp'] <= top['high pp']

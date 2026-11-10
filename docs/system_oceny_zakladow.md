@@ -366,6 +366,30 @@ całych wieczorów. Wynik: `data/backtest/reason_lift.md` i `.json` (czytany prz
 dała poprawy** (2022/23: 77 wieczorów; Superbet: 4), więc cały kontekst jest bez kierunku. Rola i pogrom są
 `nie testowane` (brak roli RotoWire i handicapu z chwili każdej linii).
 
+### 5.5 Co musiałoby się zmienić (od 10.11, zakładka w szczegółach linii na stronie zawodników)
+
+Metą jest **próg opłacalności po 12% podatku** (oczekiwany wynik po podatku > 0), wybrany przez użytkownika jako
+punkt odniesienia; to nie jest sprawdzony próg i nie zmienia decyzji (*Obstaw* dalej wymaga
+`ADMITTED_THRESHOLD`). `dashboard/whatif.py` liczy wszystko tą samą wyceną co tabela (`models.line_sides` /
+`price_line`, wydzielone z `price_props` bez zmiany wyniku: test na 2 414 liniach 2022/23, oba warianty składu):
+
+- **odległość od progu** w pp i **różnica oczekiwanej wartości od linii w rozrzutach gracza**
+  ((proj avg − linia) / odchylenie standardowe jego meczów, od 5 meczów);
+- **co by wystarczyło**, każda zmiana osobno: najniższy kurs (przy niezmienionym kursie drugiej strony), linia przy
+  tych samych kursach (szukana do 3 rozrzutów) i nasza szansa. Kalibracja trzyma naszą szansę blisko ceny (b ≈ 0,17),
+  więc wyższy kurs obniża i naszą szansę: potrzebny kurs jest dużo wyższy, niż wynikałoby ze stałej szansy, a sama
+  zmiana linii zwykle nie wystarcza;
+- **jak często** kurs tej strony w liniach tej statystyki rósł tak mocno przy tej samej linii przed meczem
+  (`whatif.odds_paths`, snapshoty + notowania z harmonogramu);
+- **suwaki** kursu i linii z krzywą oczekiwanego wyniku na 100 zł zależnie od kursu;
+- **spojrzenie wstecz**: linia tej statystyki z ostatniego meczu gracza (`core.analysis.last_game_line`) i wszystkie
+  rozliczone linie według różnicy w rozrzutach (`gap_groups`): jak często wygrywała strona w kierunku naszej
+  oczekiwanej wartości wobec szansy z ceny, z zakresem 95% z losowania całych nocy, i wynik po podatku. 10.11 (11
+  nocy): przy różnicy ≥ 0,5 rozrzutu ta strona wygrywała o 4–5 pp częściej niż mówi cena, ale po marży i podatku
+  dawała −11 do −15 zł na 100 zł; przy mniejszej różnicy +0,5 pp i −18 zł.
+
+Linia powyżej progu dostaje neutralny opis i stałe zdanie, że to szacunek, nie porada (test-strażnik słów zostaje).
+
 ---
 
 ## 6. Rynki meczowe (drużyny)

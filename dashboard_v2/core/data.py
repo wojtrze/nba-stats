@@ -123,6 +123,22 @@ def shortlist_record() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=600, show_spinner="Settling the saved lines...")
+def settled_lines(seasons: tuple, season_types: tuple) -> pd.DataFrame:
+    """core.analysis.settle_lines of every saved line (first fetch before tip-off), with the pre-game averages and
+    spreads over the chosen seasons and game types: Results and the Props what-if's look-back read it."""
+    from core.analysis import settle_lines
+    return settle_lines(snapshot_history('superbet_props'), player_logs(), games(),
+                        average_logs=filtered_logs(list(seasons), list(season_types)))
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def odds_paths():
+    """whatif.odds_paths of every saved line: the what-if's history line reads it."""
+    import whatif
+    return whatif.odds_paths(snapshot_history('superbet_props'), snapshot_history('superbet_prop_quotes'))
+
+
+@st.cache_data(ttl=600, show_spinner="Settling the saved lines...")
 def settled_props() -> pd.DataFrame:
     """tracking.settle_props of every saved line (its first fetch before tip-off, with the last line before it);
     the Overview's streaks read it."""
