@@ -257,10 +257,22 @@ Każda dostanie tu własną datę D, progi i wynik rozpoznania, zanim jej detekt
 | Id | Mechanizm | Krótko | Główna miara | Zależność od danych |
 |---|---|---|---|---|
 | **H3** | B | Zawodnicy a drużyna: suma median PTS graczy wobec sumy drużyny; drabinki meczowe (suma, handicap, sumy drużyn) między sobą | zamknięcie po podatku | ok. 7 graczy z linią PTS na drużynę, więc potrzebna poprawka na brakujących |
-| **H4** | A | Opóźnienie po wiadomości z RotoWire (gracz z ≥ 20 min: nie zagra, zmiana piątki, powrót). Etap 1 opisuje wielkość ruchu i opóźnienie; etap 2 to detektor, tylko gdy typowy ruch ≥ próg po podatku | zamknięcie po podatku i czy kurs był do wzięcia | archiwum: mediana 3 zapisy na mecz, najbliższy ok. 2,9 h przed startem, więc opóźnienia nie zmierzymy; potrzebne kursy z harmonogramu (od 1.11) |
+| **H4** | A | Opóźnienie po wiadomości z RotoWire (gracz z ≥ 20 min: nie zagra, zmiana piątki, powrót). Etap 1 opisuje wielkość ruchu i opóźnienie; etap 2 to detektor, tylko gdy typowy ruch ≥ próg po podatku | zamknięcie po podatku i czy kurs był do wzięcia | archiwum: mediana 3 zapisy na mecz, najbliższy ok. 2,9 h przed startem, więc opóźnienia nie zmierzymy; potrzebne kursy z harmonogramu (od 1.11). Pełne noce z harmonogramu na 10.11: tylko 2.11, 4.11 i 9.11 (przerwy: zawieszona konsola 5–7.11, uśpiony komputer 8–10.11), więc etap 1 czeka na ok. 10 pełnych nocy. Wcześniej **przegląd przypadków** (niżej) |
 | **H7** | D | Dryf wczesnych linii (statystyki poboczne, rezerwowi, kurs > 6 h przed meczem): czy linia idzie do zamknięcia w stronę naszej oceny w > 50% przypadków | odsetek ruchu w stronę oceny i zamknięcie po podatku | archiwum i harmonogram |
 | **H8** | D | Ruchy bez wiadomości (zmiana linii bez zmiany w RotoWire w ciągu 60 min przed nią: gramy stronę, która zyskała) oraz Overy PTS u graczy z największym udziałem w akcjach | tylko ROI po podatku (zamknięcie może być skrzywione) | ok. 33 nocy lub więcej |
 | **H9** | D | Under na trafionych rzutach (3PM, FGM, FTM): Superbet może przesuwać te linie pod graczy grających Over. Zauważone w rozpoznaniu H2: Under wygrywał częściej, niż mówi cena (3PM +3,0 pp, FGM +2,5 pp, FTM +4,1 pp, 12 nocy). Na razie bez detektora w aplikacji, bo dotyczyłby każdej takiej linii | wynik po podatku na wszystkich takich liniach; ponieważ +3–4 pp to za mało na podatek, ważne głównie przy promocji bez podatku | archiwum i kolejne noce |
+
+**H4, przegląd przypadków (10.11, tylko opis, bez werdyktu).** `python -m backtest.news_lag_cases` →
+`data/backtest/news_lag_cases.md`. Zdarzenie: gracz z ≥ 20 min średnio w ostatnich 10 meczach przechodzi między
+dwiema wersjami RotoWire (najwyżej 2 h od siebie) z „gra” na „nie zagra”. Termin harmonogramu czyta RotoWire, a
+potem Superbet z tym samym znacznikiem, więc odczyt Superbetu z tego terminu to nasz pierwszy po wiadomości. Dla
+każdego zdarzenia: czy linie samego gracza były jeszcze w ofercie, linie PTS/REB/AST/PRA kolegów przed, przy
+pierwszym odczycie i na zamknięciu, a jako tło linie drugiej drużyny między tymi samymi odczytami. Na 3 nocach
+(31 zdarzeń): linie gracza zniknęły przed naszym odczytem RotoWire w 11, do naszego pierwszego odczytu w 17, były
+jeszcze w ofercie w 3; linie kolegów ruszyły się do naszego odczytu w 83% (tło: 68% linii drugiej drużyny); linie,
+które stały i ruszyły się później przy tej samej linii (21), przesunęły się o medianę 1,2 pp (maks. 6,5) wobec
+ok. 11 pp potrzebnych po podatku. Na razie Superbet reaguje w tej samej godzinie, co nasz odczyt RotoWire; czy
+reaguje szybciej niż wiadomość z RotoWire, rozstrzygnie dopiero etap 1 przy gęstszym odczycie RotoWire.
 
 **Kolejność:** H4 etap 1 i H7 (H5 opisana wyżej), potem H3, H8 i H9 (koniec listopada, razem z weryfikacją modelu zliczeń).
 

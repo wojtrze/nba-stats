@@ -209,7 +209,7 @@ def todays_offers(hours_ahead: int = 36, event_ids: Optional[Iterable[int]] = No
             log.warning("Unmapped team name in %r, skipping", event['matchName'])
             continue
         event_rows = event_props(event)
-        print(f"{away.upper()} @ {home.upper()}: {len(event_rows)} player props")
+        log.info("%s @ %s: %d player props", away.upper(), home.upper(), len(event_rows))
         props.extend(event_rows)
         game_odds.extend(event_game_odds(event))
     events = [{'event_id': e['eventId'], 'start_time': e.get('utcDate')} for e in listed]

@@ -2338,16 +2338,93 @@ TEXTS: Dict[str, Dict[str, str]] = {
                               "odpytywany tylko po naciśnięciu przycisku tutaj (najwyżej raz na {min} minut), powoli, "
                               "z przerwami między zapytaniami. Każde pobranie jest zapisywane; strony używają "
                               "najnowszego, dopóki jego mecze się nie zaczną."),
-    'dc.schedule_card': _w("**⏱️ Scheduled fetches** (only while this dashboard runs)",
-                           "**⏱️ Pobieranie według harmonogramu** (tylko gdy ten dashboard działa)"),
-    'dc.schedule_how': _w("Every hour while a game is still to start, and 60, 40, 20, 10 and 5 minutes before each "
-                          "tip-off, always with RotoWire. The odds are saved at every fetch (what changed), the "
-                          "full priced snapshot every 2 hours and at T-60. Nothing is scheduled in the system: "
-                          "closing the dashboard stops it.",
-                          "Co godzinę, dopóki jakiś mecz się nie zaczął, oraz 60, 40, 20, 10 i 5 minut przed "
-                          "każdym meczem, zawsze z RotoWire. Kursy są zapisywane przy każdym pobraniu (to, co się "
-                          "zmieniło), pełny snapshot z wyceną co 2 godziny i w T-60. Nic nie jest planowane w "
-                          "systemie: zamknięcie dashboardu kończy pobieranie."),
+    'dc.schedule_card': _w("**⏱️ Scheduled fetches** (only while this dashboard runs and the computer is awake)",
+                           "**⏱️ Pobieranie według harmonogramu** (tylko gdy ten dashboard działa, a komputer nie "
+                           "śpi)"),
+    'dc.schedule_how': _w("Runs inside this dashboard, on the settings below: the odds are saved at every fetch (what "
+                          "changed), the full priced snapshot as set. Nothing is scheduled in the system, so it "
+                          "fetches only while the dashboard runs and the computer is awake.",
+                          "Działa wewnątrz tego dashboardu, według ustawień poniżej: kursy są zapisywane przy każdym "
+                          "pobraniu (to, co się zmieniło), pełny snapshot z wyceną tak, jak ustawiono. Nic nie jest "
+                          "planowane w systemie, więc pobiera tylko, gdy dashboard działa, a komputer nie śpi."),
+    'dc.limits': _w("“Keep the computer awake” stops only Windows' idle timer. Sleep chosen from the Start menu, "
+                    "closing the lid, the power button or a low battery still stop the night's fetches.",
+                    "„Nie usypiaj komputera” wyłącza tylko usypianie z bezczynności. Uśpienie z menu Start, "
+                    "zamknięcie klapy, przycisk zasilania albo słaba bateria nadal przerywają nocne pobieranie."),
+    'dc.on_battery': _w("**The computer is on battery ({pct}%).** When the battery runs low Windows puts it to sleep "
+                        "and the night's fetches stop (this happened on the night of 9.11). Plug it in for game "
+                        "nights.",
+                        "**Komputer działa na baterii ({pct}%).** Gdy bateria słabnie, Windows go usypia i nocne "
+                        "pobieranie staje (tak było w nocy 9.11). Na noce z meczami podłącz zasilacz."),
+    'dc.settings': _w("Schedule settings", "Ustawienia harmonogramu"),
+    'dc.set.hourly_every': _w("All-games fetch every", "Pobranie wszystkich meczów co"),
+    'dc.set.hourly_every_help': _w("Reads every game starting within the horizon below, on the hour. Off = only the "
+                                   "fetches before each tip-off. Each one costs 1 request plus 1 per game.",
+                                   "Odczyt wszystkich meczów zaczynających się w horyzoncie poniżej, o pełnej "
+                                   "godzinie. Wyłączone = tylko pobrania przed meczami. Każde kosztuje 1 zapytanie "
+                                   "plus 1 na mecz."),
+    'dc.set.off': _w("off", "wyłączone"),
+    'dc.set.hours': _w("{n} h", "{n} h"),
+    'dc.set.hourly_horizon': _w("Horizon of the all-games fetch (hours ahead)", "Horyzont pobrania wszystkich meczów "
+                                "(godzin naprzód)"),
+    'dc.set.last_hour': _w("Fetches before each tip-off (minutes)", "Pobrania przed każdym meczem (minuty)"),
+    'dc.set.last_hour_help': _w("The last of them is the closing price (valid when at most 10 min before tip-off): "
+                                "keep 5 or 10 for CLV. Each costs 1 request plus 1 per game of that tip-off.",
+                                "Ostatnie z nich to kurs zamknięcia (ważny, gdy najpóźniej 10 min przed startem): "
+                                "zostaw 5 albo 10 dla CLV. Każde kosztuje 1 zapytanie plus 1 na mecz o tej godzinie."),
+    'dc.set.priced_every': _w("Full priced snapshot every", "Pełny snapshot z wyceną co"),
+    'dc.set.priced_every_help': _w("The snapshot the pages read (the model's price of every line); also always at "
+                                   "T-60. Costs no extra requests, ~1 min of computing each.",
+                                   "Snapshot, z którego korzystają strony (wycena modelu każdej linii); zawsze też w "
+                                   "T-60. Nie kosztuje zapytań, ok. 1 min liczenia."),
+    'dc.set.rotowire': _w("RotoWire lineups with every fetch", "Składy RotoWire przy każdym pobraniu"),
+    'dc.set.late': _w("A fetch late by more than (min) is skipped", "Pobranie spóźnione o więcej niż (min) jest "
+                      "pomijane"),
+    'dc.set.slot_limit': _w("Give up on a fetch after (min)", "Porzuć pobranie po (min)"),
+    'dc.set.slot_limit_help': _w("A fetch still running after this is logged as stuck (its threads go to "
+                                 "data/fetch_hangs.log) and the schedule goes on.",
+                                 "Pobranie trwające dłużej jest zapisywane jako zawieszone (stan wątków w "
+                                 "data/fetch_hangs.log), a harmonogram idzie dalej."),
+    'dc.set.preview': _w("Tonight under these settings: **{runs} fetches, about {n} Superbet requests** "
+                         "(daily budget {budget}).",
+                         "Dziś w nocy przy tych ustawieniach: **{runs} pobrań, ok. {n} zapytań do Superbet** "
+                         "(dzienny limit {budget})."),
+    'dc.set.no_games': _w("No saved games ahead to preview: the preview fills in after the next fetch.",
+                          "Brak zapisanych nadchodzących meczów do podglądu: pojawi się po następnym pobraniu."),
+    'dc.set.over_budget': _w("Too many requests for one day's budget: fewer fetches, please.",
+                             "Za dużo zapytań na dzienny limit: ustaw mniej pobrań."),
+    'dc.set.invalid': _w("These settings can't be used: {what}.", "Tych ustawień nie da się użyć: {what}."),
+    'dc.set.save': _w("Save settings", "Zapisz ustawienia"),
+    'dc.set.reset': _w("Back to the defaults", "Przywróć domyślne"),
+    'dc.set.saved': _w("Saved: they apply from the next fetch.", "Zapisano: obowiązują od następnego pobrania."),
+    'dc.set.limits_fixed': _w("Fixed for politeness (not editable): at most {budget} Superbet requests a day, 3–6 s "
+                              "between requests, a 2-hour pause after a refusal.",
+                              "Stałe dla grzeczności (bez edycji): najwyżej {budget} zapytań do Superbet dziennie, "
+                              "3–6 s między zapytaniami, 2 godziny przerwy po odmowie."),
+    'dc.cover': _w("**Last night's collection**", "**Zbieranie danych ostatniej nocy**"),
+    'dc.cover_ok': _w("✅ Night of {night}: all {games} games have a closing price.",
+                      "✅ Noc {night}: wszystkie {games} mecze mają kurs zamknięcia."),
+    'dc.cover_partial': _w("⚠️ Night of {night}: **{n} of {games} games** have a closing price (read at most "
+                           "{minutes} min before tip-off).",
+                           "⚠️ Noc {night}: kurs zamknięcia ma **{n} z {games} meczów** (odczyt najpóźniej "
+                           "{minutes} min przed startem)."),
+    'dc.cover_gap_sleep': _w("No fetch {start}–{end}: the computer went to sleep at {sleep} ({reason}){wake}.",
+                             "Brak pobrań {start}–{end}: komputer zasnął o {sleep} ({reason}){wake}."),
+    'dc.cover_wake': _w(", woke at {wake}", ", obudził się o {wake}"),
+    'dc.cover_gap_off': _w("No fetch {start}–{end}: the computer was awake, but the dashboard wasn't running (or "
+                           "its schedule was switched off or stuck).",
+                           "Brak pobrań {start}–{end}: komputer nie spał, ale dashboard nie działał (albo "
+                           "harmonogram był wyłączony lub zawieszony)."),
+    'dc.cover_stuck': _w("{n} fetches hung and were abandoned (where they waited: data/fetch_hangs.log).",
+                         "{n} pobrań się zawiesiło i zostało porzuconych (gdzie czekały: data/fetch_hangs.log)."),
+    'dc.cover_restarts': _w("The schedule got stuck and was restarted {n}×.",
+                            "Harmonogram się zawiesił i został uruchomiony ponownie {n}×."),
+    'dc.cover_offline': _w("{n}× there was no internet (Superbet's address couldn't be resolved).",
+                           "{n}× nie było internetu (nie dało się znaleźć adresu Superbet)."),
+    'dc.reason.battery': _w("battery low", "słaba bateria"),
+    'dc.reason.menu': _w("put to sleep from the Start menu or by a program", "uśpiony z menu Start albo przez program"),
+    'dc.reason.lid': _w("the lid or the power button", "klapa albo przycisk zasilania"),
+    'dc.reason.idle': _w("idle, with “keep awake” off", "bezczynność, przy wyłączonym „Nie usypiaj”"),
     'dc.schedule_switch': _w("Fetch on schedule", "Pobieraj według harmonogramu"),
     'dc.keep_awake': _w("Keep the computer awake", "Nie usypiaj komputera"),
     'dc.keep_awake_help': _w("Windows won't sleep while the scheduled fetches run (games are at night in Poland). "

@@ -153,6 +153,53 @@ def close_coverage(event_fetches: pd.DataFrame, now) -> Optional[dict]:
             'games': len(last)}
 
 
+COLLECTION_GAP = pd.Timedelta(minutes=75)   # longer than this between two scheduled reads (hourly ones are 60) = a gap
+COLLECTION_LEAD = pd.Timedelta(hours=10)    # a night's schedule is judged from this long before its first tip-off
+
+
+def collection_report(event_fetches: pd.DataFrame, games: pd.DataFrame, run_log: pd.DataFrame, now) -> Optional[dict]:
+    """What the scheduled fetches collected on the latest night (US-Eastern date) with a started game, and why
+    anything is missing. games: event_id and start_time of every known game (superbet_props snapshots and the
+    scheduled reads), so a game the schedule never read counts too. run_log: data/run_log.csv.
+
+    Returns None without a started game, else {'night', 'games', 'valid' (read at most CLOSE_MAX_AGE_MIN before
+    tip-off), 'missing' (the games without a valid close: event_id, tip, close age min), 'gaps' (list of
+    (from, to): no successful scheduled read for longer than COLLECTION_GAP between COLLECTION_LEAD before the
+    first tip-off and the last tip-off), 'stuck', 'restarts', 'offline' (listings that failed on name resolution:
+    no internet)}."""
+    known = pd.concat([games[['event_id', 'start_time']], event_fetches[['event_id', 'start_time']]])
+    known = known.dropna().assign(tip=lambda d: pd.to_datetime(d['start_time'], utc=True))
+    known = known.drop_duplicates('event_id', keep='last')
+    now = pd.Timestamp(now)
+    started = known[known['tip'] <= now]
+    if started.empty:
+        return None
+    night = _et_date(started['tip'])
+    tonight = started[night == night.max()].set_index('event_id')
+    reads = last_reads(event_fetches) if len(event_fetches) else pd.DataFrame(columns=['tip', 'close age min'])
+    age = tonight.index.to_series().map(reads['close age min']).astype(float)
+    valid = age <= CLOSE_MAX_AGE_MIN
+    missing = pd.DataFrame({'event_id': tonight.index, 'tip': tonight['tip'].values, 'close age min': age.values})
+    missing = missing[~valid.values].sort_values('tip', ignore_index=True)
+
+    start, end = tonight['tip'].min() - COLLECTION_LEAD, tonight['tip'].max()
+    log = run_log.assign(at=pd.to_datetime(run_log['started_at'], utc=True))
+    log = log[(log['at'] >= start - COLLECTION_GAP) & (log['at'] <= end)]
+    scheduled = log['command'].astype(str).str.startswith('scheduled')
+    ran = log[scheduled & (log['exit_code'] == 0)]['at'].sort_values()
+    marks = [start] + [t for t in ran if start <= t <= end] + [end]
+    before = ran[ran < start]
+    if len(before):
+        marks[0] = max(before.max(), start - COLLECTION_GAP)
+    gaps = [(max(a, start), b) for a, b in zip(marks, marks[1:]) if b - a > COLLECTION_GAP]
+    summary = log['summary'].astype(str)
+    return {'night': night.max(), 'games': len(tonight), 'valid': int(valid.sum()), 'missing': missing,
+            'gaps': gaps,
+            'stuck': int((scheduled & summary.str.startswith('stuck')).sum()),
+            'restarts': int((log['command'] == 'scheduled restart').sum()),
+            'offline': int((scheduled & summary.str.contains('NameResolution|getaddrinfo', regex=True)).sum())}
+
+
 def _closing(quotes: pd.DataFrame, event_fetches: pd.DataFrame, key) -> pd.DataFrame:
     """Each key's last quote before tip-off (quotes holds only changes, so that's the quote as the game was last
     read), with close age min."""

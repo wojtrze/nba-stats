@@ -135,3 +135,55 @@ def test_missed_slots_are_those_between_the_last_run_and_the_start():
     assert [s.at for s in missed] == [TIP - M(m) for m in (240, 180, 120, 60, 40)]     # hourly, T-60, T-40
     assert fetch_loop.missed_slots([(1, TIP)], TIP - M(40), TIP - M(38)) == []     # nothing due in between
     assert fetch_loop.missed_slots([(1, TIP)], None, started) == []
+
+
+def test_default_settings_give_todays_slots_and_custom_ones_change_them():
+    events, since = [(1, TIP), (2, TIP + M(30))], TIP - timedelta(hours=5)
+    assert kinds(night_slots(events, since, fetch_schedule.Config())) == kinds(night_slots(events, since))
+    cfg = fetch_schedule.Config.from_dict({'last_hour': [10, 60], 'hourly_every': 2, 'priced_every': 0,
+                                           'rotowire': False})
+    slots = night_slots([(1, TIP)], since, cfg)
+    assert [s.at for s in slots if any(k.startswith('T-') for k in s.kinds)] == [TIP - M(60), TIP - M(10)]
+    assert all(s.at.hour % 2 == 0 for s in slots if s.kinds == ('hourly',))
+    assert [s.priced for s in slots] == [s.kinds[0] == 'T-60' for s in slots]      # only T-60 priced
+    assert not any(s.rotowire for s in slots)
+
+
+def test_invalid_settings_fall_back_to_the_defaults():
+    assert fetch_schedule.Config.from_dict({'late': 0}) == fetch_schedule.DEFAULT
+    assert fetch_schedule.Config.from_dict({'hourly_every': 0, 'last_hour': []}) == fetch_schedule.DEFAULT
+    assert fetch_schedule.Config.from_dict({'late': 'x', 'unknown': 1}) == fetch_schedule.DEFAULT
+    assert fetch_schedule.Config.from_dict({'late': 5}).late_by == M(5)
+
+
+def test_settings_are_saved_with_the_switches_and_read_back(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    os.makedirs('data')
+    assert fetch_loop.schedule_config() == fetch_schedule.DEFAULT
+    fetch_loop.save_worker_settings(keep_awake=False)
+    fetch_loop.save_worker_settings(schedule=fetch_schedule.Config(last_hour=(30, 5), slot_limit=8))
+    settings = fetch_loop.worker_settings()
+    assert settings['keep_awake'] is False and settings['enabled'] is True
+    assert fetch_loop.schedule_config() == fetch_schedule.Config(last_hour=(30, 5), slot_limit=8)
+
+
+def test_plan_counts_the_requests_of_each_slot():
+    p = fetch_loop.plan([(1, TIP), (2, TIP)], TIP - M(90), fetch_schedule.Config(last_hour=(60, 5)))
+    assert p['kind'].tolist() == ['T-60+hourly', 'T-5']
+    assert p['requests'].tolist() == [3, 3]                             # the listing + 2 games
+
+
+def test_a_stuck_slot_leaves_every_thread_stack_in_the_hang_log(tmp_path, monkeypatch):
+    import threading
+    monkeypatch.chdir(tmp_path)
+    release = threading.Event()
+
+    def hung(slot, now, progress, cancelled):
+        release.wait(5)
+        return {'ok': True, 'summary': '', 'events': [], 'at': None}
+
+    fetch_loop.run_guarded(fetch_schedule.Slot(datetime(2026, 11, 5, 22, tzinfo=UTC), ('hourly',)),
+                           limit=timedelta(seconds=0.2), run=hung)
+    release.set()
+    text = open(fetch_loop.HANG_LOG, encoding='utf-8').read()
+    assert 'scheduled hourly stuck' in text and '--- thread fetch-hourly' in text and 'release.wait' in text
