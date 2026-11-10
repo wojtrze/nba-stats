@@ -75,3 +75,66 @@ def change_bars(df: pd.DataFrame, label: str, value: str, highlight: Optional[st
                            hoverinfo='text' if hover else None))
     fig.add_vline(x=0, line_color='#64748b')
     return layout(fig, 60 + 32 * len(df), title, xaxis=dict(title='change'))
+
+
+def breakeven_curve(odds: np.ndarray, ev: np.ndarray, now: float, chosen: Optional[float] = None,
+                    labels: Optional[dict] = None, title: str = '') -> go.Figure:
+    """The expected return per 100 staked after costs (ev net 100) across a range of odds for one side: the zero
+    line dashed (break-even), the current odds and the chosen (slider) odds marked. labels: 'x', 'y', 'now',
+    'chosen' texts."""
+    labels = labels or {}
+    fig = go.Figure()
+    fig.add_scatter(x=odds, y=ev, mode='lines', line=dict(color=NEUTRAL), name=labels.get('y', 'ev'),
+                    hovertemplate="%{x:.2f}: %{y:+.1f}<extra></extra>")
+    fig.add_hline(y=0, line_dash='dash', line_color='#64748b')
+    fig.add_vline(x=now, line_color=AVERAGE, annotation_text=labels.get('now', 'now'), annotation_position='top left')
+    if chosen is not None and abs(chosen - now) > 1e-9:
+        fig.add_vline(x=chosen, line_color='#0f172a', line_dash='dot', annotation_text=labels.get('chosen', ''),
+                      annotation_position='top right')
+    return layout(fig, 260, title, xaxis=dict(title=labels.get('x', 'odds')), yaxis=dict(title=labels.get('y', '')),
+                  showlegend=False)
+
+
+def gap_check(groups, mark: Optional[str] = None, labels: Optional[dict] = None, title: str = '') -> go.Figure:
+    """Per gap group (core.analysis.gap_groups): how often the side toward our expectation won next to the price's
+    chance, with lines and nights under each group; the group `mark` outlined. labels: 'won', 'price', 'y'."""
+    labels = labels or {}
+    x = [f"{g}<br>{n} / {k}" for g, n, k in zip(groups['group'], groups['lines'], groups['nights'])]
+    outline = [3 if g == mark else 0 for g in groups['group']]
+    fig = go.Figure()
+    fig.add_bar(x=x, y=groups['won %'], name=labels.get('won', 'won %'), marker_color=NEUTRAL,
+                marker_line=dict(width=outline, color='#0f172a'),
+                customdata=np.stack([groups['low pp'], groups['high pp']], axis=1),
+                hovertemplate="%{y:.1f}% (%{customdata[0]:+.1f} … %{customdata[1]:+.1f} pp)<extra></extra>")
+    fig.add_bar(x=x, y=groups['price %'], name=labels.get('price', 'price %'), marker_color=PUSH,
+                hovertemplate="%{y:.1f}%<extra></extra>")
+    low = float(np.nanmin(groups[['won %', 'price %']].values)) if len(groups) else 40
+    return layout(fig, 300, title, barmode='group', yaxis=dict(title=labels.get('y', '%'),
+                                                               range=[max(0, low - 10), None]))
+
+
+def night_map(rows: pd.DataFrame, labels: Optional[dict] = None, title: str = '') -> go.Figure:
+    """Tonight's lines (whatif.night_gaps rows with name, bet_type, line, side, side odds, p win %, break-even
+    net %): x the gap in the player's spreads, y the distance to break-even after costs in pp, break-even dashed at
+    0; Over green, Under red; points above break-even outlined dark (a neutral mark). Each point's customdata[0] is
+    its row position in `rows`, for selecting it. labels: 'x', 'y', 'zero', 'Over', 'Under' texts."""
+    labels = labels or {}
+    fig = go.Figure()
+    for side, colour in (('Over', OVER), ('Under', UNDER)):
+        part = rows[rows['side'] == side]
+        if part.empty:
+            continue
+        above = part['distance pp'] > 0
+        fig.add_scatter(
+            x=part['gap sd'], y=part['distance pp'], mode='markers', name=labels.get(side, side),
+            marker=dict(color=colour, size=8, opacity=0.75, line=dict(width=np.where(above, 2, 0), color='#0f172a')),
+            customdata=np.stack([np.flatnonzero(rows['side'].values == side), part['name'], part['bet_type'],
+                                 part['line'], part['side odds'], part['p win %'], part['break-even net %']], axis=1),
+            hovertemplate="%{customdata[1]} · %{customdata[2]} " + labels.get(side, side) +
+                          " %{customdata[3]} @ %{customdata[4]:.2f}<br>%{customdata[5]:.1f}% / "
+                          "%{customdata[6]:.1f}% · %{y:+.1f} pp · %{x:+.2f} sd<extra></extra>")
+    fig.add_hline(y=0, line_dash='dash', line_color='#64748b', annotation_text=labels.get('zero', 'break-even'),
+                  annotation_position='top left')
+    fig.add_vline(x=0, line_color='#cbd5e1')
+    return layout(fig, 380, title, xaxis=dict(title=labels.get('x', 'gap in spreads'), zeroline=False),
+                  yaxis=dict(title=labels.get('y', 'pp'), zeroline=False))

@@ -4,21 +4,23 @@ import streamlit as st
 
 from components import decision_text, decision_times, reasons_panel
 from core import charts
-from core.analysis import teammate_impact
-from core.data import lineups as rotowire_lineups, player_decisions, priced_props, rotowire, superbet
+from core.analysis import gap_groups, last_game_line, sd_group, teammate_impact
+from core.data import (lineups as rotowire_lineups, odds_paths, player_decisions, priced_props, rotowire,
+                       settled_lines, superbet)
 from decisions import OBSTAW, offer_changed, offer_decision, offer_key, star_text, stars
 from core.columns import PROPS_MAIN as MAIN_COLUMNS, PROPS_MORE as MORE_COLUMNS
-from core.state import language, persist, remember
+from core.state import cost_profile, language, persist, remember
 from core.ui import PAGES, go_to_data, kpis, no_offers, page_header, pl_time, stop, table
 from glossary import column_config
 from i18n import t, value
 from reasons import flag_texts
 from loaders import filtered_logs, player_logs, snapshot_history
-from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits
+from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits, team_rotation
 from mispricing import offer_signals
-from models import calibration_warning, top_up_logs
+from models import calibration_warning, load_calibration, top_up_logs
 from reasons import offer_context, prop_reasons
 from tracking import PROP_KEY
+import whatif
 
 lang = language()
 seasons, season_types = page_header(t('props.title', lang), t('props.purpose', lang), with_scope=True)
@@ -31,6 +33,7 @@ if len(table_all):
     rated = stars(table_all, decided)[PROP_KEY + ['stars']].rename(columns={'stars': 'star count'})
     table_all = table_all.merge(rated, on=PROP_KEY, how='left')
     table_all['stars'] = table_all['star count'].map(star_text)
+    table_all = whatif.night_gaps(table_all)        # gap sd and distance pp: the gap sort and the whole-night chart
 if warning := calibration_warning(table_all['calibration'].iloc[0] if len(table_all) else None, lang):
     st.warning(warning, icon="⚠️")
 
@@ -40,26 +43,30 @@ FORMATS = {'raw model %': '%.0f', 'line': '%g', 'side odds': '%.2f', 'p win %': 
            'proj avg': '%.1f', 'pick % L10': '%.0f', 'pick %': '%.0f',
            'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'percentile': '%.0f',
            'over_odds': '%.2f', 'under_odds': '%.2f', 'games': '%d', 'line move': '%+g', 'open line': '%g',
-           'spread': '%+g', 'game total': '%g'}
+           'spread': '%+g', 'game total': '%g', 'gap sd': '%+.1f'}
 
 
 # how the table can be ordered (i18n 'props.sort.*'): by tip-off by default; none of them says what to bet
-SORTS = ['tip', 'stars', 'return', 'chance']
+SORTS = ['tip', 'stars', 'return', 'chance', 'gap']
 
 
 def sort_lines(rows: pd.DataFrame, how: str) -> pd.DataFrame:
     """The lines in the chosen order, warnings always last. tip: the earliest game first; return: the highest
     expected return after the tax; chance: the highest chance to win (mostly low odds); stars: the most stars
-    first (decisions.stars), then by expected return."""
+    first (decisions.stars), then by expected return; gap: the biggest gap between our expectation and the line in
+    the player's spreads first (lines without a spread after them)."""
     rows = rows.assign(warned=rows['red flag'].fillna('') != '')
+    rows = rows.assign(abs_gap=rows['gap sd'].abs() if 'gap sd' in rows else np.nan)
     if 'star count' not in rows:
         rows = rows.assign(**{'star count': pd.NA, 'stars': '–'})
     rows = rows.assign(listed=-pd.to_numeric(rows['star count'], errors='coerce').fillna(-1))
     by = {'return': ['warned', 'ev net 100'], 'chance': ['warned', 'p win %'],
-          'tip': ['warned', 'tip_at', 'game', 'ev net 100'], 'stars': ['warned', 'listed', 'ev net 100']}[how]
+          'tip': ['warned', 'tip_at', 'game', 'ev net 100'], 'stars': ['warned', 'listed', 'ev net 100'],
+          'gap': ['warned', 'abs_gap']}[how]
     ascending = {'return': [True, False], 'chance': [True, False], 'tip': [True, True, True, False],
-                 'stars': [True, True, False]}[how]
-    return rows.sort_values(by, ascending=ascending, kind='stable').drop(columns=['warned', 'listed'])
+                 'stars': [True, True, False], 'gap': [True, False]}[how]
+    return rows.sort_values(by, ascending=ascending, kind='stable', na_position='last') \
+        .drop(columns=['warned', 'listed', 'abs_gap'])
 
 
 def line_decision(row) -> dict:
@@ -121,9 +128,9 @@ def detail(row: pd.Series, changed=None):
                           t('detail.pass_title', lang, name=row['name'], side=side, ev=row['ev net 100'])))
     st.caption(f"{row['game']} · {pl_time(row['start_time'])} · "
                f"{value(row['RotoWire'], lang) or t('detail.not_listed', lang)}")
-    verdict_tab, mates_tab, history_tab, move_tab = st.tabs(
-        [t('detail.tab.verdict', lang), t('detail.tab.mates', lang), t('detail.tab.history', lang),
-         t('detail.tab.move', lang)])
+    verdict_tab, whatif_tab, mates_tab, history_tab, move_tab = st.tabs(
+        [t('detail.tab.verdict', lang), t('detail.tab.whatif', lang), t('detail.tab.mates', lang),
+         t('detail.tab.history', lang), t('detail.tab.move', lang)])
 
     with verdict_tab:
         every = player_logs()
@@ -155,6 +162,9 @@ def detail(row: pd.Series, changed=None):
         if row['team'] and b[1].button(t('detail.open_lineup', lang, team=row['team'].upper()), width='stretch'):
             st.session_state['lineup_team'] = row['team']
             st.switch_page(PAGES['lineup'])
+
+    with whatif_tab:
+        whatif_panel(row, games)
 
     with mates_tab:
         if not row['team']:
@@ -234,6 +244,222 @@ def detail(row: pd.Series, changed=None):
                                                          base={'time': st.column_config.Column(t('move.time', lang))},
                                                          lang=lang))
                 st.caption(t('move.now', lang, line=line, over=row['over_odds'], under=row['under_odds']))
+
+
+def _distance(p: float, be: float):
+    """The distance to break-even after tax in words (whatif.short / whatif.above + the fixed caveat)."""
+    if p > be:
+        st.markdown(t('whatif.above', lang, p=p, be=be, gap=p - be))
+        st.caption(t('whatif.caveat', lang))
+    else:
+        st.markdown(t('whatif.short', lang, p=p, be=be, gap=be - p))
+
+
+def whatif_panel(row: pd.Series, games: pd.DataFrame):
+    """What would have to change for the line's evaluated side to reach break-even after tax (whatif.py), and the
+    look-back: his last game's line and every settled line by its gap in the player's spreads."""
+    stat, line, side = row['bet_type'], float(row['line']), row['side']
+    if side not in ('Over', 'Under') or games.empty or stat not in games:
+        st.caption(t('whatif.no_side', lang))
+        return
+    coef, profile = load_calibration(), cost_profile()
+    if side == 'Over':
+        side_odds, other = float(row['over_odds']), float(row['under_odds'])
+    else:
+        side_odds, other = float(row['under_odds']), float(row['over_odds'])
+    args = dict(values=games[stat], proj_avg=row['proj avg'], side=side, other_odds=other, coef=coef,
+                profile=profile)
+    side_word = value(side, lang)
+    key = f"{row['event_id']}_{row['name_ESPN']}_{stat}"
+    st.caption(t('whatif.intro', lang))
+
+    now = whatif.evaluate(line=line, side_odds=side_odds, **args)
+    _distance(now['p win %'], now['break-even %'])
+    gap = whatif.gap_in_spreads(row['proj avg'], line, row['sd'], row['games'])
+    if pd.notna(gap):
+        st.markdown(t('whatif.gap', lang, proj=row['proj avg'], line=line, gap=gap, sd=row['sd'], n=int(row['games'])))
+    else:
+        st.markdown(t('whatif.gap_none', lang, proj=row['proj avg'], line=line))
+
+    # what would be enough, each on its own
+    st.markdown(t('whatif.needs', lang))
+    need_odds = whatif.needed_odds(line=line, side_odds=side_odds, **args)
+    if need_odds is None:
+        st.markdown(t('whatif.need_odds_none', lang))
+    elif need_odds <= side_odds:
+        st.markdown(t('whatif.need_odds_now', lang, now=side_odds))
+    else:
+        st.markdown(t('whatif.need_odds', lang, need=need_odds, side=side_word, now=side_odds))
+    need_line = whatif.needed_line(line=line, side_odds=side_odds, sd=row['sd'], **args)
+    if need_line is not None:
+        st.markdown(t('whatif.need_line', lang, need=need_line, now=line))
+    else:
+        st.markdown(t('whatif.need_line_none', lang))
+    st.markdown(t('whatif.need_chance', lang, need=now['break-even %'], now=now['p win %']))
+    st.caption(t('whatif.why', lang, b=100 * coef.get('b', 1.0)))
+    if need_odds is not None and need_odds > side_odds:
+        moved = whatif.move_share(odds_paths(), stat, side, need_odds / side_odds)
+        if moved['lines']:
+            st.caption(t('whatif.history', lang, side=side_word, stat=stat, **moved))
+        else:
+            st.caption(t('whatif.history_none', lang, stat=stat))
+
+    # sliders: another price or line, priced the same way
+    st.markdown(t('whatif.sliders', lang))
+    c = st.columns(2)
+    odds = c[0].slider(t('whatif.slider_odds', lang, side=side_word), 1.10, 5.00,
+                       float(min(max(side_odds, 1.10), 5.0)), 0.01, key=f"whatif_odds_{key}")
+    sd = row['sd'] if pd.notna(row['sd']) and row['sd'] > 0 else 1.0
+    steps = int(max(1, round(3 * sd)))
+    lines = sorted({line + k for k in range(-steps, steps + 1) if line + k >= 0})
+    chosen_line = c[1].select_slider(t('whatif.slider_line', lang), lines, value=line, key=f"whatif_line_{key}")
+    tried = whatif.evaluate(line=chosen_line, side_odds=odds, **args)
+    st.markdown(t('whatif.result', lang, odds=odds, line=chosen_line, p=tried['p win %'], be=tried['break-even %'],
+                  dist=tried['distance pp'], ev=tried['ev net 100']))
+    if tried['p win %'] > tried['break-even %'] and (odds, chosen_line) != (side_odds, line):
+        st.caption(t('whatif.caveat', lang))
+    grid = np.round(np.arange(1.10, 5.001, 0.05), 2)
+    ev = np.array([whatif.evaluate(line=chosen_line, side_odds=o, **args)['ev net 100'] for o in grid])
+    labels = {'x': t('whatif.chart_x', lang, side=side_word), 'y': t('whatif.chart_y', lang),
+              'now': t('whatif.chart_now', lang), 'chosen': t('whatif.chart_chosen', lang)}
+    charts.show(charts.breakeven_curve(grid, ev, side_odds, odds, labels, t('whatif.chart', lang, line=chosen_line)),
+                key='whatif_curve')
+
+    lineup_whatif(row, games, coef, profile, key)
+
+    # look back: his last game, then every settled line by its gap in spreads
+    st.markdown(t('whatif.lookback', lang))
+    settled = settled_lines(tuple(seasons), tuple(season_types))
+    tip = pd.to_datetime(row['start_time'], utc=True).tz_convert('US/Eastern').tz_localize(None)
+    last = last_game_line(settled, row['player_id'], stat, tip) if pd.notna(row['player_id']) else None
+    if last is None:
+        st.caption(t('whatif.last_none', lang, stat=stat))
+    else:
+        result = last['result']
+        st.markdown(t('whatif.last', lang, date=f"{pd.Timestamp(last['game_date']):%d.%m}", game=last['game'],
+                      line=last['line'], proj=last['proj_avg'],
+                      gap=f"{last['gap sd']:+.1f}" if pd.notna(last['gap sd']) else '?',
+                      side=value(last['side'], lang), actual=last['actual'],
+                      result=t(f"whatif.result.{result}", lang) if result in ('win', 'loss', 'push') else '?',
+                      ret=last['return 100'] if pd.notna(last['return 100']) else 0.0))
+    groups = gap_groups(settled)
+    if groups.empty:
+        st.caption(t('whatif.check_none', lang))
+        return
+    mark = sd_group(pd.Series([gap])).iloc[0] if pd.notna(gap) else None
+    st.caption(t('whatif.check', lang))
+    charts.show(charts.gap_check(groups, mark, {'won': t('whatif.check_won', lang),
+                                                'price': t('whatif.check_price', lang), 'y': '%'},
+                                 t('whatif.check_chart', lang)), key='whatif_check')
+    here = groups[groups['group'] == mark]
+    if len(here):
+        g = here.iloc[0]
+        st.markdown(t('whatif.check_read', lang, group=g['group'], won=g['won %'], price=g['price %'],
+                      diff=g['won − price pp'], low=g['low pp'], high=g['high pp'], ret=g['return 100']))
+
+
+def night_map(rows: pd.DataFrame):
+    """Every shown line by its gap in spreads and its distance to break-even after tax (charts.night_map); a click
+    opens the line (props_focus, as the Overview's links do)."""
+    st.caption(t('props.map.intro', lang))
+    drawn = rows[rows['gap sd'].notna() & rows['distance pp'].notna() & rows['side'].isin(['Over', 'Under'])]
+    if drawn.empty:
+        st.caption(t('props.map.none', lang))
+        return
+    drawn = drawn.reset_index(drop=True)
+    labels = {'x': t('props.map.x', lang), 'y': t('props.map.y', lang), 'zero': t('props.map.zero', lang),
+              'Over': value('Over', lang), 'Under': value('Under', lang)}
+    picked = st.plotly_chart(charts.night_map(drawn, labels, t('props.map.chart', lang)), width='stretch',
+                             key='props_map', on_select='rerun', selection_mode='points',
+                             config={'displayModeBar': False})
+    points = (picked or {}).get('selection', {}).get('points', []) if picked else []
+    if points and points[0].get('customdata') is not None:
+        r = drawn.iloc[int(points[0]['customdata'][0])]
+        key = (r['event_id'], r['name_ESPN'], r['bet_type'])
+        if st.session_state.get('props_map_opened') != key:   # the selection stays: open it once, not on every run
+            st.session_state['props_map_opened'] = key
+            st.session_state['props_focus'] = key
+            st.session_state.pop('props_open', None)
+            st.rerun()
+    above = int((drawn['distance pp'] > 0).sum())
+    st.caption(t('props.map.summary', lang, n=len(drawn), above=above, left=len(rows) - len(drawn)))
+    if above:
+        st.caption(t('whatif.caveat', lang))
+    else:
+        r = drawn.loc[drawn['distance pp'].idxmax()]
+        st.caption(t('props.map.nearest', lang, name=r['name'], stat=r['bet_type'], side=value(r['side'], lang),
+                     line=r['line'], odds=r['side odds'], gap=-r['distance pp']))
+
+
+def lineup_whatif(row: pd.Series, games: pd.DataFrame, coef, profile: str, key: str):
+    """If the lineup changes: the line priced again (whatif.price_lineup) with the teammates chosen as sitting,
+    starting from RotoWire's out list, at Superbet's current price; and each single teammate sitting
+    (whatif.single_absences), computed only while its expander is open."""
+    st.markdown(t('whatif.lineup.title', lang))
+    if not row['team'] or pd.isna(row['player_id']):
+        st.caption(t('whatif.lineup.no_team', lang))
+        return
+    pid, stat = row['player_id'], row['bet_type']
+    listed = rotowire_team(lineups, row['team'])
+    out_now = [o for o in listed['out'] if o != pid]
+    names = player_logs().groupby('player_id_ESPN')['player_display_name'].last()
+    options = [m for m in dict.fromkeys(team_rotation(logs, row['team']).index.tolist() + out_now
+                                        + listed['questionable']) if m != pid]
+    sits = st.multiselect(t('whatif.lineup.pick', lang), options, default=out_now,
+                          format_func=lambda m: names.get(m, str(m)), key=f"whatif_out_{key}",
+                          help=t('whatif.lineup.pick_help', lang))
+    values = games[stat]
+    now = whatif.price_lineup(row, values, logs, out_now, coef, profile)
+    tried = now if sorted(sits) == sorted(out_now) else whatif.price_lineup(row, values, logs, sits, coef, profile)
+    who = t('whatif.lineup.who', lang, names=', '.join(names.get(m, str(m)) for m in sits)) if sits else         t('whatif.lineup.nobody', lang)
+    if tried['side'] in ('Over', 'Under'):
+        st.markdown(t('whatif.lineup.result', lang, who=who, proj=tried['proj avg'], proj_now=now['proj avg'],
+                      side=value(tried['side'], lang), line=row['line'], p=tried['p win %'], p_now=now['p win %'],
+                      be=tried['break-even net %'], dist=tried['distance pp'], ev=tried['ev net 100']))
+        if tried['side'] != now['side']:
+            st.caption(t('whatif.lineup.flip', lang, side=value(tried['side'], lang)))
+        if tried['distance pp'] > 0:
+            st.caption(t('whatif.caveat', lang))
+        elif tried is not now:
+            side_odds, other = (row['over_odds'], row['under_odds']) if tried['side'] == 'Over' else \
+                (row['under_odds'], row['over_odds'])
+            need = whatif.needed_odds(values, row['line'], tried['proj avg'], tried['side'], float(side_odds),
+                                      float(other), coef, profile)
+            if need is not None and need > side_odds:
+                st.caption(t('whatif.lineup.needs', lang, need=need, now=side_odds))
+    st.caption(t('whatif.lineup.price_held', lang))
+    st.caption(t('whatif.lineup.shrunk', lang))
+
+    one_box = st.expander(t('whatif.lineup.one', lang), key=f"whatif_one_{key}", on_change='rerun')
+    with one_box:
+        if not one_box.open:
+            return
+        mates = [m for m in options if m not in sits]
+        one = whatif.single_absences(row, values, logs, sits, mates, coef, profile)
+        one = one[one['games without'] > 0]
+        if one.empty:
+            st.caption(t('whatif.lineup.one_none', lang))
+            return
+        above = one['distance pp'] > 0
+        st.caption(t('whatif.lineup.one_some' if above.any() else 'whatif.lineup.one_short', lang,
+                     n=int(above.sum())))
+        if above.any():
+            st.caption(t('whatif.caveat', lang))
+        shown = one.head(5).assign(teammate=lambda d: d['teammate_id'].map(lambda m: names.get(m, str(m))),
+                                   side=lambda d: d['side'].map(lambda v: value(v, lang)))
+        st.dataframe(shown[['teammate', 'games without', 'proj avg', 'side', 'p win %', 'distance pp', 'ev net 100']],
+                     hide_index=True, width='stretch', column_config={
+                         'teammate': st.column_config.Column(t('mates.col.teammate', lang)),
+                         'games without': st.column_config.NumberColumn(t('whatif.lineup.col.games', lang),
+                                                                         format='%d'),
+                         'proj avg': st.column_config.NumberColumn(t('whatif.lineup.col.proj', lang, stat=stat),
+                                                                   format='%.1f'),
+                         'side': st.column_config.Column(t('whatif.lineup.col.side', lang)),
+                         'p win %': st.column_config.NumberColumn(t('whatif.lineup.col.p', lang), format='%.1f'),
+                         'distance pp': st.column_config.NumberColumn(t('whatif.lineup.col.dist', lang),
+                                                                      format='%+.1f'),
+                         'ev net 100': st.column_config.NumberColumn(t('whatif.lineup.col.ev', lang),
+                                                                     format='%+.1f')})
 
 
 def line_checker():
@@ -333,6 +559,11 @@ if not any(d['status'] == OBSTAW for d in decided.values()):
     st.info(t('props.all_pass', lang), icon="⚖️")
 decisions_banner(table_all.sort_values('tip_at').drop_duplicates('event_id')['event_id']
                  [lambda e: e.isin(shown['event_id']) if len(shown) else e])
+persist('props_map_open', False)
+map_box = st.expander(t('props.map.title', lang), key='props_map_open', on_change=remember, args=('props_map_open',))
+with map_box:
+    if map_box.open:                 # drawn only while open: the table stays where it was
+        night_map(shown)
 columns = MAIN_COLUMNS + (MORE_COLUMNS if more else [])
 picked = table(display_values(shown), columns, FORMATS, key='props_table', select=True, height=420,
                legend=['superbet', 'rotowire', 'stats'])
