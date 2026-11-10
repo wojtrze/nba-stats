@@ -13,7 +13,8 @@ from espn_scraper.storage import snapshot_file
 from glossary import column_config
 from i18n import t
 from metrics import score_check
-from tracking import CLOSE_MAX_AGE_MIN, close_coverage
+import power_events
+from tracking import CLOSE_MAX_AGE_MIN, close_coverage, collection_report
 from loaders import (SUPERBET_COOLDOWN, clear_rotowire, fetch_superbet, games, player_logs, season_label,
                      season_status, snapshot_history, superbet_error, superbet_wait)
 
@@ -245,9 +246,127 @@ def schedule_card():
         if cover:
             st.caption(t('dc.schedule_closes', lang, night=f"{cover['night']:%d.%m}", n=cover['valid'],
                          games=cover['games'], minutes=CLOSE_MAX_AGE_MIN))
+        power = power_events.power_status()
+        if power and power['on_battery']:
+            st.warning(t('dc.on_battery', lang, pct=power['percent'] if power['percent'] is not None else '?'))
+
+
+def _pl(ts) -> str:
+    return f"{pd.Timestamp(ts).tz_convert(freshness.PL):%H:%M}"
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _collection(stamp: str):
+    """Last night's collection report (tracking.collection_report) with the computer's sleeps in its gaps;
+    `stamp` (the run log's size and the hour) refreshes it."""
+    import fetch_loop
+    from daily_snapshot import RUN_LOG
+    reads_path = snapshot_file(CURRENT_SEASON, 'superbet_event_fetches')
+    props_path = snapshot_file(CURRENT_SEASON, 'superbet_props')
+    if not (os.path.exists(reads_path) and os.path.exists(RUN_LOG)):
+        return None
+    reads = pd.read_csv(reads_path)
+    known = pd.read_csv(props_path, usecols=['event_id', 'start_time']).drop_duplicates() \
+        if os.path.exists(props_path) else reads[['event_id', 'start_time']]
+    report = collection_report(reads, known, pd.read_csv(RUN_LOG), pd.Timestamp.now(tz='UTC'))
+    if report and report['gaps']:
+        events = power_events.sleep_events(report['gaps'][0][0] - pd.Timedelta(hours=2))
+        report['sleeps'] = power_events.sleeps_in(events, report['gaps'])
+    return report
+
+
+def collection_card():
+    from daily_snapshot import RUN_LOG
+    stamp = f"{os.path.getsize(RUN_LOG) if os.path.exists(RUN_LOG) else 0}:{pd.Timestamp.now():%Y%m%d%H}"
+    report = _collection(stamp)
+    if not report:
+        return
+    with st.container(border=True):
+        st.markdown(t('dc.cover', lang))
+        night = f"{report['night']:%d.%m}"
+        if report['valid'] == report['games']:
+            st.markdown(t('dc.cover_ok', lang, night=night, games=report['games']))
+        else:
+            st.markdown(t('dc.cover_partial', lang, night=night, n=report['valid'], games=report['games'],
+                          minutes=CLOSE_MAX_AGE_MIN))
+        for gap in report.get('sleeps', []):
+            if gap['sleep_at'] is not None:
+                reason = gap['reason']
+                reason = t(f'dc.reason.{reason}', lang) if reason in power_events.REASONS.values() else reason
+                wake = t('dc.cover_wake', lang, wake=_pl(gap['wake_at'])) if gap['wake_at'] is not None else ''
+                st.markdown('- ' + t('dc.cover_gap_sleep', lang, start=_pl(gap['from']), end=_pl(gap['to']),
+                                     sleep=_pl(gap['sleep_at']), reason=reason, wake=wake))
+            else:
+                st.markdown('- ' + t('dc.cover_gap_off', lang, start=_pl(gap['from']), end=_pl(gap['to'])))
+        for key in ('stuck', 'restarts', 'offline'):
+            if report[key]:
+                st.markdown('- ' + t(f'dc.cover_{key}', lang, n=report[key]))
+        st.caption(t('dc.limits', lang))
+
+
+def settings_card():
+    import fetch_loop
+    import fetch_schedule
+    from http_polite import DAILY_REQUEST_BUDGET
+    saved = fetch_loop.schedule_config()
+    d = fetch_schedule.DEFAULT
+    with st.expander(t('dc.settings', lang)):
+        hours = lambda n: t('dc.set.off', lang) if n == 0 else t('dc.set.hours', lang, n=n)
+        c = st.columns(2)
+        hourly_every = c[0].selectbox(t('dc.set.hourly_every', lang), [0, 1, 2, 3, 4, 6],
+                                      index=[0, 1, 2, 3, 4, 6].index(saved.hourly_every)
+                                      if saved.hourly_every in (0, 1, 2, 3, 4, 6) else 1,
+                                      format_func=hours, help=t('dc.set.hourly_every_help', lang), key='set_hourly')
+        horizon = c[1].number_input(t('dc.set.hourly_horizon', lang), 1, 48, saved.hourly_horizon, key='set_horizon')
+        options = sorted(set((120, 90, 60, 45, 40, 30, 20, 15, 10, 5, 2) + saved.last_hour), reverse=True)
+        last_hour = st.multiselect(t('dc.set.last_hour', lang), options, default=list(saved.last_hour),
+                                   format_func=lambda m: f"T-{m}", help=t('dc.set.last_hour_help', lang),
+                                   key='set_last_hour')
+        c = st.columns(2)
+        priced_every = c[0].selectbox(t('dc.set.priced_every', lang), [0, 1, 2, 3, 4, 6, 12],
+                                      index=[0, 1, 2, 3, 4, 6, 12].index(saved.priced_every)
+                                      if saved.priced_every in (0, 1, 2, 3, 4, 6, 12) else 2,
+                                      format_func=hours, help=t('dc.set.priced_every_help', lang), key='set_priced')
+        rotowire = c[1].checkbox(t('dc.set.rotowire', lang), saved.rotowire, key='set_rotowire')
+        c = st.columns(2)
+        late = c[0].number_input(t('dc.set.late', lang), 1, 30, saved.late, key='set_late')
+        slot_limit = c[1].number_input(t('dc.set.slot_limit', lang), 2, 30, saved.slot_limit,
+                                       help=t('dc.set.slot_limit_help', lang), key='set_slot_limit')
+        cfg = fetch_schedule.Config(hourly_every=int(hourly_every), hourly_horizon=int(horizon),
+                                    last_hour=tuple(sorted({int(m) for m in last_hour}, reverse=True)),
+                                    priced_every=int(priced_every), rotowire=bool(rotowire), late=int(late),
+                                    slot_limit=int(slot_limit))
+        problems = cfg.problems()
+        tips = fetch_loop.known_tips()
+        plan = fetch_loop.plan(tips, pd.Timestamp.now(tz='UTC').to_pydatetime(), cfg)
+        requests = int(plan['requests'].sum()) if len(plan) else 0
+        if len(plan):
+            st.markdown(t('dc.set.preview', lang, runs=len(plan), n=requests, budget=DAILY_REQUEST_BUDGET))
+            shown = plan.assign(at=plan['at'].map(lambda a: f"{pd.Timestamp(a).tz_convert(freshness.PL):%a %H:%M}"))
+            st.dataframe(shown, hide_index=True, width='stretch', height=200)
+        else:
+            st.caption(t('dc.set.no_games', lang))
+        over = requests > DAILY_REQUEST_BUDGET
+        if problems:
+            st.error(t('dc.set.invalid', lang, what=', '.join(problems)))
+        elif over:
+            st.error(t('dc.set.over_budget', lang))
+        c = st.columns(2)
+        if c[0].button(t('dc.set.save', lang), disabled=bool(problems) or over or cfg == saved, type='primary'):
+            fetch_loop.save_worker_settings(schedule=cfg)
+            st.success(t('dc.set.saved', lang))
+        if c[1].button(t('dc.set.reset', lang), disabled=saved == d):
+            fetch_loop.save_worker_settings(schedule=d)
+            for key in ('set_hourly', 'set_horizon', 'set_last_hour', 'set_priced', 'set_rotowire', 'set_late',
+                        'set_slot_limit'):
+                st.session_state.pop(key, None)
+            st.rerun()
+        st.caption(t('dc.set.limits_fixed', lang, budget=DAILY_REQUEST_BUDGET))
 
 
 schedule_card()
+collection_card()
+settings_card()
 if st.button(t('dc.reload', lang), help=t('dc.reload_help', lang)):
     clear_live()
     st.rerun()

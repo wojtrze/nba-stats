@@ -434,13 +434,28 @@ kalibracja „powstanie automatycznie”). Dane pokazują, że model wymaga prze
 
 ### 8.1 Pobieranie według harmonogramu i kurs zamknięcia (od 2.11)
 
-**Tylko gdy program działa.** Wątek w dashboardzie v2 (`dashboard_v2/core/fetch_worker.py`, pętla
-`fetch_loop.loop`) albo `python -m fetch_loop` w terminalu. Nic nie jest rejestrowane w systemie: zamknięcie
+**Tylko gdy program działa, a komputer nie śpi.** Wątek w dashboardzie v2 (`dashboard_v2/core/fetch_worker.py`,
+pętla `fetch_loop.loop`) albo `python -m fetch_loop` w terminalu. Nic nie jest rejestrowane w systemie: zamknięcie
 dashboardu kończy pobieranie. Opcja „Nie usypiaj komputera” (`SetThreadExecutionState`, tylko na czas procesu)
-działa, bo mecze są u nas 00:00–04:30. Jeden wątek pobierający naraz także między procesami (`data/fetch_worker.json`
-z bieżącym znacznikiem czasu).
+wyłącza tylko usypianie z bezczynności; uśpienie z menu Start, klapa i słaba bateria dalej przerywają noc (tak
+było 8–10.11). Jeden wątek pobierający naraz także między procesami (`data/fetch_worker.json` z bieżącym
+znacznikiem czasu).
 
-**Terminy** (`fetch_schedule.py`, czysta funkcja testowana z fałszywym zegarem):
+**Niezawodność (od 10.11).** Pętla daje znak życia co 30 s (`status['beat']`); wątek nadzorcy w dashboardzie
+zastępuje pętlę, która milczy dłużej niż limit przebiegu + 4 min (wiersz `scheduled restart` w run logu).
+Zawieszony przebieg zapisuje stos każdego wątku w `data/fetch_hangs.log`. W konsoli programu wyłączany jest tryb
+QuickEdit: 5.11 kliknięcie w okno konsoli zatrzymało cały proces na 47 h (każdy zapis do konsoli czekał na
+klawisz). Karta „Zbieranie danych ostatniej nocy” w Centrum danych podaje, ile meczów ma kurs zamknięcia, i
+przyczynę braków: przerwy w pobieraniu, uśpienie komputera z powodem z dziennika zdarzeń Windows
+(`power_events.py`, tylko odczyt), zawieszenia i brak internetu (`tracking.collection_report`).
+
+**Ustawienia** (`fetch_schedule.Config`, zapisywane w `data/fetch_worker_settings.json`, edytowane w Centrum danych,
+z podglądem dzisiejszych pobrań i liczby zapytań; obowiązują od następnego pobrania): co ile godzin pobranie
+wszystkich meczów (albo wyłączone), jego horyzont, minuty przed meczem, co ile godzin pełny snapshot, RotoWire,
+tolerancja spóźnienia i limit przebiegu. Domyślne wartości są opisane niżej. Limity grzeczności (budżet, przerwy)
+nie są edytowalne.
+
+**Terminy domyślne** (`fetch_schedule.py`, czysta funkcja testowana z fałszywym zegarem):
 - co godzinę, o pełnej godzinie, wszystkie mecze startujące w ciągu 24 h;
 - w ostatniej godzinie przed każdą godziną startu: **T−60, T−40, T−20, T−10, T−5**, tylko mecze tej godziny;
 - **RotoWire przy każdym terminie** (zapis tylko zmian, z czasem, więc widać moment zmiany składu);
