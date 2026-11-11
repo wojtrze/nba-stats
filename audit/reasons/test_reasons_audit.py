@@ -105,7 +105,8 @@ def test_A1_reason_model_text_carries_the_numbers_it_claims():
     games = pd.DataFrame({'PTS': VALUES, 'MIN': [32.0] * 12,
                           'Date': pd.date_range('2026-10-01', periods=12, freq='2D')})
     text = [r for r in prop_reasons(bet, games, games.iloc[0:0]) if r['kind'] == 'economics'][0]['text']
-    assert 'Under wins 51.2%' in text and 'need 58.3%' in text and 'edge -7.1 pp' in text and '-12.1 per 100' in text
+    assert 'estimates Under at 51.2%' in text and 'need 58.3%' in text and 'edge -7.1 pp' in text
+    assert '-12.1 per 100' in text
     nt = prop_reasons(bet | {'tax': 0.0, 'break-even %': 100 / 1.95, 'edge pp': 51.2 - 100 / 1.95,
                              'ev': 100 * (0.512 * 1.95 - 1)}, games, games.iloc[0:0])
     assert any('without the stake tax' in r['text'] for r in nt if r['kind'] == 'economics')

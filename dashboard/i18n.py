@@ -1319,10 +1319,14 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'panel.meta_quote': _w("{source} · {as_of}", "{source} · {as_of}"),
     'panel.economics': _w("Price", "Cena"),
     'panel.economics_note': _w("The evaluated side is the one with the higher expected return, which isn't "
-                               "necessarily positive. Only the stake tax is counted; the separate tax on large "
-                               "winnings isn't.",
+                               "necessarily positive. The chance is a point estimate: there's no range for the whole "
+                               "forecast. The table's 'edge low' covers only the sampling noise of the player's "
+                               "record, not the errors of the projection or the model. Only the stake tax is counted; "
+                               "the separate tax on large winnings isn't.",
                                "Oceniana strona to ta z wyższym oczekiwanym zwrotem, który nie musi być dodatni. "
-                               "Liczony jest tylko podatek od stawki; osobny podatek od dużych wygranych nie."),
+                               "Szansa to ocena punktowa: nie ma przedziału dla całej prognozy. „Dolny koniec "
+                               "przewagi” w tabeli obejmuje tylko losowość próby gracza, nie błędy projekcji ani "
+                               "modelu. Liczony jest tylko podatek od stawki; osobny podatek od dużych wygranych nie."),
     'panel.economics_note_games': _w("The game model isn't admitted: its chance is an experimental estimate, not "
                                      "a reason to bet.",
                                      "Model meczów nie jest dopuszczony: jego szansa to eksperymentalna ocena, nie "
@@ -1357,8 +1361,10 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'panel.group.opponent': _w("Opponent", "Rywal"),
     'panel.group.market': _w("Line and odds movement", "Ruch linii i kursów"),
     'panel.group.other': _w("Other", "Inne"),
-    'panel.validation.untested': _w("not tested", "nie testowane"),
-    'panel.validation.no_lift': _w("tested: no gain beyond the model", "testowane: nic ponad model"),
+    # what the context's test said (backtest/reason_lift.py); not tested and no added value are told apart
+    'panel.validation.untested': _w("Not tested", "Nieprzetestowane"),
+    'panel.validation.no_lift': _w("In the test so far, no added value was shown",
+                                   "W dotychczasowym teście nie wykazano dodatkowej wartości"),
     'panel.validation.lift': _w("tested: predicted beyond the model", "testowane: przewidywało ponad model"),
     # an ADMITTED hypothesis (none yet) is shown with the reasons; the rest only as research (audit F-04)
     'panel.mispricing': _w("Tested hypotheses about Superbet's prices", "Sprawdzone hipotezy o cenach Superbetu"),
@@ -1533,19 +1539,25 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                                                        "powyżej linii)"),
     'panel.line': _w("line {line:g}", "linia {line:g}"),
     # reasons about a prop (reasons.prop_reasons): the price
-    'reason.model': _w("Model: {side} wins {model:.1f}%; odds {odds:.2f} after the {tax:.0f}% stake tax need "
-                       "{be:.1f}% (edge {edge:+.1f} pp, {ev:+.1f} per 100 staked)",
-                       "Model: {side} wygrywa w {model:.1f}%; kurs {odds:.2f} po {tax:.0f}% podatku od stawki "
-                       "wymaga {be:.1f}% (przewaga {edge:+.1f} pp, {ev:+.1f} na 100 zł stawki)"),
-    'reason.model_no_tax': _w("Model: {side} wins {model:.1f}%; odds {odds:.2f} without the stake tax (promotion, "
-                              "{tax:.0f}%) need {be:.1f}% (edge {edge:+.1f} pp, {ev:+.1f} per 100 staked)",
-                              "Model: {side} wygrywa w {model:.1f}%; kurs {odds:.2f} bez podatku od stawki "
-                              "(promocja, {tax:.0f}%) wymaga {be:.1f}% (przewaga {edge:+.1f} pp, {ev:+.1f} na 100 zł "
-                              "stawki)"),
-    'reason.beyond_price': _w("The price alone says {side} {market:.1f}% (margin-free), {price:.1f}% after the "
-                              "calibration; the player's numbers move it {beyond:+.1f} pp",
-                              "Sama cena mówi {side} {market:.1f}% (bez marży), {price:.1f}% po kalibracji; liczby "
-                              "zawodnika zmieniają to o {beyond:+.1f} pp"),
+    # the price: an estimate, not a fact about the game (audit F-03)
+    'reason.model': _w("The model estimates {side} at {model:.1f}%; odds {odds:.2f} after the {tax:.0f}% stake tax "
+                       "need {be:.1f}% (edge {edge:+.1f} pp, estimated EV {ev:+.1f} per 100 staked)",
+                       "Model szacuje {side} na {model:.1f}%; kurs {odds:.2f} po {tax:.0f}% podatku od stawki "
+                       "wymaga {be:.1f}% (przewaga {edge:+.1f} pp, szacowane EV {ev:+.1f} na 100 zł stawki)"),
+    'reason.model_no_tax': _w("The model estimates {side} at {model:.1f}%; odds {odds:.2f} without the stake tax "
+                              "(promotion, {tax:.0f}%) need {be:.1f}% (edge {edge:+.1f} pp, estimated EV {ev:+.1f} per "
+                              "100 staked)",
+                              "Model szacuje {side} na {model:.1f}%; kurs {odds:.2f} bez podatku od stawki "
+                              "(promocja, {tax:.0f}%) wymaga {be:.1f}% (przewaga {edge:+.1f} pp, szacowane EV "
+                              "{ev:+.1f} na 100 zł stawki)"),
+    # how the estimate is built from the price: each step's number and what it adds (audit F-03). The calibration
+    # is fitted on settled lines; its weights aren't hit rates, so no 'works x% of the time' here
+    'reason.beyond_price': _w("How the estimate is built for {side}: the price alone {market:.1f}% (margin-free) → "
+                              "the calibration applied to the price alone {price:.1f}% ({calib:+.1f} pp) → with the "
+                              "player's games and tonight's adjustments {final:.1f}% ({beyond:+.1f} pp)",
+                              "Jak powstaje ocena dla {side}: sama cena {market:.1f}% (bez marży) → kalibracja "
+                              "zastosowana do samej ceny {price:.1f}% ({calib:+.1f} pp) → z meczami gracza i dzisiejszymi "
+                              "korektami {final:.1f}% ({beyond:+.1f} pp)"),
     # what the model used
     'reason.impact': _w("; moves the model's chance {impact:+.1f} pp", "; zmienia szansę modelu o {impact:+.1f} pp"),
     'reason.impact_none': _w("; moves the model's chance less than {least:g} pp",
@@ -1671,9 +1683,10 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'market.TOTAL': _w("Total", "Suma"), 'market.HOME_TOTAL': _w("Home team total", "Suma gospodarza"),
     'market.AWAY_TOTAL': _w("Away team total", "Suma gościa"),
     'winner': _w("{team} by {margin:.1f}", "{team} o {margin:.1f}"),
-    'game.model': _w("Model: {model:.0f}%; odds {odds:.2f} after the 12% stake tax need {be:.0f}% (edge {edge:+.1f} pp)",
-                     "Model: {model:.0f}%; kurs {odds:.2f} po 12% podatku od stawki wymaga {be:.0f}% (przewaga "
-                     "{edge:+.1f} pp)"),
+    'game.model': _w("The game model estimates {model:.0f}%; odds {odds:.2f} after the 12% stake tax need {be:.0f}% "
+                     "(edge {edge:+.1f} pp)",
+                     "Model meczów szacuje {model:.0f}%; kurs {odds:.2f} po 12% podatku od stawki wymaga {be:.0f}% "
+                     "(przewaga {edge:+.1f} pp)"),
     'game.wins_by': _w("wins by {margin:.1f}", "wygrywa o {margin:.1f}"),
     'game.loses_by': _w("loses by {margin:.1f}", "przegrywa o {margin:.1f}"),
     'game.projection': _w("Projection: {team} {what}", "Prognoza: {team} {what}"),

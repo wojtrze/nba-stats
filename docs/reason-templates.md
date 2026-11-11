@@ -46,9 +46,9 @@ Always first. 'For' when the edge after tax is positive, else 'against'.
 
 | Key | When shown | English | Polish |
 |---|---|---|---|
-| `reason.model` | Edge is known; the active cost profile has the stake tax | Model: {side} wins {model:.1f}%; odds {odds:.2f} after the {tax:.0f}% stake tax need {be:.1f}% (edge {edge:+.1f} pp, {ev:+.1f} per 100 staked) | Model: {side} wygrywa w {model:.1f}%; kurs {odds:.2f} po {tax:.0f}% podatku od stawki wymaga {be:.1f}% (przewaga {edge:+.1f} pp, {ev:+.1f} na 100 zł stawki) |
-| `reason.model_no_tax` | Same, under a no-tax (promotion) profile | Model: {side} wins {model:.1f}%; odds {odds:.2f} without the stake tax (promotion, {tax:.0f}%) need {be:.1f}% (edge {edge:+.1f} pp, {ev:+.1f} per 100 staked) | Model: {side} wygrywa w {model:.1f}%; kurs {odds:.2f} bez podatku od stawki (promocja, {tax:.0f}%) wymaga {be:.1f}% (przewaga {edge:+.1f} pp, {ev:+.1f} na 100 zł stawki) |
-| `reason.beyond_price` | How far the player's numbers move the chance away from the price (neutral) | The price alone says {side} {market:.1f}% (margin-free), {price:.1f}% after the calibration; the player's numbers move it {beyond:+.1f} pp | Sama cena mówi {side} {market:.1f}% (bez marży), {price:.1f}% po kalibracji; liczby zawodnika zmieniają to o {beyond:+.1f} pp |
+| `reason.model` | Edge is known; the active cost profile has the stake tax | The model estimates {side} at {model:.1f}%; odds {odds:.2f} after the {tax:.0f}% stake tax need {be:.1f}% (edge {edge:+.1f} pp, estimated EV {ev:+.1f} per 100 staked) | Model szacuje {side} na {model:.1f}%; kurs {odds:.2f} po {tax:.0f}% podatku od stawki wymaga {be:.1f}% (przewaga {edge:+.1f} pp, szacowane EV {ev:+.1f} na 100 zł stawki) |
+| `reason.model_no_tax` | Same, under a no-tax (promotion) profile | The model estimates {side} at {model:.1f}%; odds {odds:.2f} without the stake tax (promotion, {tax:.0f}%) need {be:.1f}% (edge {edge:+.1f} pp, estimated EV {ev:+.1f} per 100 staked) | Model szacuje {side} na {model:.1f}%; kurs {odds:.2f} bez podatku od stawki (promocja, {tax:.0f}%) wymaga {be:.1f}% (przewaga {edge:+.1f} pp, szacowane EV {ev:+.1f} na 100 zł stawki) |
+| `reason.beyond_price` | How the estimate is built (neutral): margin-free price, then the calibration applied to the price alone, then the player's games and tonight's adjustments | How the estimate is built for {side}: the price alone {market:.1f}% (margin-free) → the calibration applied to the price alone {price:.1f}% ({calib:+.1f} pp) → with the player's games and tonight's adjustments {final:.1f}% ({beyond:+.1f} pp) | Jak powstaje ocena dla {side}: sama cena {market:.1f}% (bez marży) → kalibracja zastosowana do samej ceny {price:.1f}% ({calib:+.1f} pp) → z meczami gracza i dzisiejszymi korektami {final:.1f}% ({beyond:+.1f} pp) |
 
 ## 3. Prop reasons: model drivers
 
@@ -184,7 +184,7 @@ Team markets are always Unavailable; these explain the outcome rows.
 
 | Key | When shown | English | Polish |
 |---|---|---|---|
-| `game.model` | Every outcome: model vs break-even | Model: {model:.0f}%; odds {odds:.2f} after the 12% stake tax need {be:.0f}% (edge {edge:+.1f} pp) | Model: {model:.0f}%; kurs {odds:.2f} po 12% podatku od stawki wymaga {be:.0f}% (przewaga {edge:+.1f} pp) |
+| `game.model` | Every outcome: model vs break-even | The game model estimates {model:.0f}%; odds {odds:.2f} after the 12% stake tax need {be:.0f}% (edge {edge:+.1f} pp) | Model meczów szacuje {model:.0f}%; kurs {odds:.2f} po 12% podatku od stawki wymaga {be:.0f}% (przewaga {edge:+.1f} pp) |
 | `game.projection` | Projection line (with wins_by / loses_by and covering / missing) | Projection: {team} {what} | Prognoza: {team} {what} |
 | `game.wins_by` | Fragment | wins by {margin:.1f} | wygrywa o {margin:.1f} |
 | `game.loses_by` | Fragment | loses by {margin:.1f} | przegrywa o {margin:.1f} |

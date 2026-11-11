@@ -98,8 +98,10 @@ def test_the_price_alone_is_the_evaluated_sides():
     impacts = {'final': 51.9, 'price': 51.2, 'beyond_price': 0.7}
     under = prop_reasons(_bet(side='Under', impacts=impacts, **{'market over %': 52.1}), _games([25.0] * 12),
                          _games([]))
-    assert any('Under 47.9% (margin-free), 51.2% after the calibration' in t and '+0.7 pp' in t
-               for t in texts(under, None))
+    built = [t for t in texts(under, None) if t.startswith('How the estimate is built for Under')]
+    assert len(built) == 1
+    assert 'the price alone 47.9% (margin-free) → the calibration applied to the price alone 51.2% (+3.3 pp) → ' \
+           'with the player\'s games and tonight\'s adjustments 51.9% (+0.7 pp)' in built[0]
 
 
 def test_context_is_for_or_against_only_when_it_predicted_results():
@@ -424,3 +426,36 @@ def test_a_mixed_sample_is_disclosed_with_the_projection_too():
     reasons = prop_reasons(_bet(), games, _games([]))
     expected = [r for r in reasons if r['group'] == 'projection'][0]['text']
     assert "3 of the games are from last season" in expected and "2 are preseason" in expected
+
+
+
+# --- audit package D: the estimate without false precision (F-03, F-17) ---
+
+@pytest.mark.parametrize('lang', ['en', 'pl'])
+def test_the_price_reasons_say_estimate_and_build_it_step_by_step(lang):
+    impacts = {'final': 49.5, 'price': 46.4, 'beyond_price': 3.1}
+    reasons = prop_reasons(_bet(side='Under', impacts=impacts, **{'market over %': 53.1}), _games([25.0] * 12),
+                           _games([]), lang)
+    econ = [r['text'] for r in reasons if r['kind'] == 'economics']
+    assert econ[0].startswith('The model estimates Under' if lang == 'en' else 'Model szacuje Poniżej')
+    assert ('estimated EV' if lang == 'en' else 'szacowane EV') in econ[0]
+    assert '46.9%' in econ[1] and '46.4% (-0.5 pp)' in econ[1] and '49.5% (+3.1 pp)' in econ[1]
+    for text in econ:
+        assert 'wins' not in text and 'wygrywa' not in text and '1/6' not in text and 'independent' not in text
+
+
+def test_the_validation_labels_tell_not_tested_from_no_added_value():
+    import i18n
+    assert i18n.t('panel.validation.untested', 'pl') == 'Nieprzetestowane'
+    assert i18n.t('panel.validation.no_lift', 'pl') == 'W dotychczasowym teście nie wykazano dodatkowej wartości'
+    assert i18n.t('panel.validation.no_lift', 'en') == 'In the test so far, no added value was shown'
+    note = i18n.t('panel.economics_note', 'en')
+    assert 'point estimate' in note and "covers only the sampling noise" in note
+
+
+def test_the_estimates_steps_add_up_as_shown():
+    impacts = {'final': 49.457, 'price': 46.431, 'beyond_price': 3.026}
+    reasons = prop_reasons(_bet(side='Under', impacts=impacts, **{'market over %': 53.135}), _games([25.0] * 12),
+                           _games([]))
+    built = [r['text'] for r in reasons if r['kind'] == 'economics'][1]
+    assert '46.9% (margin-free)' in built and '46.4% (-0.5 pp)' in built and '49.5% (+3.1 pp)' in built

@@ -478,7 +478,11 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
     if _known(impacts.get('beyond_price')) and _known(bet.get('market over %')):
         market = bet['market over %'] if over else 100 - bet['market over %']
         reasons.append(_reason(None, i18n.t('reason.beyond_price', lang, side=side, market=market,
-                                            price=impacts['price'], beyond=impacts['beyond_price']),
+                                            price=impacts['price'],
+                                            # each step is the difference of the numbers shown, so the text adds up
+                                            calib=round(impacts['price'], 1) - round(market, 1),
+                                            final=impacts['final'],
+                                            beyond=round(impacts['final'], 1) - round(impacts['price'], 1)),
                                value=impacts['final'], reference=impacts['price'], as_of=odds_at,
                                source=f"{MODEL} · {SUPERBET}", kind=ECONOMICS, group='price', used_by_model=True))
 
