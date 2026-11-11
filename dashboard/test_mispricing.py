@@ -116,9 +116,12 @@ def test_signals_shown_only_when_they_concern_the_line_and_matter():
 
 
 def test_only_an_admitted_hypothesis_argues_for_or_against():
-    assert _mispricing([_signal(status=ADMITTED)], stat='ARP', side='Over')[0]['supports'] is True
-    assert _mispricing([_signal(status=ADMITTED)], stat='ARP', side='Under')[0]['supports'] is False
-    clears = _mispricing([_signal(status=ADMITTED, clears=True, gap_pp=12.0)], stat='ARP')[0]['text']
+    assert _mispricing([_signal(status=ADMITTED)], stat='ARP', line=33.5, side='Over')[0]['supports'] is True
+    assert _mispricing([_signal(status=ADMITTED)], stat='ARP', line=33.5, side='Under')[0]['supports'] is False
+    # about another offer (a part's line, or another line of the same stat): no direction here (audit F-11)
+    assert _mispricing([_signal(status=ADMITTED)], stat='REB', line=6.5, side='Over')[0]['supports'] is None
+    assert _mispricing([_signal(status=ADMITTED)], stat='ARP', line=34.5, side='Over')[0]['supports'] is None
+    clears = _mispricing([_signal(status=ADMITTED, clears=True, gap_pp=12.0)], stat='ARP', line=33.5)[0]['text']
     assert '1.0 pp nad progiem opłacalności' in clears and clears.split("  \n")[1].startswith('✅')
 
 

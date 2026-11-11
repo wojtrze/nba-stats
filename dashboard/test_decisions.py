@@ -66,18 +66,33 @@ def test_stale_odds_mean_wait():
     assert d['status'] == CZEKAJ and d['reason'] == 'decision.reason.stale_odds'
 
 
-def test_a_missing_lineup_or_a_questionable_player_means_wait():
+MAY_SIT = 'RotoWire: Ques 50%: may sit or play limited minutes'
+
+
+def test_a_missing_lineup_means_wait_and_a_questionable_player_only_when_his_lineup_decides():
     d = _decide([_line()], lineups=_lineups('bos'))
     assert d['status'] == CZEKAJ and d['values']['teams'] == 'NYK'
-    d = _decide([_line(ev=-2.0, role='Ques 50%'), _line('B', ev=-6.0)])
-    assert d['status'] == CZEKAJ and d['reason'] == 'decision.reason.questionable'
+    # without a threshold no lineup can change the decision: the questionable player is a note (audit F-01)
+    d = _decide([_line(ev=-2.0, role='Ques 50%', flag=MAY_SIT), _line('B', ev=-6.0)])
+    assert d['status'] == NIE_OBSTAWIAJ and d['reason'] == 'decision.reason.no_threshold'
+    assert d['notes'] == [('decision.note.questionable', {'name': 'A', 'role': 'Ques 50%'})]
+    # only his line would meet the condition: his lineup can change the decision, so the game waits
+    d = _decide([_line(ev=5.0, edge=3.0, role='Ques 50%', flag=MAY_SIT), _line('B', ev=-6.0)], threshold=1.0)
+    assert d['status'] == CZEKAJ and d['reason'] == 'decision.reason.questionable' and d['values']['name'] == 'A'
+    # blocked for another reason too: no lineup unlocks it, nothing to wait for
+    d = _decide([_line(ev=5.0, edge=3.0, role='Ques 50%', flag=MAY_SIT + '; Only 3 games'), _line('B', ev=-6.0)],
+                threshold=1.0)
+    assert d['status'] == NIE_OBSTAWIAJ and d['reason'] == 'decision.reason.no_offer'
     # a player who's out won't play: his lines aren't offers, so they don't make the game wait
     assert _decide([_line(ev=-2.0, role='Out 0%'), _line('B', ev=-6.0)])['status'] == NIE_OBSTAWIAJ
 
 
 def test_a_tie_isnt_broken_arbitrarily():
     rows = [_line('A', ev=6.0, edge=3.0), _line('B', ev=6.05, edge=3.1)]
-    assert _decide(rows, threshold=1.0)['status'] == CZEKAJ
+    tie = _decide(rows, threshold=1.0)
+    assert tie['status'] == decisions.REMIS and tie['offer'] is None              # not 'wait': no data breaks a tie
+    assert tie['values'] == {'first': 'B PTS', 'second': 'A PTS', 'tie': decisions.TIE_EV}
+    assert i18n.t('decision.REMIS', 'pl') == 'Brak jednoznacznego wyboru'
     one = _decide([_line('A', ev=6.0, edge=3.0), _line('B', ev=2.0, edge=1.5)], threshold=1.0)
     assert one['status'] == OBSTAW and one['offer']['name'] == 'A'
     # a warned line never qualifies
@@ -263,3 +278,37 @@ def test_stars_side_price_and_gap():
 def test_stars_of_nothing_is_empty():
     assert decisions.stars(pd.DataFrame()).empty
     assert decisions.stars(pd.DataFrame([_line(odds=np.nan)])).empty
+
+
+# --- audit package C: a questionable player never hides an offer; not chosen isn't unprofitable ---
+
+def test_a_questionable_players_blocked_line_doesnt_hide_a_qualifying_offer():
+    rows = [_line('A', ev=10.0, edge=5.0, role='Ques 50%', flag=MAY_SIT), _line('B', ev=6.0, edge=3.0)]
+    d = _decide(rows, threshold=1.0)
+    assert d['status'] == OBSTAW and d['offer']['name'] == 'B'
+    assert d['notes'] == [('decision.note.questionable_better', {'name': 'A', 'role': 'Ques 50%'})]
+    for lang in ('en', 'pl'):
+        assert 'A' in i18n.t(*d['notes'][0][:1], lang, **d['notes'][0][1])
+
+
+def test_a_line_says_whether_it_was_chosen_qualified_or_didnt_qualify():
+    rows = [_line('A', ev=8.0, edge=4.0), _line('B', ev=6.0, edge=3.0), _line('C', ev=-3.0, edge=-1.0)]
+    d = _decide(rows, threshold=1.0)
+    lines = {r['name']: offer_decision(d, pd.Series(r)) for r in rows}
+    assert lines['A']['line'] == decisions.CHOSEN and lines['A']['status'] == OBSTAW
+    assert lines['B']['line'] == decisions.NOT_CHOSEN and lines['B']['reason'] == 'decision.reason.not_chosen'
+    assert lines['C']['line'] == decisions.NOT_QUALIFYING and lines['C']['reason'] == 'decision.reason.other_offer'
+    assert 'Not chosen doesn\'t mean unprofitable' in i18n.t('decision.reason.not_chosen', 'en')
+    assert offer_decision(_decide(rows), pd.Series(rows[0]))['line'] is None       # no OBSTAW without a threshold
+
+
+@pytest.mark.parametrize('lang', ['en', 'pl'])
+def test_a_line_that_isnt_the_offer_is_titled_as_an_analysis(lang):
+    from reasons import line_title
+    row = pd.Series(_line('A', ev=-8.0) | {'line': 20.5, 'bet_type': 'PTS'})
+    both = line_title(row, NIE_OBSTAWIAJ, {'Over': {'ev': -8.0}, 'Under': {'ev': -11.5}}, lang)
+    one = line_title(pd.Series(dict(row) | {'ev net 100': 3.0}), NIE_OBSTAWIAJ, {'Under': {'ev': -11.5}}, lang)
+    assert both.startswith('Analysis:' if lang == 'en' else 'Analiza:') and '-11.5' in both
+    assert ('both sides have a negative estimated EV' if lang == 'en' else 'obie strony mają ujemne') in both
+    assert ('not an offer' if lang == 'en' else 'to nie oferta') in one
+    assert line_title(row, OBSTAW, {}, lang).startswith('A · ')

@@ -12,7 +12,7 @@ from loaders import (fetch_rotowire, filtered_logs, games as all_games, player_l
                      snapshot_history, superbet_fetch_controls, superbet_offers, today_game_odds, today_props)
 from metrics import STATS, absence_adjustments, hit_rates, percentile_band
 from models import calibration_warning, price_props, top_up_logs
-from reasons import flag_props, offer_context, prop_reasons
+from reasons import flag_props, line_title, offer_context, prop_reasons
 from schedule import tip_label
 from tracking import prop_movement
 
@@ -68,10 +68,8 @@ def prop_panel(row, decision, changed=None):
     if bet['side'] is None:
         st.info("Superbet has no odds for this line.")
         return
-    side = f"{bet['side']} {row['line']:g} {row['bet_type']} @ {row['side odds']:.2f}"
-    # only an OBSTAW offer is named as one; any other line shows its evaluated side and what it returns
-    title = f"{row['name']} {side}" if decision['status'] == OBSTAW else \
-        f"{row['name']} · {side} (evaluated side, {row['ev net 100']:+.1f} per 100 after tax)"
+    # only an OBSTAW offer is named as one; any other line is an analysis of its evaluated side
+    title = line_title(row, decision['status'], bet['sides'])
     reasons_panel(title, decision, prop_reasons(bet, games, history), games, row['bet_type'], row['line'],
                   changed=changed)
     b = st.columns([1, 1, 4])

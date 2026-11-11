@@ -21,7 +21,7 @@ A reason that lacks its data (value, reference, time, source, and observations w
 
 ## 1. Decision reasons (one verdict per game)
 
-Shown in the verdict panel. They explain why a game gets Bet / Don't bet / Wait / Unavailable.
+Shown in the verdict panel. They explain why a game gets Bet / Don't bet / Wait / No single choice / Unavailable; notes (decision.note.*) are shown under the decision and don't change it.
 
 | Key | When shown | English | Polish |
 |---|---|---|---|
@@ -30,12 +30,15 @@ Shown in the verdict panel. They explain why a game gets Bet / Don't bet / Wait 
 | `decision.reason.no_odds` | Wait. No priced player line for the game | No odds for this game's player lines | Brak kursów na linie zawodników tego meczu |
 | `decision.reason.stale_odds` | Wait. Odds older than the allowed age | The odds are {hours:.0f} h old: fetch them again | Kursy mają {hours:.0f} h: pobierz je ponownie |
 | `decision.reason.no_lineup` | Wait. RotoWire has no lineup for a team of the game | RotoWire doesn't list the lineup of {teams} yet | RotoWire nie podaje jeszcze składu {teams} |
-| `decision.reason.questionable` | Wait. The best line's player is questionable | {name} may not play ({role}): wait for the lineup | {name} może nie zagrać ({role}): poczekaj na skład |
+| `decision.reason.questionable` | Wait. With a threshold, only lines of a questionable player would qualify (blocked only by his status) | {name} may not play ({role}), and only his lines would meet the condition: his lineup can change the decision | {name} może nie zagrać ({role}), a tylko jego linie spełniłyby warunek: jego skład może zmienić decyzję |
 | `decision.reason.no_threshold` | Don't bet. No edge threshold validated on held-out nights yet | No offer can qualify: there's no edge threshold yet that was checked on nights not used to choose it | Żadna oferta nie może się zakwalifikować: nie ma jeszcze progu przewagi sprawdzonego na nocach, których nie użyto do jego wyboru |
 | `decision.reason.no_offer` | Don't bet. No offer reaches the threshold | No offer has an edge after tax of {threshold:+.1f} pp or more | Żadna oferta nie ma przewagi po podatku co najmniej {threshold:+.1f} pp |
-| `decision.reason.tie` | Wait. The two best offers tie on expected return | Two offers tie on expected return: no arbitrary choice | Dwie oferty mają równy oczekiwany zwrot: bez arbitralnego wyboru |
+| `decision.reason.tie` | No single choice (REMIS). The two best qualifying offers tie on expected return (within 0.1 per 100) | Equal offers: {first} and {second} meet the condition with expected returns less than {tie:g} per 100 apart, so neither is chosen arbitrarily | Równorzędne oferty: {first} i {second} spełniają warunek, a ich oczekiwane zwroty różnią się o mniej niż {tie:g} na 100, więc żadna nie jest wybrana arbitralnie |
 | `decision.reason.meets` | Bet. The chosen offer meets the threshold | Meets the recorded threshold | Spełnia zapisany próg |
-| `decision.reason.other_offer` | Don't bet. Every other line of a game that has a Bet offer | Another offer of this game is the one evaluated | Oceniana jest inna oferta tego meczu |
+| `decision.reason.other_offer` | Don't bet. A line of a game that has a Bet offer, which doesn't meet the condition | This line doesn't meet the condition; another offer of this game does | Ta linia nie spełnia warunku; spełnia go inna oferta tego meczu |
+| `decision.reason.not_chosen` | Don't bet. A line of a game that has a Bet offer, which meets the condition but isn't the one chosen (one offer per game) | This line meets the condition too, but another offer of this game has a higher expected return: one offer per game. Not chosen doesn't mean unprofitable | Ta linia też spełnia warunek, ale inna oferta tego meczu ma wyższy oczekiwany zwrot: jedna oferta na mecz. Niewybrana nie znaczy nieopłacalna |
+| `decision.note.questionable` | Note beside a decision: the game's best line by EV is a questionable player's (blocked); doesn't change the decision | {name} may not play ({role}): his lines are blocked until RotoWire confirms him; that doesn't change this decision | {name} może nie zagrać ({role}): jego linie są zablokowane, dopóki RotoWire go nie potwierdzi; to nie zmienia tej decyzji |
+| `decision.note.questionable_better` | Note beside Bet: a questionable player's blocked line would beat the chosen offer if he's confirmed | {name} may not play ({role}); if RotoWire confirms him, one of his lines would have a higher expected return than this offer | {name} może nie zagrać ({role}); jeśli RotoWire go potwierdzi, jedna z jego linii miałaby wyższy oczekiwany zwrot niż ta oferta |
 
 ## 2. Prop reasons: price (economics)
 

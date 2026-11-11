@@ -199,6 +199,20 @@ def main_sides(values: pd.Series, line: float, over_odds, under_odds, proj_avg, 
     return out
 
 
+def line_title(row, status: str, sides: Dict, lang: str = 'en') -> str:
+    """The detail title of a priced line: 'name · side line stat @ odds' for the OBSTAW offer only; any other line
+    is an analysis, never a pick, and says so when both sides' estimated EV is negative (audit, package C4).
+    sides: main_sides of the line."""
+    side = f"{i18n.value(row['side'], lang)} {row['line']:g} {row['bet_type']} @ {row['side odds']:.2f}"
+    if status == 'OBSTAW':
+        return f"{row['name']} · {side}"
+    other = (sides or {}).get('Under' if row['side'] == 'Over' else 'Over', {}).get('ev')
+    if row['ev net 100'] < 0 and _known(other) and other < 0:
+        return i18n.t('detail.analysis_both_negative', lang, name=row['name'], side=side, ev=row['ev net 100'],
+                      ev_other=other)
+    return i18n.t('detail.analysis', lang, name=row['name'], side=side, ev=row['ev net 100'])
+
+
 def _margin(result: str) -> float:
     """The final margin of a 'W120-110' / 'L106-114' result (positive)."""
     match = re.search(r'(\d+)-(\d+)', str(result or ''))
@@ -365,8 +379,9 @@ def mispricing_reasons(signals: List[Dict], stat: str, side: str, lang: str = 'e
             lines.append(i18n.t('mispricing.h2.ft_limit', lang))
         lines.append(i18n.t(key + ('why_' + s['side'].lower() if h == 'H6' else 'why'), lang))
         lines.append(i18n.t('mispricing.expiry.' + s['expires_when'], lang))
-        # only a tested hypothesis argues: for this line when its side is the one the signal favours
-        supports = None if s['status'] != ADMITTED else (s['bet_type'] == stat and s['side'] == side)
+        # only a tested hypothesis argues, and only about this very offer: for it when it favours its side,
+        # against when it favours the other; a signal about another offer has no direction here (audit F-11)
+        supports = None if s['status'] != ADMITTED or not this_offer else s['side'] == side
         reason = _reason(supports, "  \n".join(lines), value=100 * s['p_ours'], reference=100 * s['p_book'],
                          n=s['n'], as_of=s['as_of'], source=f"{SUPERBET} · {ESPN}", kind=MISPRICING, group=h,
                          validation=s['status'])
@@ -380,7 +395,8 @@ CONTEXT_GROUPS = ('history', 'minutes_role', 'opportunity', 'environment', 'oppo
 
 def panel_layout(reasons: List[Dict]) -> Dict:
     """Where each reason goes in the verdict panel (components.reasons_panel; no Streamlit, so it can be tested):
-    economics, drivers (the projection and its inputs), mispricing (admitted hypotheses only: they argue),
+    economics, drivers (the projection and its inputs), mispricing (admitted hypotheses about this offer only: they
+    argue; one about another offer is research),
     context [(group, reasons)] in CONTEXT_GROUPS order, warnings, flags, and research [(offer, reasons)]: every
     hypothesis not admitted, by the offer it is about (this offer's first), so several hypotheses about one offer
     read as one group resting on one price, not as separate confirmations. Order within a section is kept."""
@@ -391,7 +407,7 @@ def panel_layout(reasons: List[Dict]) -> Dict:
     other = [r for r in context if r.get('group') not in CONTEXT_GROUPS]
     research, offers = {}, []
     for r in of(MISPRICING):
-        if r.get('validation') == ADMITTED:
+        if r.get('validation') == ADMITTED and r.get('this_offer', True):
             continue
         about = r.get('about', (r.get('group'),))[:2]
         if about not in research:
@@ -399,7 +415,7 @@ def panel_layout(reasons: List[Dict]) -> Dict:
             research[about] = []
         research[about].append(r)
     return {'economics': of(ECONOMICS), 'drivers': of(DRIVER),
-            'mispricing': [r for r in of(MISPRICING) if r.get('validation') == ADMITTED],
+            'mispricing': [r for r in of(MISPRICING) if r.get('validation') == ADMITTED and r.get('this_offer', True)],
             'context': [(g, rs) for g, rs in groups if rs] + ([('other', other)] if other else []),
             'warnings': of(WARNING), 'flags': [r for r in reasons if r['flag']],
             'research': [(about, research[about]) for _, _, about in sorted(offers)]}

@@ -258,9 +258,8 @@ def test_A_mispricing_needed_pp_includes_margin_and_tax():
     assert sig['clears'] == (sig['p_ours'] >= 1 / (0.88 * odds))
 
 
-@pytest.mark.xfail(strict=True, reason="F-11: once a hypothesis is admitted, a signal about another line (a combo "
-                                       "shown on its part) becomes an argument AGAINST the offer it's shown on")
 def test_A_admitted_signal_about_another_line_has_no_direction_on_this_one():
+    """F-11 (fixed in package C): a signal about another offer gets no direction on this one."""
     sig = {'hypothesis': 'H1', 'mechanism': 'B', 'status': 'admitted', 'exploration': None, 'bet_type': 'PR',
            'line': 30.5, 'parts': [('PTS', 23.5), ('REB', 6.5)], 'side': 'Over', 'p_ours': 0.62, 'p_book': 0.5,
            'gap_pp': 12.0, 'needed_pp': 7.0, 'clears': True, 'odds': 1.9, 'n': 20, 'as_of': FETCHED,
@@ -341,18 +340,15 @@ def _decide(rows, threshold=None):
     return decisions.player_decision(pd.DataFrame(rows), 'fitted', lu, FETCHED, NOW, threshold)
 
 
-@pytest.mark.xfail(strict=True, reason="F-01: a questionable player's line (already red-flagged, so it can never "
-                                       "qualify) with the best EV makes the whole game CZEKAJ and hides a clean "
-                                       "qualifying offer")
 def test_7_questionable_player_does_not_hide_a_clean_qualifying_offer():
+    """F-01 (fixed in package C)."""
     rows = [_line('A', ev=10.0, edge=5.0, role='Ques 50%', flag='RotoWire: Ques 50%: may sit'),
             _line('B', ev=6.0, edge=3.0)]
     assert _decide(rows, threshold=1.0)['status'] == decisions.OBSTAW
 
 
-@pytest.mark.xfail(strict=True, reason="F-01: with no admitted threshold no lineup can lead to OBSTAW, yet a "
-                                       "questionable top line says 'wait for the lineup'")
 def test_7_without_a_threshold_a_questionable_player_is_not_a_reason_to_wait():
+    """F-01 (fixed in package C): the questionable player is a note beside 'no threshold'."""
     d = _decide([_line('A', ev=-2.0, role='Ques 50%', flag='x'), _line('B', ev=-6.0)])
     assert d['reason'] == 'decision.reason.no_threshold'
 
@@ -362,11 +358,11 @@ def test_7_blockers_are_applied_before_choosing_the_offer():
     assert d['status'] == decisions.OBSTAW and d['offer']['name'] == 'B'
 
 
-def test_7_documents_that_a_tie_is_reported_as_wait():
-    """F-15: two equal offers give CZEKAJ ('Wait'), whose other reasons all mean 'data not current'; no new data
-    will break the tie."""
+def test_7_a_tie_is_its_own_status_not_wait():
+    """F-15 (fixed in package C): two equal offers give REMIS ('No single choice'), not CZEKAJ ('Wait')."""
     d = _decide([_line('A', ev=6.0, edge=3.0), _line('B', ev=6.05, edge=3.1)], threshold=1.0)
-    assert d['status'] == decisions.CZEKAJ and d['reason'] == 'decision.reason.tie'
+    assert d['status'] == decisions.REMIS and d['reason'] == 'decision.reason.tie'
+    assert decisions.TIE_EV == 0.1                                       # the tolerance itself is unchanged
 
 
 def test_7_the_decision_never_reads_the_reasons():
@@ -375,8 +371,10 @@ def test_7_the_decision_never_reads_the_reasons():
     assert 'prop_reasons' not in inspect.getsource(decisions.player_decision)
 
 
-def test_7_not_chosen_is_worded_as_another_offer_not_as_unprofitable():
-    assert i18n.TEXTS['decision.reason.other_offer']['en'] == "Another offer of this game is the one evaluated"
+def test_7_not_chosen_is_worded_apart_from_not_qualifying():
+    """Package C4: a line that meets the condition but isn't chosen is told apart from one that doesn't meet it."""
+    assert "Not chosen doesn't mean unprofitable" in i18n.TEXTS['decision.reason.not_chosen']['en']
+    assert "doesn't meet the condition" in i18n.TEXTS['decision.reason.other_offer']['en']
 
 
 # ---------- B. small samples, missing data, colliding warnings ----------

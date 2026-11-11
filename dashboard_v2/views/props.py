@@ -18,7 +18,7 @@ from loaders import filtered_logs, player_logs, snapshot_history
 from metrics import STATS, hit_rates, percentile_band, rotowire_team, splits, team_rotation
 from mispricing import offer_signals
 from models import calibration_warning, load_calibration, top_up_logs
-from reasons import offer_context, prop_reasons
+from reasons import line_title, main_sides, offer_context, prop_reasons
 from tracking import PROP_KEY
 import whatif
 
@@ -121,11 +121,12 @@ def detail(row: pd.Series, changed=None):
     # the games the line was priced from (priced_props tops a player with few games up with last season's)
     games = top_up_logs(logs[logs['player_id_ESPN'] == pid], player_logs(), max(seasons), [pid]).sort_values('Date')
     stat, line = row['bet_type'], row['line']
-    side = f"{value(row['side'], lang)} {line:g} {stat} @ {row['side odds']:.2f}"
     decision = line_decision(row)
-    # only an OBSTAW offer is named as one; any other line shows its evaluated side and what it returns
-    st.markdown("### " + (f"{row['name']} · {side}" if decision['status'] == OBSTAW else
-                          t('detail.pass_title', lang, name=row['name'], side=side, ev=row['ev net 100'])))
+    # only an OBSTAW offer is named as one; any other line is an analysis of its evaluated side (and says when both
+    # sides lose on average)
+    sides = main_sides(games[stat] if len(games) else pd.Series(dtype=float), line, row['over_odds'],
+                       row['under_odds'], row['proj avg'], load_calibration(), row['cost profile'], row.get('p push %'))
+    st.markdown("### " + line_title(row, decision['status'], sides, lang))
     st.caption(f"{row['game']} · {pl_time(row['start_time'])} · "
                f"{value(row['RotoWire'], lang) or t('detail.not_listed', lang)}")
     verdict_tab, whatif_tab, mates_tab, history_tab, move_tab = st.tabs(

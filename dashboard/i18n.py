@@ -1163,8 +1163,15 @@ TEXTS: Dict[str, Dict[str, str]] = {
                      "📋 Każdy mecz poprawiony o składy z RotoWire ({confirmed} z {total} potwierdzonych)."),
 
     # the selected line
-    'detail.pass_title': _w("{name} · {side} (evaluated side, {ev:+.1f} per 100 after tax)",
-                            "{name} · {side} (oceniana strona, {ev:+.1f} zł na 100 po podatku)"),
+    # a line that isn't the OBSTAW offer: an analysis, never a pick (audit, package C4)
+    'detail.analysis': _w("Analysis: {name} · {side} (the evaluated side, estimated EV {ev:+.1f} per 100 after "
+                          "costs; not an offer)",
+                          "Analiza: {name} · {side} (oceniana strona, szacowane EV {ev:+.1f} zł na 100 po kosztach; "
+                          "to nie oferta)"),
+    'detail.analysis_both_negative': _w("Analysis: {name} · {side}; both sides have a negative estimated EV "
+                                        "({ev:+.1f} and {ev_other:+.1f} per 100 after costs)",
+                                        "Analiza: {name} · {side}; obie strony mają ujemne szacowane EV ({ev:+.1f} "
+                                        "i {ev_other:+.1f} zł na 100 po kosztach)"),
     'detail.not_listed': _w("not on RotoWire yet", "jeszcze nie ma w RotoWire"),
     'detail.tab.verdict': _w("Verdict", "Werdykt"),
     'detail.tab.mates': _w("Teammates (with / without)", "Koledzy (z / bez)"),
@@ -1247,6 +1254,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
     # the verdict panel (components.reasons_panel)
     'decision.OBSTAW': _w("Bet", "Obstaw"), 'decision.NIE_OBSTAWIAJ': _w("Don't bet", "Nie obstawiaj"),
     'decision.CZEKAJ': _w("Wait", "Czekaj"), 'decision.NIEDOSTEPNE': _w("Unavailable", "Niedostępne"),
+    'decision.REMIS': _w("No single choice", "Brak jednoznacznego wyboru"),
     'decision.teams': _w("Team markets", "Rynki drużynowe"), 'decision.players': _w("Players", "Zawodnicy"),
     'decision.reason.game_model': _w("The game model isn't admitted: on the settled nights it predicted worse than the "
                                      "bookmaker's margin-free price", "Model meczów nie jest dopuszczony: na "
@@ -1261,19 +1269,36 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                                                                        "pobierz je ponownie"),
     'decision.reason.no_lineup': _w("RotoWire doesn't list the lineup of {teams} yet", "RotoWire nie podaje "
                                                                                        "jeszcze składu {teams}"),
-    'decision.reason.questionable': _w("{name} may not play ({role}): wait for the lineup",
-                                       "{name} może nie zagrać ({role}): poczekaj na skład"),
+    'decision.reason.questionable': _w("{name} may not play ({role}), and only his lines would meet the condition: "
+                                       "his lineup can change the decision",
+                                       "{name} może nie zagrać ({role}), a tylko jego linie spełniłyby warunek: jego "
+                                       "skład może zmienić decyzję"),
     'decision.reason.no_threshold': _w("No offer can qualify: there's no edge threshold yet that was checked on "
                                        "nights not used to choose it",
                                        "Żadna oferta nie może się zakwalifikować: nie ma jeszcze progu przewagi "
                                        "sprawdzonego na nocach, których nie użyto do jego wyboru"),
     'decision.reason.no_offer': _w("No offer has an edge after tax of {threshold:+.1f} pp or more",
                                    "Żadna oferta nie ma przewagi po podatku co najmniej {threshold:+.1f} pp"),
-    'decision.reason.tie': _w("Two offers tie on expected return: no arbitrary choice",
-                              "Dwie oferty mają równy oczekiwany zwrot: bez arbitralnego wyboru"),
+    'decision.reason.tie': _w("Equal offers: {first} and {second} meet the condition with expected returns less "
+                              "than {tie:g} per 100 apart, so neither is chosen arbitrarily",
+                              "Równorzędne oferty: {first} i {second} spełniają warunek, a ich oczekiwane zwroty "
+                              "różnią się o mniej niż {tie:g} na 100, więc żadna nie jest wybrana arbitralnie"),
     'decision.reason.meets': _w("Meets the recorded threshold", "Spełnia zapisany próg"),
-    'decision.reason.other_offer': _w("Another offer of this game is the one evaluated",
-                                      "Oceniana jest inna oferta tego meczu"),
+    'decision.reason.other_offer': _w("This line doesn't meet the condition; another offer of this game does",
+                                      "Ta linia nie spełnia warunku; spełnia go inna oferta tego meczu"),
+    'decision.reason.not_chosen': _w("This line meets the condition too, but another offer of this game has a higher "
+                                     "expected return: one offer per game. Not chosen doesn't mean unprofitable",
+                                     "Ta linia też spełnia warunek, ale inna oferta tego meczu ma wyższy oczekiwany "
+                                     "zwrot: jedna oferta na mecz. Niewybrana nie znaczy nieopłacalna"),
+    # beside a decision: worth knowing, doesn't change it (decisions.player_decision notes)
+    'decision.note.questionable': _w("{name} may not play ({role}): his lines are blocked until RotoWire confirms "
+                                     "him; that doesn't change this decision",
+                                     "{name} może nie zagrać ({role}): jego linie są zablokowane, dopóki RotoWire go "
+                                     "nie potwierdzi; to nie zmienia tej decyzji"),
+    'decision.note.questionable_better': _w("{name} may not play ({role}); if RotoWire confirms him, one of his lines "
+                                            "would have a higher expected return than this offer",
+                                            "{name} może nie zagrać ({role}); jeśli RotoWire go potwierdzi, jedna z "
+                                            "jego linii miałaby wyższy oczekiwany zwrot niż ta oferta"),
     'decision.odds_at': _w("odds from {time}", "kurs z {time}"),
     'decision.lineup_at': _w("lineup from {time}", "skład z {time}"),
     'decision.lineup_unknown': _w("no lineup time", "brak czasu składu"),

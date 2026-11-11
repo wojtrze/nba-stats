@@ -46,7 +46,8 @@ def slip_button(bet: Dict, key: str, where=st):
 
 
 # how each decision status is shown (decisions.py); the words are i18n's 'decision.<status>'
-STATUS_COLOURS = {'OBSTAW': 'green', 'NIE_OBSTAWIAJ': 'gray', 'CZEKAJ': 'orange', 'NIEDOSTEPNE': 'gray'}
+STATUS_COLOURS = {'OBSTAW': 'green', 'NIE_OBSTAWIAJ': 'gray', 'CZEKAJ': 'orange', 'REMIS': 'blue',
+                  'NIEDOSTEPNE': 'gray'}
 
 
 def local_time(when) -> str:
@@ -61,10 +62,12 @@ def local_time(when) -> str:
 
 
 def decision_text(decision: Dict, lang: str = 'en') -> str:
-    """'**Don't bet** · why' for a decision (decisions.py), coloured by its status."""
+    """'**Don't bet** · why' for a decision (decisions.py), coloured by its status, with its notes (worth knowing,
+    they don't change it) on lines of their own."""
     word = t(f"decision.{decision['status']}", lang)
     why = t(decision['reason'], lang, **decision.get('values', {}))
-    return f":{STATUS_COLOURS[decision['status']]}[**{word}**] · {why}"
+    notes = ''.join(f"  \n:gray[ℹ️ {t(key, lang, **values)}]" for key, values in decision.get('notes') or [])
+    return f":{STATUS_COLOURS[decision['status']]}[**{word}**] · {why}{notes}"
 
 
 def decision_times(decision: Dict, lang: str = 'en') -> str:
