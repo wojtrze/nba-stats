@@ -146,7 +146,9 @@ def fetch_superbet() -> Optional[str]:
         done(1, f"failed: {e}"[:200])
         return store['error']
     try:
-        counts = save_superbet(offers, rotowire_lineups(), started.strftime('%Y-%m-%dT%H:%M:%SZ'))
+        rotowire = fetch_rotowire()
+        counts = save_superbet(offers, rotowire['lineups'], started.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                               lineup_at=rotowire['fetched_at'])
     except Exception as e:
         log.error("Superbet's offers were fetched but couldn't be saved: %s", e)
         store['error'] = f"fetched, but couldn't be saved: {e}"

@@ -1,9 +1,11 @@
 """Reasons for and against an offer in plain words (no Streamlit, so it can be tested). They're written after the
 decision (decisions.py) and explain it: how many there are never changes it.
 
-Every reason is {'supports': True / False / None, 'direction': 'for' / 'against' / None, 'text', 'flag', 'kind',
-'group', 'used_by_model', 'impact_pp', 'validation', 'value', 'reference', 'n', 'as_of', 'source'}. kind says what
-sort of claim it is:
+Every reason is {'key', 'supports': True / False / None, 'direction': 'for' / 'against' / None, 'text', 'flag',
+'kind', 'group', 'used_by_model', 'impact_pp', 'validation', 'verified', 'feature', 'value', 'reference', 'n',
+'as_of', 'source'}. key is the i18n key of its main text, the same in every language (what reason_log.py records);
+feature and verified belong to context reasons (the tested feature, and whether its test's metadata matches the
+current code: lift_status). kind says what sort of claim it is:
   economics  the price: the model's chance against what the odds need after the cost profile's tax
   driver     an input the model used, with how much it moved the final (calibrated) chance: impact_pp
   context    what the player's games show that the model doesn't use; validation says whether it predicted results
@@ -48,14 +50,18 @@ def _known(value) -> bool:
 
 def _reason(supports, text: str, flag: bool = False, value=None, reference=None, n=None, as_of=None,
             source=None, kind: str = CONTEXT, group: Optional[str] = None, used_by_model: bool = False,
-            impact_pp=None, validation: Optional[str] = None) -> Dict:
+            impact_pp=None, validation: Optional[str] = None, key: Optional[str] = None,
+            feature: Optional[str] = None, verified: Optional[bool] = None) -> Dict:
+    """key: the i18n key of the reason's main text (the same in every language: what the reason log records);
+    feature: the context feature backtest/reason_lift.py tests; verified: whether that test's metadata matches the
+    current model and feature definitions (lift_status; None when there's no test)."""
     # numpy comparisons give np.bool_, which `is True` doesn't match
     supports = None if supports is None else bool(supports)
     kind = BLOCKER if flag else kind
-    return {'supports': supports, 'direction': None if supports is None else 'for' if supports else 'against',
-            'text': text, 'flag': flag, 'kind': kind, 'group': group, 'used_by_model': used_by_model,
-            'impact_pp': impact_pp, 'validation': validation, 'value': value, 'reference': reference, 'n': n,
-            'as_of': as_of, 'source': source}
+    return {'key': key, 'supports': supports, 'direction': None if supports is None else 'for' if supports else
+            'against', 'text': text, 'flag': flag, 'kind': kind, 'group': group, 'used_by_model': used_by_model,
+            'impact_pp': impact_pp, 'validation': validation, 'verified': verified, 'feature': feature,
+            'value': value, 'reference': reference, 'n': n, 'as_of': as_of, 'source': source}
 
 
 def complete(reason: Dict) -> bool:
@@ -83,13 +89,47 @@ def _last(dates) -> object:
 # signed for Over (higher = more Over); NaN where there's too little to say ---
 
 def lift_status(path: str = LIFT_FILE) -> Dict[str, Dict]:
-    """backtest/reason_lift.py's verdict per context feature: {feature: {'status', 'over_sign', ...}}; {} when it
-    hasn't been run (every context reason is then 'untested')."""
+    """backtest/reason_lift.py's verdict per context feature: {feature: {'status', 'over_sign', ..., 'verified',
+    'problems'}}; {} when it hasn't been run (every context reason is then 'untested').
+
+    verified: the file's metadata (lift_check) matches the current model and the feature's current definition.
+    An unverified verdict is still shown (marked as such), but never gives a context reason a direction (audit E):
+    a test of another model or of another feature definition says nothing about this one."""
     try:
         with open(path, encoding='utf-8') as f:
-            return json.load(f).get('features', {})
+            saved = json.load(f)
     except (OSError, ValueError):
         return {}
+    common = lift_check(saved)
+    definitions = lift_definitions()
+    meta_features = (saved.get('meta') or {}).get('features') or {}
+    out = {}
+    for feature, verdict in (saved.get('features') or {}).items():
+        problems = list(common)
+        if feature in definitions and meta_features.get(feature, {}).get('definition') != definitions[feature]:
+            problems.append('definition')
+        out[feature] = dict(verdict, verified=not problems, problems=problems)
+    return out
+
+
+# the reason_lift.json format (its 'meta'); a file of another schema is never verified
+LIFT_SCHEMA = 1
+
+
+def lift_check(saved: Dict) -> List[str]:
+    """What keeps a reason_lift.json from being verified against the current code: 'meta' (no metadata, e.g. a
+    file written before it was saved), 'schema', 'model' (tested with another MODEL_VERSION). [] = matches. The
+    feature definitions are checked one by one in lift_status."""
+    from models import MODEL_VERSION
+    meta = saved.get('meta')
+    if not isinstance(meta, dict):
+        return ['meta']
+    problems = []
+    if meta.get('schema_version') != LIFT_SCHEMA:
+        problems.append('schema')
+    if meta.get('model_version') != MODEL_VERSION:
+        problems.append('model')
+    return problems
 
 
 def current_stint(games: pd.DataFrame) -> pd.DataFrame:
@@ -154,6 +194,21 @@ def feature_volume(stint: pd.DataFrame, stat: str, recent: int = 5) -> float:
         return np.nan
     now, before = _per_minute(stint.tail(recent), column), _per_minute(stint.iloc[:-recent], column)
     return now / before - 1 if _known(before) and before > 0 and _known(now) else np.nan
+
+
+# the function behind each tested feature (backtest/reason_lift.FEATURES)
+FEATURE_FUNCTIONS = {'hits_l10': feature_hits, 'minutes': feature_minutes, 'venue': feature_venue,
+                     'rest': feature_rest, 'vs_opp': feature_vs_opp, 'volume': feature_volume}
+
+
+def lift_definitions() -> Dict[str, str]:
+    """A fingerprint of each tested feature's definition: its function's source with the helpers and constants it
+    uses. reason_lift.json saves them; a feature whose definition changed since its test isn't verified."""
+    import hashlib
+    import inspect
+    shared = inspect.getsource(current_stint) + inspect.getsource(_per_minute) + repr((MIN_GAMES, sorted(SHOT_STATS)))
+    return {name: hashlib.sha256((inspect.getsource(fn) + shared).encode()).hexdigest()[:12]
+            for name, fn in FEATURE_FUNCTIONS.items()}
 
 
 # --- the model's drivers: how much each input moved the final chance ---
@@ -384,9 +439,18 @@ def mispricing_reasons(signals: List[Dict], stat: str, side: str, lang: str = 'e
         supports = None if s['status'] != ADMITTED or not this_offer else s['side'] == side
         reason = _reason(supports, "  \n".join(lines), value=100 * s['p_ours'], reference=100 * s['p_book'],
                          n=s['n'], as_of=s['as_of'], source=f"{SUPERBET} · {ESPN}", kind=MISPRICING, group=h,
-                         validation=s['status'])
+                         validation=s['status'], key=f"mispricing.{h.lower()}")
         reasons.append(reason | {'about': (s['bet_type'], float(s['line']), s['side']), 'this_offer': this_offer})
     return reasons
+
+
+def validation_label(reason: Dict, lang: str = 'en') -> str:
+    """What the context reason's test said ('panel.validation.*'), marked when the test's metadata doesn't match
+    the current model or feature definition (lift_status: verified False). '' without a validation."""
+    if not reason.get('validation'):
+        return ''
+    text = i18n.t('panel.validation.' + reason['validation'], lang)
+    return text + (i18n.t('panel.validation.unverified', lang) if reason.get('verified') is False else '')
 
 
 # the context's sub-groups in the panel, in this order (reasons with another group go under 'other')
@@ -448,13 +512,16 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
     reasons = []
 
     def context(feature: str, value_for_over, text: str, **kw):
-        """A context reason: for or against only if the feature predicted results beyond the model."""
+        """A context reason: for or against only if the feature predicted results beyond the model, in a test
+        whose metadata matches the current model and feature definitions (lift_status: 'verified')."""
         verdict = lifts.get(feature, {})
         status = verdict.get('status', UNTESTED)
+        verified = verdict.get('verified', True) if feature in lifts else None
         supports = None
-        if status == LIFT and _known(value_for_over) and value_for_over != 0:
+        if status == LIFT and verified and _known(value_for_over) and value_for_over != 0:
             supports = favours(value_for_over * verdict.get('over_sign', 1) > 0)
-        reasons.append(_reason(supports, text, kind=CONTEXT, validation=status, **kw))
+        reasons.append(_reason(supports, text, kind=CONTEXT, validation=status, feature=feature, verified=verified,
+                               **kw))
 
     def driver(group: str, text: str, **kw):
         impact = impacts.get(group)
@@ -474,7 +541,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                                                           odds=bet['odds'], be=be, edge=bet['edge pp'], ev=ev,
                                                           tax=tax),
                                value=bet['model %'], reference=be, as_of=odds_at, source=f"{MODEL} · {SUPERBET}",
-                               kind=ECONOMICS, group='price', used_by_model=True))
+                               kind=ECONOMICS, group='price', used_by_model=True, key=key))
     if _known(impacts.get('beyond_price')) and _known(bet.get('market over %')):
         market = bet['market over %'] if over else 100 - bet['market over %']
         reasons.append(_reason(None, i18n.t('reason.beyond_price', lang, side=side, market=market,
@@ -484,7 +551,8 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                                             final=impacts['final'],
                                             beyond=round(impacts['final'], 1) - round(impacts['price'], 1)),
                                value=impacts['final'], reference=impacts['price'], as_of=odds_at,
-                               source=f"{MODEL} · {SUPERBET}", kind=ECONOMICS, group='price', used_by_model=True))
+                               source=f"{MODEL} · {SUPERBET}", kind=ECONOMICS, group='price', used_by_model=True,
+                               key='reason.beyond_price'))
 
     # --- the model's drivers ---
     if n:
@@ -492,7 +560,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
         reasons.append(_reason(None, i18n.t('reason.expected', lang, proj=proj, stat=stat, line=line, diff=proj - line,
                                             avg=bet['avg'], median=values.median()) + _sample_note(games, lang),
                                value=proj, reference=line, n=n, as_of=played_through, source=f"{MODEL} · {ESPN}",
-                               kind=DRIVER, group='projection', used_by_model=True))
+                               kind=DRIVER, group='projection', used_by_model=True, key='reason.expected'))
 
     adj = bet.get('lineup adj', 0) or 0
     absences = bet.get('absences')
@@ -510,23 +578,24 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                 text += i18n.t('reason.teammates_unknown', lang, names=_mate_names(unknown, lang))
             driver('availability', text, value=bet['avg'] + adj, reference=bet['avg'],
                    n=min(a['n_without'] for a in estimated), as_of=bet.get('lineup_at'),
-                   source=f"{ROTOWIRE} · {ESPN}")
+                   source=f"{ROTOWIRE} · {ESPN}", key='reason.teammates')
         elif unknown:
             reasons.append(_reason(None, i18n.t('warn.absence_unknown', lang, names=_mate_names(unknown, lang)),
-                                   kind=WARNING, group='availability'))
+                                   kind=WARNING, group='availability', key='warn.absence_unknown'))
     elif adj and bet.get('out_names'):
         # a caller without the breakdown: the total and the games it rests on
         driver('availability', i18n.t('reason.teammates', lang, names=', '.join(bet['out_names']), adj=adj,
                                       stat=stat, parts=i18n.t('reason.teammates_fewest', lang,
                                                               n=bet.get('out_n') or 0)),
                value=bet['avg'] + adj, reference=bet['avg'], n=bet.get('out_n'), as_of=bet.get('lineup_at'),
-               source=f"{ROTOWIRE} · {ESPN}")
+               source=f"{ROTOWIRE} · {ESPN}", key='reason.teammates')
 
     implied, usual = bet.get('implied'), bet.get('team_pts')
     if _known(implied) and _known(usual) and usual:
         driver('environment', i18n.t('reason.environment', lang, team=bet['team'].upper(), implied=implied,
                                      usual=usual),
-               value=implied, reference=usual, n=bet.get('team_games'), as_of=odds_at, source=f"{SUPERBET} · {ESPN}")
+               value=implied, reference=usual, n=bet.get('team_games'), as_of=odds_at, source=f"{SUPERBET} · {ESPN}",
+               key='reason.environment')
 
     m = bet.get('matchup') or {}
     if m:
@@ -536,7 +605,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                                   more=i18n.t('reason.more' if m['diff'] > 0 else 'reason.fewer', lang),
                                   rank=m['rank'], teams=m['teams'], word=i18n.value(m['word'], lang)),
                value=m['value'], reference=m['average'], n=m.get('games'),
-               as_of=bet.get('stats_through') or played_through, source=ESPN)
+               as_of=bet.get('stats_through') or played_through, source=ESPN, key='reason.matchup')
 
     # --- context: what the games show that the model doesn't use (or uses only as part of its hit rate) ---
     if n >= 3:
@@ -555,7 +624,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
         context('hits_l10', feature_hits(values, line, bet.get('market over %', np.nan) / 100
                                          if _known(bet.get('market over %')) else np.nan),
                 text, group='history', value=100 * hits / len(last), reference=be, n=n, as_of=played_through,
-                source=ESPN)
+                source=ESPN, key='reason.history_last')
 
     if len(stint) >= MIN_GAMES and 'MIN' in stint:
         recent, earlier = stint['MIN'].tail(5), stint['MIN'].iloc[:-5]
@@ -569,7 +638,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                 blowouts = int((short['Result'].map(_margin) >= 20).sum()) if 'Result' in short else 0
                 text += i18n.t('reason.minutes_short', lang, short=len(short), fouls=fouls, blowouts=blowouts)
             context('minutes', feature_minutes(stint), text, group='minutes_role', value=recent.mean(),
-                    reference=earlier.mean(), n=len(stint), as_of=played_through, source=ESPN)
+                    reference=earlier.mean(), n=len(stint), as_of=played_through, source=ESPN, key='reason.minutes')
 
     if 'starter' in games and n and bet.get('status'):
         tonight = 'starter' if bet['status'].startswith('starter') else 'bench' if bet['status'] == 'bench' else None
@@ -579,17 +648,18 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                                                 role=i18n.value(tonight, lang)),
                                    value=int(last.sum()), reference=len(last), n=len(last),
                                    as_of=bet.get('lineup_at') or played_through, source=f"{ESPN} · {ROTOWIRE}",
-                                   kind=CONTEXT, group='minutes_role', validation=UNTESTED))
+                                   kind=CONTEXT, group='minutes_role', validation=UNTESTED, key='reason.role',
+                                   feature='role'))
             share = last.mean()
             if (tonight == 'starter' and share <= 0.3) or (tonight == 'bench' and share >= 0.7):
                 reasons.append(_reason(None, i18n.t('warn.role', lang, started=int(last.sum()), n=len(last),
                                                     role=i18n.value(tonight, lang)),
-                                       kind=WARNING, group='minutes_role'))
+                                       kind=WARNING, group='minutes_role', key='warn.role'))
 
     if n and 'team' in games and len(stint) < min(MIN_GAMES, n):
         reasons.append(_reason(None, i18n.t('warn.stint', lang, k=len(stint), n=n,
                                             team=str(games['team'].iloc[-1]).upper()),
-                               kind=WARNING, group='minutes_role'))
+                               kind=WARNING, group='minutes_role', key='warn.stint'))
 
     if stat in SHOT_STATS | {'3PM'} and len(stint) >= MIN_GAMES and {'FGA', '3PA', 'FTA', 'FGM', '3PM', 'FTM',
                                                                      'MIN'} <= set(stint.columns):
@@ -605,7 +675,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                            ft=made(recent, 'FTM', 'FTA'), fg0=made(earlier, 'FGM', 'FGA'),
                            tp0=made(earlier, '3PM', '3PA'), ft0=made(earlier, 'FTM', 'FTA'), attempts=attempts),
                     group='opportunity', value=per36(recent, 'FGA'), reference=per36(earlier, 'FGA'),
-                    n=len(stint), as_of=played_through, source=ESPN)
+                    n=len(stint), as_of=played_through, source=ESPN, key='reason.volume')
 
     if _known(bet.get('home')) and n >= 6:
         where = 'home' if bet['home'] else 'away'
@@ -615,7 +685,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                     i18n.t('reason.home' if bet['home'] else 'reason.away', lang, value=part.mean(), n=len(part),
                            avg=values.mean()),
                     group='environment', value=part.mean(), reference=values.mean(), n=len(part),
-                    as_of=played_through, source=ESPN)
+                    as_of=played_through, source=ESPN, key='reason.home' if bet['home'] else 'reason.away')
 
     rest, opp_rest = bet.get('rest_days'), bet.get('opp_rest')
     if _known(rest) and _known(opp_rest) and n:
@@ -627,14 +697,14 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                 i18n.t('reason.rest', lang, team=bet['team'].upper(), rest=days(rest), opp=bet['opp'].upper(),
                        opp_rest=days(opp_rest), name=name, m3=within(3), m7=within(7)),
                 group='environment', value=min(rest, 3), reference=min(opp_rest, 3), n=n, as_of=played_through,
-                source=ESPN)
+                source=ESPN, key='reason.rest')
 
     if len(history) >= 2 and lifts.get('vs_opp', {}).get('status') == LIFT:
         context('vs_opp', feature_vs_opp(history, stat, line, values.std()),
                 i18n.t('reason.vs_opp', lang, opp=bet['opp'].upper(), avg=history[stat].mean(), stat=stat,
                        n=len(history)),
                 group='opponent', value=history[stat].mean(), reference=line, n=len(history),
-                as_of=_last(history['Date']) if 'Date' in history else None, source=ESPN)
+                as_of=_last(history['Date']) if 'Date' in history else None, source=ESPN, key='reason.vs_opp')
 
     spread = bet.get('spread')
     if _known(spread) and abs(spread) >= 10 and bet.get('starter') and 'Result' in games and 'MIN' in games:
@@ -646,7 +716,8 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                            team=bet['team'].upper(), spread=abs(spread), big=big.mean(), n_big=len(big),
                            close=close.mean(), n_close=len(close)),
                     group='environment', value=big.mean(), reference=close.mean(), n=len(games), as_of=odds_at,
-                    source=f"{SUPERBET} · {ESPN}")
+                    source=f"{SUPERBET} · {ESPN}",
+                    key='reason.blowout_favoured' if spread < 0 else 'reason.blowout_underdogs')
 
     open_line = bet.get('open_line')
     if _known(open_line):
@@ -654,6 +725,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
             if _known(bet.get('start_time')) and _known(odds_at) else np.nan
         move = line - open_line
         open_odds = bet.get('open_over') if over else bet.get('open_under')
+        key = 'reason.line_moved' if move else 'reason.odds_moved'
         if move:
             text = i18n.t('reason.line_moved', lang, move=move, open=open_line, line=line)
         elif _known(open_odds) and _known(bet.get('odds')) and abs(open_odds - bet['odds']) > 1e-9:
@@ -667,21 +739,21 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
             if _known(hours):
                 text += i18n.t('reason.before_tip', lang, hours=hours)
             reasons.append(_reason(None, text, value=line, reference=open_line, n=bet.get('snapshots'),
-                                   as_of=odds_at, source=SUPERBET, kind=CONTEXT, group='market'))
+                                   as_of=odds_at, source=SUPERBET, kind=CONTEXT, group='market', key=key))
 
     if signals:
         reasons += mispricing_reasons(signals, stat, bet['side'], lang, bet)
 
     if bet.get('lineup_status') == 'expected':
         reasons.append(_reason(None, i18n.t('warn.lineup_expected', lang, team=bet['team'].upper()), kind=WARNING,
-                               group='availability'))
+                               group='availability', key='warn.lineup_expected'))
 
     # blockers: an offer with one can't get OBSTAW (the tables show them as 🔴)
     preseason_only = bool(n and 'season_type' in games and (games['season_type'] == 'pre').all())
     minutes = games['MIN'] if n else pd.Series(dtype=float)
-    reasons += [_reason(False, text, flag=True) for text in
-                prop_flags(n, preseason_only, bet.get('play_pct'), bet.get('status'), minutes, bet.get('line_move'),
-                           bet['side'], lang)]
+    reasons += [_reason(False, i18n.t(key, lang, **values), flag=True, key=key) for key, values in
+                prop_flag_items(n, preseason_only, bet.get('play_pct'), bet.get('status'), minutes,
+                                bet.get('line_move'), bet['side'])]
     return [r for r in reasons if complete(r)]
 
 
@@ -758,7 +830,7 @@ def game_reasons(outcome: Dict, ctx: Dict, lang: str = 'en') -> List[Dict]:
     reasons = [_reason(edge > 0, i18n.t('game.model', lang, model=outcome['model %'], be=be, odds=outcome['odds'],
                                         edge=edge),
                        value=outcome['model %'], reference=be, n=played, as_of=odds_at, source=f"{MODEL} · {SUPERBET}",
-                       kind=ECONOMICS, group='price', used_by_model=True)]
+                       kind=ECONOMICS, group='price', used_by_model=True, key='game.model')]
     league = r[['off_rtg', 'def_rtg', 'pace']].mean()
     # the game model's inputs (it isn't admitted: these explain its estimate, not a bet)
     rated = dict(n=played, as_of=through, source=f"{MODEL} · {ESPN}", kind=DRIVER, group='projection',
@@ -773,11 +845,11 @@ def game_reasons(outcome: Dict, ctx: Dict, lang: str = 'en') -> List[Dict]:
         spread_part = i18n.t('game.covering' if cover > 0 else 'game.missing', lang, line=line, gap=abs(cover)) \
             if market == 'SPREAD' and pd.notna(line) else ""
         reasons.append(_reason(cover > 0, i18n.t('game.projection', lang, team=team.upper(), what=what) + spread_part,
-                               value=margin, reference=-handicap, **rated))
+                               value=margin, reference=-handicap, key='game.projection', **rated))
         net = lambda tm: r.loc[tm, 'off_rtg'] - r.loc[tm, 'def_rtg']
         reasons.append(_reason(net(team) > net(opp), i18n.t('game.net', lang, team=team.upper(), net=net(team),
                                                             opp=opp.upper(), opp_net=net(opp)),
-                               value=net(team), reference=net(opp), **rated))
+                               value=net(team), reference=net(opp), key='game.net', **rated))
         for tm in (team, opp):
             for name, imp in ctx['absences'].get(tm, []):
                 swing = imp['pts_for'] - imp['pts_against']
@@ -786,19 +858,20 @@ def game_reasons(outcome: Dict, ctx: Dict, lang: str = 'en') -> List[Dict]:
                     reasons.append(_reason(helps, i18n.t('game.absence_margin', lang, team=tm.upper(), name=name,
                                                          swing=swing, n=imp['n_without']),
                                            value=swing, reference=0, n=imp['n_without'], as_of=through,
-                                           source=f"{ROTOWIRE} · {ESPN}", **absent))
+                                           source=f"{ROTOWIRE} · {ESPN}", key='game.absence_margin', **absent))
     else:
         over = side == 'over'
         expected = {'TOTAL': p['total'], 'HOME_TOTAL': p['home_pts'], 'AWAY_TOTAL': p['away_pts']}[market]
         gap = expected - line
         reasons.append(_reason(gap > 0 if over else gap < 0,
                                i18n.t('game.projected_total', lang, expected=expected, line=line, gap=gap),
-                               value=expected, reference=line, **rated))
+                               value=expected, reference=line, key='game.projected_total', **rated))
         faster = p['pace'] - league['pace']
         reasons.append(_reason(None if abs(faster) < 1 else (faster > 0) == over,
                                i18n.t('game.pace_faster' if p['pace'] > league['pace'] else 'game.pace_slower', lang,
                                       pace=p['pace'], league=league['pace']),
-                               value=p['pace'], reference=league['pace'], **rated))
+                               value=p['pace'], reference=league['pace'],
+                               key='game.pace_faster' if p['pace'] > league['pace'] else 'game.pace_slower', **rated))
         teams = {'TOTAL': (home, away), 'HOME_TOTAL': (home,), 'AWAY_TOTAL': (away,)}[market]
         for tm in teams:
             opp = away if tm == home else home
@@ -807,7 +880,7 @@ def game_reasons(outcome: Dict, ctx: Dict, lang: str = 'en') -> List[Dict]:
                                    i18n.t('game.attack', lang, team=tm.upper(), off=r.loc[tm, 'off_rtg'],
                                           opp=opp.upper(), defense=r.loc[opp, 'def_rtg'], league=league['off_rtg'],
                                           attack=attack),
-                                   value=attack, reference=0, **rated))
+                                   value=attack, reference=0, key='game.attack', **rated))
         for tm in (home, away):
             for name, imp in ctx['absences'].get(tm, []):
                 change = imp['pts_for'] + imp['pts_against'] if market == 'TOTAL' else \
@@ -817,19 +890,23 @@ def game_reasons(outcome: Dict, ctx: Dict, lang: str = 'en') -> List[Dict]:
                                            i18n.t('game.absence_points', lang, team=tm.upper(), name=name,
                                                   change=change, n=imp['n_without']),
                                            value=change, reference=0, n=imp['n_without'], as_of=through,
-                                           source=f"{ROTOWIRE} · {ESPN}", **absent))
+                                           source=f"{ROTOWIRE} · {ESPN}", key='game.absence_points', **absent))
 
-    reasons += [_reason(False, text, flag=True)
-                for text in game_flags(edge, played, ctx['rotowire'], lang)]
+    reasons += [_reason(False, i18n.t(key, lang), flag=True, key=key)
+                for key in game_flag_keys(edge, played, ctx['rotowire'])]
     return [reason for reason in reasons if complete(reason)]
+
+
+def game_flag_keys(edge_pp: float, games_played: int, rotowire: bool) -> List[str]:
+    """The i18n keys of game_flags."""
+    return (['gameflag.early'] if games_played < 5 else []) + ([] if rotowire else ['gameflag.no_lineup']) \
+        + (['gameflag.big_edge'] if edge_pp > 15 else [])
 
 
 def game_flags(edge_pp: float, games_played: int, rotowire: bool, lang: str = 'en') -> List[str]:
     """Warnings on a game market whatever its numbers say. games_played: the fewer of the two teams'
     current-season games; rotowire: RotoWire lists the game."""
-    keys = (['gameflag.early'] if games_played < 5 else []) + ([] if rotowire else ['gameflag.no_lineup']) \
-        + (['gameflag.big_edge'] if edge_pp > 15 else [])
-    return [i18n.t(key, lang) for key in keys]
+    return [i18n.t(key, lang) for key in game_flag_keys(edge_pp, games_played, rotowire)]
 
 
 def flag_game_outcomes(edges: pd.DataFrame, games_played: int, rotowire: bool, lang: str = 'en') -> pd.DataFrame:

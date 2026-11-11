@@ -1366,6 +1366,10 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'panel.validation.no_lift': _w("In the test so far, no added value was shown",
                                    "W dotychczasowym teście nie wykazano dodatkowej wartości"),
     'panel.validation.lift': _w("tested: predicted beyond the model", "testowane: przewidywało ponad model"),
+    # the test's metadata doesn't match the current model or feature definition (reasons.lift_status): kept for
+    # reference, never a direction
+    'panel.validation.unverified': _w(" (the test's match with the current model is unverified)",
+                                      " (zgodność testu z obecnym modelem niezweryfikowana)"),
     # an ADMITTED hypothesis (none yet) is shown with the reasons; the rest only as research (audit F-04)
     'panel.mispricing': _w("Tested hypotheses about Superbet's prices", "Sprawdzone hipotezy o cenach Superbetu"),
     'panel.mispricing_note': _w("Hypotheses admitted on nights their test hadn't seen (docs/hipotezy_wyceny.md).",

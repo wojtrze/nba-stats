@@ -111,3 +111,32 @@ def test_lineage_names_the_model_and_the_calibration(data_dir):
     with open(models.CALIBRATION_FILE, 'w') as f:
         json.dump(fitted | {'superbet_through': '2026-10-26'}, f)
     assert models.calibration_id() != first
+
+
+# --- audit package E: the snapshot writes its reason log once (synthetic records, no real result) ---
+
+def test_a_saved_fetch_logs_its_reasons_once(data_dir, monkeypatch):
+    import reason_log
+    from test_reason_log import VERSION, _records
+
+    def priced(props, game_odds, lineups, evaluation=None):
+        # what log_reasons reads; offer_records is replaced below, so these are placeholders
+        evaluation.update({k: None for k in ('decisions', 'scope', 'every_game', 'lineups', 'evaluated_at',
+                                             'version', 'profile', 'coef', 'lifts', 'statuses')})
+        evaluation.update(table='t', arts={'calibration': {'id': 'c1', 'content': {'coefficients': {'a': 1.0}}}})
+        return props.assign(player_id_ESPN=1), game_odds
+
+    monkeypatch.setattr(daily_snapshot, 'add_model_columns', priced)
+    records = _records()
+    monkeypatch.setattr(reason_log, 'offer_records', lambda *a, **kw: records)
+    offers = {'props': [{'name': 'A', 'name_ESPN': 'A', 'home': 'bos', 'away': 'ny', 'bet_type': 'PTS',
+                         'line': 20.5, 'event_id': 1, 'start_time': '2026-10-21T23:30:00Z', 'over_under': side,
+                         'odds': 1.9} for side in ('Over', 'Under')], 'game_odds': []}
+    daily_snapshot.save_superbet(offers, pd.DataFrame(), '2026-10-25T20:00:00Z', reasons='wait')
+    daily_snapshot.save_superbet(offers, pd.DataFrame(), '2026-10-25T20:00:00Z', reasons='wait')
+    log = reason_log.read(reason_log.log_path('2026-10-25T20:00:00Z'))
+    assert len(log) == 2 and {r['origin'] for r in log} == {'recorded'} and log[0]['versions'] == VERSION
+    assert os.path.exists(os.path.join('data', 'archive', 'calibration', 'c1.json'))
+    # 'off' saves the snapshot without a log
+    daily_snapshot.save_superbet(offers, pd.DataFrame(), '2026-10-26T20:00:00Z', reasons='off')
+    assert not os.path.exists(reason_log.log_path('2026-10-26T20:00:00Z'))

@@ -8,7 +8,7 @@ import streamlit as st
 
 from bets import describe
 from i18n import TEXTS, t
-from reasons import panel_layout
+from reasons import panel_layout, validation_label
 from schedule import no_offers_text
 
 
@@ -134,8 +134,7 @@ def reasons_panel(title: str, decision: Dict, reasons: List[Dict], games: Option
                     note = f" · _{t('panel.group_note.' + group, lang)}_" if f'panel.group_note.{group}' in TEXTS \
                         else ''
                     st.markdown(block(f"**{t('panel.group.' + group, lang)}**{note}", [
-                        item(r, f" · {t('panel.validation.' + r['validation'], lang)}" if r.get('validation') else '')
-                        for r in rows]))
+                        item(r, f" · {validation_label(r, lang)}" if r.get('validation') else '') for r in rows]))
         if layout['warnings']:
             st.markdown(block(f"**{t('panel.warnings', lang)}**", [f"- ℹ️ {r['text']}" for r in layout['warnings']]))
         if layout['flags']:
