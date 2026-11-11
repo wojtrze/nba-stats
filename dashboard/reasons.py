@@ -26,7 +26,8 @@ import numpy as np
 import pandas as pd
 
 import i18n
-from metrics import ACTIVE_PROFILE, alpha, calibrate, logit, no_vig, prop_probability, wilson_interval
+from metrics import (ACTIVE_PROFILE, alpha, calibrate, expected_return_100, logit, no_vig, prop_probability,
+                     wilson_interval)
 
 MIN_GAMES = 8
 ESPN, SUPERBET, ROTOWIRE, MODEL = 'ESPN', 'Superbet', 'RotoWire', 'model'
@@ -179,6 +180,25 @@ def driver_impacts(values: pd.Series, line: float, side: str, market: float, adj
             'opponent': p - final(adj_avg * pace)}
 
 
+def main_sides(values: pd.Series, line: float, over_odds, under_odds, proj_avg, coef: Optional[Dict], profile: str,
+               p_push_pct=None) -> Dict[str, Dict[str, float]]:
+    """The main model's calibrated chance (pp) and expected return per 100 for each quoted side of a line, the way
+    models.price_props prices them (the same functions and inputs; the evaluated side's equals its 'p win %'):
+    {'Over': {'p', 'ev'}, 'Under': {...}}. Lets a research hypothesis be set beside the main model on the same
+    offer. {} without games or a projection."""
+    if not len(values) or not _known(proj_avg):
+        return {}
+    push = p_push_pct / 100 if _known(p_push_pct) else 0.0
+    markets = dict(zip(['Over', 'Under'], no_vig(over_odds, under_odds)))
+    out = {}
+    for side, odds in (('Over', over_odds), ('Under', under_odds)):
+        if not (_known(odds) and _known(markets[side])):
+            continue
+        p = calibrate(prop_probability(values, line, side, markets[side], mean=proj_avg)['p'], markets[side], side, coef)
+        out[side] = {'p': 100 * p, 'ev': float(expected_return_100(p, odds, profile, push))}
+    return out
+
+
 def _margin(result: str) -> float:
     """The final margin of a 'W120-110' / 'L106-114' result (positive)."""
     match = re.search(r'(\d+)-(\d+)', str(result or ''))
@@ -256,10 +276,12 @@ def offer_context(row, games: pd.DataFrame, logs: pd.DataFrame, lineups: pd.Data
         impacts = driver_impacts(games[stat], line, side, _side_market(market_over, side), row['adj avg'],
                                  row['lineup adj'], row.get('pace factor'), row.get('matchup factor'), coef)
     profile = row.get('cost profile') or ACTIVE_PROFILE
+    sides = main_sides(games[stat] if len(games) else pd.Series(dtype=float), line, row.get('over_odds'),
+                       row.get('under_odds'), row.get('proj avg'), coef, profile, row.get('p push %'))
     return {'name': row['name'], 'stat': stat, 'side': side, 'line': line, 'odds': row.get('side odds'),
             'model %': row.get('p win %'), 'break-even %': row.get('break-even net %'),
             'edge pp': row.get('edge net pp'), 'ev': row.get('ev net 100'), 'tax': 100 * (1 - alpha(profile)),
-            'market over %': row.get('market over %'), 'impacts': impacts,
+            'market over %': row.get('market over %'), 'impacts': impacts, 'sides': sides,
             'avg': row['avg'], 'proj avg': row['proj avg'], 'lineup adj': row['lineup adj'], 'status': status,
             'play_pct': listed['play_pct'].iloc[0] if len(listed) else np.nan,
             'lineup_status': team_rows['lineup_status'].iloc[0] if len(team_rows) else None,
@@ -282,19 +304,26 @@ def offer_context(row, games: pd.DataFrame, logs: pd.DataFrame, lineups: pd.Data
             bool(len(games) and games['starter'].tail(10).mean() > 0.5)}
 
 
-def mispricing_reasons(signals: List[Dict], stat: str, side: str, lang: str = 'en') -> List[Dict]:
+def mispricing_reasons(signals: List[Dict], stat: str, side: str, lang: str = 'en',
+                       bet: Optional[Dict] = None) -> List[Dict]:
     """mispricing.py's signals about this line (its own, or one resting on it: a combo's part, a makes line's
-    attempts) as reasons, each answering in order: did the gap clear the tax, what happened, why it may be a
-    pricing error, how long it holds, how tested (i18n 'mispricing.<hypothesis>.*'); one that clears the tax adds
-    how such signals did on the exploration nights. A gap under the hypothesis's
-    mispricing.SHOW_GAP_PP and a rejected hypothesis aren't shown."""
-    from mispricing import ADMITTED, REJECTED, SHOW_GAP_PP
+    attempts) as research reasons. Each is an alternative model, so its text says, in this order: which offer it
+    is about; how tested the hypothesis is; how such signals did on the exploration nights (or that there's no
+    record); its chance and expected return beside the main model's on the same offer (bet['sides'];
+    another offer isn't compared); by how much it is above or below the break-even after costs; how it is
+    computed, with its assumptions and limits; how long it holds. A gap under the hypothesis's
+    mispricing.SHOW_GAP_PP and a rejected hypothesis aren't shown. Each reason carries 'about' (bet_type, line,
+    side) and 'this_offer'."""
+    from mispricing import ADMITTED, PRIOR_ATTEMPTS, REJECTED, SHOW_GAP_PP
+    line_now = (bet or {}).get('line')
+    sides = (bet or {}).get('sides') or {}
     reasons = []
     for s in signals:
         h = s['hypothesis']
         if s['gap_pp'] < SHOW_GAP_PP[h] or s['status'] == REJECTED or (
                 stat != s['bet_type'] and stat not in [part for part, _ in s['parts']]):
             continue
+        this_offer = s['bet_type'] == stat and (line_now is None or abs(float(s['line']) - float(line_now)) < 1e-9)
         values = {k: v for k, v in s.items() if not isinstance(v, (list, dict))}
         values.update(stat=i18n.label(s['bet_type'], lang), side=i18n.value(s['side'], lang), gap=s['gap_pp'],
                       needed=s['needed_pp'], p_ours=100 * s['p_ours'], p_book=100 * s['p_book'],
@@ -306,19 +335,74 @@ def mispricing_reasons(signals: List[Dict], stat: str, side: str, lang: str = 'e
         for rate in ('implied_rate', 'player_rate', 'league_rate', 'below'):
             if rate in s:
                 values[rate] = 100 * s[rate]
+        if h == 'H2':
+            # what he made himself, and how much of the rate used is the league's prior
+            values.update(observed=100 * s['made'] / s['attempted'] if s['attempted'] else 0.0,
+                          prior_share=100 * PRIOR_ATTEMPTS / (s['attempted'] + PRIOR_ATTEMPTS))
+        if h == 'H6':
+            cmp = 'same' if round(s['spread'], 1) == round(s['league_spread'], 1) else \
+                'above' if s['spread'] > s['league_spread'] else 'below'
+            values['league_cmp'] = i18n.t(f'mispricing.h6.{cmp}', lang)
+        profile = s.get('profile') or ACTIVE_PROFILE
+        be = 100 * s['p_book'] + s['needed_pp']                    # the side's break-even after costs, in %
+        values.update(be=be, margin=abs(s['gap_pp'] - s['needed_pp']),
+                      ev_ours=float(expected_return_100(s['p_ours'], s['odds'], profile)))
         key = f"mispricing.{h.lower()}."
-        lines = [i18n.t(key + ('clears' if s['clears'] else 'short'), lang, **values),
-                 i18n.t(key + 'what', lang, **values), i18n.t(key + 'why', lang),
-                 i18n.t('mispricing.expiry.' + s['expires_when'], lang),
-                 i18n.t('mispricing.status.' + s['status'], lang)]
-        if s['clears'] and s.get('exploration'):
-            lines.append(i18n.t('mispricing.exploration', lang, **s['exploration']))
+        lines = [i18n.t('mispricing.heading.' + ('this' if this_offer else 'other'), lang,
+                        name=i18n.t(f'mispricing.name.{h}', lang), **values),
+                 i18n.t('mispricing.status.' + s['status'], lang),
+                 i18n.t('mispricing.exploration', lang, **s['exploration']) if s.get('exploration')
+                 else i18n.t('mispricing.no_exploration', lang)]
+        main = sides.get(s['side']) if this_offer else None
+        if main:
+            lines.append(i18n.t('mispricing.compare', lang, p_main=main['p'], ev_main=main['ev'], **values))
+        else:
+            lines.append(i18n.t('mispricing.compare_this' if this_offer else 'mispricing.compare_other', lang,
+                                **values))
+        lines.append(i18n.t('mispricing.above' if s['clears'] else 'mispricing.below', lang, **values))
+        lines.append(i18n.t(key + 'what', lang, **values))
+        if h == 'H2' and s['bet_type'] == 'FTM':
+            lines.append(i18n.t('mispricing.h2.ft_limit', lang))
+        lines.append(i18n.t(key + ('why_' + s['side'].lower() if h == 'H6' else 'why'), lang))
+        lines.append(i18n.t('mispricing.expiry.' + s['expires_when'], lang))
         # only a tested hypothesis argues: for this line when its side is the one the signal favours
         supports = None if s['status'] != ADMITTED else (s['bet_type'] == stat and s['side'] == side)
-        reasons.append(_reason(supports, "  \n".join(lines), value=100 * s['p_ours'], reference=100 * s['p_book'],
-                               n=s['n'], as_of=s['as_of'], source=f"{SUPERBET} · {ESPN}", kind=MISPRICING,
-                               group=h, validation=s['status']))
+        reason = _reason(supports, "  \n".join(lines), value=100 * s['p_ours'], reference=100 * s['p_book'],
+                         n=s['n'], as_of=s['as_of'], source=f"{SUPERBET} · {ESPN}", kind=MISPRICING, group=h,
+                         validation=s['status'])
+        reasons.append(reason | {'about': (s['bet_type'], float(s['line']), s['side']), 'this_offer': this_offer})
     return reasons
+
+
+# the context's sub-groups in the panel, in this order (reasons with another group go under 'other')
+CONTEXT_GROUPS = ('history', 'minutes_role', 'opportunity', 'environment', 'opponent', 'market')
+
+
+def panel_layout(reasons: List[Dict]) -> Dict:
+    """Where each reason goes in the verdict panel (components.reasons_panel; no Streamlit, so it can be tested):
+    economics, drivers (the projection and its inputs), mispricing (admitted hypotheses only: they argue),
+    context [(group, reasons)] in CONTEXT_GROUPS order, warnings, flags, and research [(offer, reasons)]: every
+    hypothesis not admitted, by the offer it is about (this offer's first), so several hypotheses about one offer
+    read as one group resting on one price, not as separate confirmations. Order within a section is kept."""
+    from mispricing import ADMITTED
+    of = lambda kind: [r for r in reasons if r.get('kind') == kind and not r['flag']]
+    context = of(CONTEXT)
+    groups = [(g, [r for r in context if r.get('group') == g]) for g in CONTEXT_GROUPS]
+    other = [r for r in context if r.get('group') not in CONTEXT_GROUPS]
+    research, offers = {}, []
+    for r in of(MISPRICING):
+        if r.get('validation') == ADMITTED:
+            continue
+        about = r.get('about', (r.get('group'),))[:2]
+        if about not in research:
+            offers.append((not r.get('this_offer', False), len(offers), about))
+            research[about] = []
+        research[about].append(r)
+    return {'economics': of(ECONOMICS), 'drivers': of(DRIVER),
+            'mispricing': [r for r in of(MISPRICING) if r.get('validation') == ADMITTED],
+            'context': [(g, rs) for g, rs in groups if rs] + ([('other', other)] if other else []),
+            'warnings': of(WARNING), 'flags': [r for r in reasons if r['flag']],
+            'research': [(about, research[about]) for _, _, about in sorted(offers)]}
 
 
 def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: str = 'en',
@@ -566,7 +650,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                                    as_of=odds_at, source=SUPERBET, kind=CONTEXT, group='market'))
 
     if signals:
-        reasons += mispricing_reasons(signals, stat, bet['side'], lang)
+        reasons += mispricing_reasons(signals, stat, bet['side'], lang, bet)
 
     if bet.get('lineup_status') == 'expected':
         reasons.append(_reason(None, i18n.t('warn.lineup_expected', lang, team=bet['team'].upper()), kind=WARNING,

@@ -18,7 +18,7 @@ A detector doesn't forecast the result better than the price; it looks for a kno
 
 Every signal is {'hypothesis', 'mechanism', 'status', 'bet_type', 'line', 'parts' [(stat, line)], 'side',
 'p_ours', 'p_book', 'gap_pp', 'needed_pp', 'clears', 'odds', 'n', 'as_of', 'expires_when'} plus what its message
-needs, and 'exploration' (how the signals that cleared the tax did on the exploration nights, from the status file;
+needs, 'profile' (the cost profile needed_pp and clears are judged under), and 'exploration' (how the signals that cleared the tax did on the exploration nights, from the status file;
 None when not recorded): chances of `side` in 0-1; p_ours what the mechanism gives, p_book the line's margin-free price; gap_pp how
 far p_ours puts the side above p_book; needed_pp how far above it the side's odds need after the stake tax
 (metrics.break_even); clears = p_ours reaches the break-even. status is the hypothesis's verdict
@@ -166,7 +166,7 @@ def _signal(hypothesis: str, mechanism: str, verdict: Dict, quoted: pd.DataFrame
             'line': float(quoted.loc[stat, 'line']), 'parts': parts, 'side': 'Over' if over else 'Under',
             'p_ours': p_ours, 'p_book': p_book, 'gap_pp': 100 * (p_ours - p_book), 'needed_pp': 100 * (be - p_book),
             'clears': p_ours >= be, 'odds': odds, 'n': n, 'as_of': as_of, 'expires_when': 'line_or_odds_change',
-            **extra}
+            'profile': profile, **extra}
 
 
 def combo_over_from_parts(parts: Dict[str, Dict], combo_line: float, games: pd.DataFrame,

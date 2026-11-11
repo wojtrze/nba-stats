@@ -196,9 +196,8 @@ def _h6_games(values):
     return pd.DataFrame({'BLK': values})
 
 
-@pytest.mark.xfail(strict=True, reason="F-05: H6's 'why' always says a wider spread ends below the line more often; "
-                                       "for a line above the price's mean the signal favours Over")
 def test_A_H6_why_text_matches_the_side_the_signal_favours():
+    """F-05 (fixed in package B): the 'why' text now depends on the side the signal favours."""
     # synthetic and extreme on purpose: an Over-side H6 gap reaches the 4 pp display minimum only with a price of
     # ~7% and a spread ~5 (the audit's grid search: max Over gap 5.8 pp), so this is a rare but reachable case
     q = _quotes([('BLK', 2.5, 14.0, 1.02)])
@@ -208,9 +207,8 @@ def test_A_H6_why_text_matches_the_side_the_signal_favours():
     assert 'below the line more often' not in text
 
 
-@pytest.mark.xfail(strict=True, reason="F-06: H6 says 'swing more than usual' whenever the shrunk spread is > 1, "
-                                       "also when it is below the league's typical spread it quotes next to it")
 def test_A_H6_more_than_usual_only_when_above_the_league():
+    """F-06 (fixed in package B): the comparison with the league's typical spread follows the numbers."""
     q = _quotes([('BLK', 0.5, 1.50, 2.60)])
     sig = mispricing.spread_signals(q, _h6_games([0, 1, 2, 0, 3, 1, 0, 2, 1, 0]), {'BLK': 1.6}, status={})
     assert sig and 1 < sig[0]['spread'] < sig[0]['league_spread']
@@ -219,9 +217,10 @@ def test_A_H6_more_than_usual_only_when_above_the_league():
 
 
 def test_A_H6_one_x_means_poisson_not_evenly_scattered():
-    """F-06 (wording): '1.0× = evenly scattered'. Variance/mean = 1 is a Poisson count, which is not even:
-    evenly scattered results (always the same number) have variance 0."""
-    assert 'evenly scattered' in i18n.TEXTS['mispricing.h6.what']['en']
+    """F-06 (fixed in package B): variance/mean = 1 is a Poisson count; 'evenly' (variance 0) is gone."""
+    for lang, word in (('en', 'evenly'), ('pl', 'równomiernie')):
+        assert word not in i18n.TEXTS['mispricing.h6.what'][lang]
+    assert 'variance equal to the mean' in i18n.TEXTS['mispricing.h6.what']['en']
 
 
 def test_A_H5_is_not_emitted_by_the_props_page():
@@ -270,16 +269,22 @@ def test_A_admitted_signal_about_another_line_has_no_direction_on_this_one():
     assert r['supports'] is None
 
 
-def test_A_documents_negative_exploration_after_a_clearing_signal():
-    """F-04: a signal that 'covers' the tax is followed by its exploration record, negative for H1, H2 and H5."""
+def test_A_negative_exploration_comes_before_the_hypothetical_gain():
+    """F-04, F-07 (fixed in package B): the exploration record comes before the gap, the gap is the alternative
+    model's distance from the break-even after costs, and the offers aren't said to 'assume' a shooting rate."""
     sig = {'hypothesis': 'H2', 'mechanism': 'B', 'status': 'untested', 'bet_type': '3PM', 'line': 1.5,
            'parts': [('3PA', 5.5)], 'side': 'Under', 'p_ours': 0.54, 'p_book': 0.41, 'gap_pp': 13.1,
            'needed_pp': 9.1, 'clears': True, 'odds': 2.25, 'n': 10, 'as_of': FETCHED,
            'expires_when': 'line_or_odds_change', 'implied_rate': 0.46, 'player_rate': 0.34, 'league_rate': 0.35,
            'made': 17, 'attempted': 57, 'games_all': 10,
            'exploration': {'nights': 12, 'through': '2026-10-31', 'signals': 130, 'won': 54.6, 'roi': -9.8}}
-    text = mispricing_reasons([sig], '3PM', 'Under', 'en')[0]['text']
-    assert 'the gap covers it' in text and '-9.8 per 100 staked' in text
+    lines = mispricing_reasons([sig], '3PM', 'Under', 'en')[0]['text'].split("  \n")
+    assert '-9.8 per 100 staked' in lines[2]
+    assert lines[4].startswith("Under this alternative model's assumptions it is 4.0 pp above the break-even after "
+                               "costs")
+    text = "  ".join(lines)
+    assert 'covers it' not in text and 'together assume' not in text
+    assert 'observed rate: 17 of 57 (30%)' in text and '78% of the weight' in text
 
 
 # ---------- C. evidence dependence ----------

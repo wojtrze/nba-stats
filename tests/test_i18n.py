@@ -79,7 +79,7 @@ def test_reasons_and_warnings_in_polish():
     pl = [r['text'] for r in prop_reasons(bet, games, games.iloc[0:0], 'pl')]
     assert len(en) == len(pl)
     assert en[0].startswith("Model: Over wins 55.0%") and pl[0].startswith("Model: Powyżej wygrywa w 55.0%")
-    assert any(text.startswith("Oczekiwane dziś 24.0 PTS") for text in pl)
+    assert any(text.startswith("Projekcja modelu: 24.0 PTS") for text in pl)
     items = prop_flag_items(3, True, 50, 'Ques 50%', pd.Series([10.0, 30, 12]), -2.0, 'Over')
     assert [k for k, _ in items] == ['flag.few_games', 'flag.preseason', 'flag.may_not_play', 'flag.line_against']
     assert flag_texts(items)[0] == "Only 3 games in the sample: too few to trust the numbers"

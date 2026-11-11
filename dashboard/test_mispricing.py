@@ -89,15 +89,23 @@ def _mispricing(signals, **bet):
             if r['kind'] == MISPRICING]
 
 
-def test_an_untested_signal_answers_the_five_questions_without_a_direction():
+def test_an_untested_signal_says_how_tested_it_is_before_what_it_claims():
+    """Package B order: the offer, the status, the exploration record, beside the main model, the break-even,
+    how it's computed, its assumptions and limits, how long it holds."""
     [r] = _mispricing([_signal()], stat='ARP', line=33.5)
     lines = r['text'].split("  \n")
-    assert r['supports'] is None and r['validation'] == UNTESTED
-    assert lines[0].startswith('Za mało, by wyjść na zero po kosztach') and '7.0 pp' in lines[0] and '11.0 pp' in lines[0]
-    assert lines[1].startswith('Co się stało') and 'PTS 21.5' in lines[1] and '58%' in lines[1]
-    assert lines[2].startswith('Dlaczego')
-    assert 'znika' in lines[3]
-    assert lines[4].startswith('🧪') and 'nie wskazówka do gry' in lines[4]
+    assert r['supports'] is None and r['validation'] == UNTESTED and r['this_offer']
+    assert lines[0] == 'H1, kombinacja a jej składowe: „Powyżej PRA 33.5”, ta oferta'
+    assert lines[1].startswith('🧪') and 'nie wskazówka do gry' in lines[1]
+    assert lines[2].startswith('Brak zapisu z rozpoznania')
+    assert lines[3].startswith('Po 1.75 ten model alternatywny szacuje 58%') and 'sama cena 51%' in lines[3]
+    assert lines[4].startswith('Przy założeniach tego modelu alternatywnego jest 4.0 pp pod progiem')
+    assert '(62.0%;' in lines[4] and 'dokładają 11.0 pp' in lines[4]
+    assert lines[5].startswith('Jak:') and 'PTS 21.5' in lines[5]
+    assert lines[6].startswith('Założenia i ograniczenia') and 'się spóźnia' in lines[6]
+    assert 'znika' in lines[7] and len(lines) == 8
+    for banned in ('pokrywa', 'zakładają', 'nie nadąża'):
+        assert banned not in r['text']
 
 
 def test_signals_shown_only_when_they_concern_the_line_and_matter():
@@ -111,13 +119,18 @@ def test_only_an_admitted_hypothesis_argues_for_or_against():
     assert _mispricing([_signal(status=ADMITTED)], stat='ARP', side='Over')[0]['supports'] is True
     assert _mispricing([_signal(status=ADMITTED)], stat='ARP', side='Under')[0]['supports'] is False
     clears = _mispricing([_signal(status=ADMITTED, clears=True, gap_pp=12.0)], stat='ARP')[0]['text']
-    assert 'ta różnica to pokrywa' in clears and clears.split("  \n")[-1].startswith('✅')
+    assert '1.0 pp nad progiem opłacalności' in clears and clears.split("  \n")[1].startswith('✅')
 
 
 def test_the_signal_texts_are_in_both_languages():
-    keys = [f'mispricing.{h}.{part}' for h in ('h1', 'h2', 'h5', 'h6') for part in ('short', 'clears', 'what', 'why')]
+    keys = [f'mispricing.{h}.what' for h in ('h1', 'h2', 'h5', 'h6')] + \
+        ['mispricing.h1.why', 'mispricing.h2.why', 'mispricing.h5.why', 'mispricing.h6.why_under',
+         'mispricing.h6.why_over', 'mispricing.h2.ft_limit'] + [f'mispricing.name.H{h}' for h in (1, 2, 5, 6)]
     for key in keys + ['mispricing.expiry.line_or_odds_change', 'mispricing.status.untested',
-                       'mispricing.status.admitted', 'panel.mispricing', 'panel.mispricing_note']:
+                       'mispricing.status.admitted', 'mispricing.exploration', 'mispricing.no_exploration',
+                       'mispricing.compare', 'mispricing.compare_this', 'mispricing.compare_other',
+                       'mispricing.above', 'mispricing.below', 'panel.mispricing', 'panel.mispricing_note',
+                       'panel.research', 'panel.research_note', 'panel.research_shared']:
         assert set(i18n.TEXTS[key]) == set(i18n.LANGS)
 
 
@@ -191,24 +204,30 @@ def test_shooting_and_spread_messages_say_the_numbers_they_rest_on():
                  implied_rate=0.44, player_rate=0.35, league_rate=0.36, made=60, attempted=170, games_all=25)
     [r] = [r for r in prop_reasons(_bet(stat='3PA', line=7.5), games, _games([]), 'pl', validation={},
                                    signals=[h2]) if r['kind'] == MISPRICING]
-    assert 'zakładają, że trafi 44% rzutów; trafia 35% (60 z 170 w 25 meczach' in r['text']
+    assert 'skuteczność obserwowana: 60 z 170 (35%) w 25 meczach' in r['text']
+    assert 'ligową 36% (jak gdyby warta 200 prób, tu 54% wagi) daje 35%' in r['text']
+    assert 'stosunek 44%: to liczba tego modelu, nie skuteczność podawana przez Superbet' in r['text']
+    assert 'inna oferta' in r['text'] and 'nie jest porównywany' in r['text']           # the 3PM line, shown on 3PA
     assert not [r for r in prop_reasons(_bet(stat='3PM', line=2.5), games, _games([]), 'pl', validation={},
                                         signals=[h2 | {'gap_pp': 5.9}]) if r['kind'] == MISPRICING]
     h6 = _signal(hypothesis='H6', bet_type='BLK', line=0.5, parts=[], side='Under', gap_pp=4.5, spread=1.8,
                  own_spread=2.1, league_spread=1.07, below=0.48)
     [r] = [r for r in prop_reasons(_bet(stat='BLK', line=0.5, side='Under'), games, _games([]), 'pl',
                                    validation={}, signals=[h6]) if r['kind'] == MISPRICING]
-    assert 'w 48% meczów' in r['text'] and 'rozrzut 1.8×' in r['text'] and r['text'].startswith('Za mało')
+    assert 'w 48% z nich' in r['text'] and '1.8×, więcej niż typowo w lidze' in r['text']
+    assert r['text'].startswith('H6, rozrzut małej liczby') and 'wariancja równa średniej' in r['text']
+    assert 'równomiernie' not in r['text'] and 'Poniżej staje się bardziej prawdopodobne' in r['text']
 
 
-def test_a_signal_that_clears_the_tax_says_how_such_signals_did_on_the_exploration_nights():
+def test_the_exploration_record_comes_before_the_hypothetical_gain():
+    """Whether or not this signal reaches the break-even, how such signals did is said first (audit F-04)."""
     explored = {'nights': 12, 'through': '2026-10-31', 'signals': 130, 'won': 54.6, 'roi': -9.8}
-    [r] = _mispricing([_signal(clears=True, gap_pp=12.0, exploration=explored)], stat='ARP')
-    assert r['text'].split("  \n")[-1] == ("Na nocach rozpoznania (12 nocy do 2026-10-31) takich sygnałów, które "
-                                           "pokrywały standardowy podatek 12%, było 130: wygrało 55%, wynik -9.8 zł "
-                                           "na 100 zł stawki po tym podatku.")
-    [short] = _mispricing([_signal(exploration=explored)], stat='ARP')
-    assert 'rozpoznania' not in short['text']
+    for signal in (_signal(clears=True, gap_pp=12.0, exploration=explored), _signal(exploration=explored)):
+        lines = _mispricing([signal], stat='ARP')[0]['text'].split("  \n")
+        assert lines[2] == ("Dotąd: na nocach rozpoznania (12 nocy do 2026-10-31) sygnałów tej hipotezy, które "
+                            "sięgały progu opłacalności po standardowym podatku 12%, było 130; wygrało 55% z nich, "
+                            "wynik -9.8 zł na 100 zł stawki po tym podatku.")
+        assert 'progiem opłacalności' in lines[4]
 
 
 def test_the_status_file_feeds_the_signal():
@@ -272,9 +291,9 @@ def test_signals_use_the_cost_profile_they_are_given_and_never_call_needed_the_t
         assert s['needed_pp'] == pytest.approx(100 * (float(break_even(s['odds'], profile)) - p_side))
     assert free['needed_pp'] < std['needed_pp']
     for lang in ('en', 'pl'):
-        first = mispricing_reasons([free], 'BLK', free['side'], lang)[0]['text'].split("  \n")[0]
-        assert 'tax' not in first and 'podat' not in first
-        assert ('with the margin and costs' if lang == 'en' else 'z marżą i kosztami') in first
+        threshold = mispricing_reasons([free], 'BLK', free['side'], lang)[0]['text'].split("  \n")[4]
+        assert 'tax' not in threshold and 'podat' not in threshold
+        assert ('break-even after costs' if lang == 'en' else 'progiem opłacalności po kosztach') in threshold
 
 
 def test_the_props_page_passes_its_cost_profile_to_the_signals():
@@ -284,3 +303,77 @@ def test_the_props_page_passes_its_cost_profile_to_the_signals():
                         'props.py')
     call = re.search(r'signals = offer_signals\((.*)\)', open(page, encoding='utf-8').read()).group(1)
     assert 'profile=cost_profile()' in call
+
+
+# --- package B: research hypotheses beside the main model, grouped, worded as an alternative model ---
+
+def test_a_hypothesis_is_set_beside_the_main_model_on_the_same_offer_only():
+    sides = {'Over': {'p': 47.0, 'ev': -18.1}, 'Under': {'p': 53.0, 'ev': -10.2}}
+    games = _games([25.0] * 12).assign(REB=7.0, AST=5.0, ARP=37.0)
+    reasons = prop_reasons(_bet(stat='ARP', line=33.5) | {'sides': sides}, games, _games([]), 'en',
+                           validation={}, signals=[_signal()])
+    [r] = [r for r in reasons if r['kind'] == MISPRICING]
+    compare = r['text'].split("  \n")[3]
+    assert compare.startswith("The same offer at 1.75: the main model estimates 47% (EV -18.1 per 100); this "
+                              "alternative model 58% (EV -10.7)")
+    # the same signal shown on a part's line: another offer, no comparison with this line's evaluation
+    reasons = prop_reasons(_bet(stat='REB', line=6.5) | {'sides': sides}, games, _games([]), 'en',
+                           validation={}, signals=[_signal()])
+    [r] = [r for r in reasons if r['kind'] == MISPRICING]
+    assert not r['this_offer'] and "another offer (not the one evaluated above)" in r['text']
+    assert "isn't compared with the evaluation above" in r['text'] and 'main model' not in r['text']
+
+
+def test_free_throws_carry_their_limit():
+    games = _games([25.0] * 12).assign(FTM=1.0)
+    ft = _signal(hypothesis='H2', bet_type='FTM', line=0.5, parts=[('FTA', 1.5)], side='Over', gap_pp=24.1,
+                 implied_rate=0.39, player_rate=0.77, league_rate=0.78, made=14, attempted=21, games_all=10)
+    [r] = [r for r in prop_reasons(_bet(stat='FTM', line=0.5), games, _games([]), 'en', validation={},
+                                   signals=[ft]) if r['kind'] == MISPRICING]
+    assert 'Limit for free throws: they come in pairs' in r['text'] and '(67%)' in r['text'] and '90% of the weight' in r['text']
+
+
+@pytest.mark.parametrize('side,words', [('Under', 'the Under gets more likely'), ('Over', 'the Over gets more likely')])
+def test_the_spread_message_matches_the_side_it_favours(side, words):
+    games = _games([25.0] * 12).assign(BLK=1.0)
+    h6 = _signal(hypothesis='H6', bet_type='BLK', line=2.5, parts=[], side=side, gap_pp=5.0, spread=1.4,
+                 own_spread=2.0, league_spread=1.6, below=0.8)
+    [r] = [r for r in prop_reasons(_bet(stat='BLK', line=2.5, side=side), games, _games([]), 'en', validation={},
+                                   signals=[h6]) if r['kind'] == MISPRICING]
+    assert words in r['text'] and 'less than the league\'s typical, though more than a Poisson\'s' in r['text']
+    assert 'more than usual' not in r['text']
+
+
+def test_the_panel_layout_keeps_research_apart_and_groups_it_by_offer():
+    from reasons import panel_layout
+    games = _games([25.0] * 12).assign(REB=7.0, AST=5.0, ARP=37.0, BLK=1.0)
+    h6 = _signal(hypothesis='H6', bet_type='ARP', line=33.5, parts=[], side='Over', gap_pp=5.0, spread=1.4,
+                 own_spread=2.0, league_spread=1.2, below=0.4)
+    other = _signal(bet_type='PR', line=30.5, parts=[('PTS', 21.5), ('REB', 6.5)])
+    reasons = prop_reasons(_bet(stat='PTS', line=21.5), games, _games([]), 'en', validation={},
+                           signals=[other, _signal(bet_type='PTS', line=21.5, parts=[]), h6])
+    layout = panel_layout(reasons)
+    assert layout['mispricing'] == [] and not any(r['kind'] == MISPRICING for _, rs in layout['context'] for r in rs)
+    offers = [about for about, _ in layout['research']]
+    assert offers[0] == ('PTS', 21.5)                                    # this offer's first
+    assert ('PR', 30.5) in offers and all(len(rs) >= 1 for _, rs in layout['research'])
+    assert [g for g, _ in layout['context']] == [g for g in ('history', 'minutes_role', 'opportunity',
+                                                             'environment', 'opponent', 'market')
+                                                 if g in {g for g, _ in layout['context']}]
+    admitted = panel_layout(prop_reasons(_bet(stat='ARP', line=33.5), games, _games([]), 'en', validation={},
+                                         signals=[_signal(status=ADMITTED)]))
+    assert len(admitted['mispricing']) == 1 and admitted['research'] == []
+
+
+def test_the_main_models_sides_are_priced_like_price_props():
+    from metrics import calibrate, expected_return_100, no_vig, prop_probability
+    from reasons import main_sides
+    values = pd.Series([18.0, 25, 31, 22, 27, 19, 24, 30, 21, 26, 23, 28])
+    coef = {'a': 1.14, 'b': 0.17, 'c': 0.0, 'd': 0.0}
+    sides = main_sides(values, 23.5, 1.85, 1.95, 25.2, coef, 'superbet_standard')
+    m_over = no_vig(1.85, 1.95)[0]
+    p = calibrate(prop_probability(values, 23.5, 'Over', m_over, mean=25.2)['p'], m_over, 'Over', coef)
+    assert sides['Over']['p'] == pytest.approx(100 * p) and \
+        sides['Over']['ev'] == pytest.approx(float(expected_return_100(p, 1.85, 'superbet_standard')))
+    assert set(sides) == {'Over', 'Under'} and main_sides(values.iloc[0:0], 23.5, 1.85, 1.95, 25.2, coef,
+                                                          'superbet_standard') == {}

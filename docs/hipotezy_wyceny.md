@@ -57,12 +57,21 @@ statystyce wygrywał częściej, a to jest osobna hipoteza (H9).
 **Sygnał się liczy** tylko wtedy, gdy przy następnym pobraniu była nadal ta sama linia, a kurs nie gorszy (można
 go było postawić).
 
-**Komunikaty w aplikacji** odpowiadają na pięć pytań, w tej kolejności:
-1. Czy różnica pokrywa podatek? Gdy nie, mówimy to pierwszym zdaniem.
-2. Co się stało (fakt z liczbami)?
-3. Dlaczego to może być błąd ceny?
-4. Jak długo sygnał jest aktualny?
-5. Na ile jest sprawdzony (status)?
+**Komunikaty w aplikacji** (od 2026-11-11, pakiet B audytu reasonów, `audit/reasons/RAPORT.md`). Hipoteza
+niedopuszczona to model alternatywny, nie argument. Strona zawodników pokazuje ją tylko w zwiniętej sekcji „Hipotezy
+badawcze: nie wpływają na decyzję”, bez ikon za/przeciw, pogrupowaną według oferty. Dopuszczona (dotąd żadna) byłaby
+pokazana razem z powodami. Każdy komunikat odpowiada w tej kolejności:
+1. Której oferty dotyczy (tej ocenianej czy innej, np. składowej kombinacji)?
+2. Na ile jest sprawdzona (status)?
+3. Jak dotąd wypadały takie sygnały na nocach rozpoznania (albo: brak zapisu)? Wynik, także ujemny, stoi przed
+   hipotetyczną korzyścią.
+4. Jak wypada obok modelu głównego na tej samej ofercie (szansa i EV obu)? Innej oferty nie porównujemy.
+5. O ile model alternatywny jest nad progiem opłacalności po kosztach albo pod nim? Próg obejmuje marżę i koszty
+   profilu wybranego na stronie, nie sam podatek.
+6. Jak jest liczony, jakie ma założenia i ograniczenia? Wielkości modelu (np. stosunek średnich trafień i prób w H2,
+   rozkład Poissona w H6) nie są przypisywane Superbetowi; bez twierdzeń o spóźnionej cenie, gdy nie ma na to dowodu
+   czasowego.
+7. Jak długo sygnał jest aktualny?
 
 Bez słów „pewniak”, „okazja”, „warto”; zawsze z liczbą i punktem odniesienia.
 
