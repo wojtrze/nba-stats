@@ -314,20 +314,47 @@ def lineup_scenario(logs: pd.DataFrame, team: str, starters, out, available, sta
     return pd.DataFrame(rows)
 
 
+def absence_terms(logs: pd.DataFrame, player_id, teammate_id, stats, shrink: float = 5) -> Dict:
+    """One out teammate's share of absence_adjustments: the player's games without and with him in their shared
+    stint (n_without, n_with) and, when both exist (estimated), change = (average without − average with) ×
+    n_without / (n_without + shrink) per stat (a Series over stats); change is None when not estimated, which
+    adds nothing to the sum — an unknown effect, not a zero one."""
+    games = stint_games(logs, player_id, teammate_id)
+    played, missed = games[games['teammate_played']], games[~games['teammate_played']]
+    n = len(missed)
+    estimated = bool(n and len(played))
+    change = (missed[list(stats)].mean() - played[list(stats)].mean()) * n / (n + shrink) if estimated else None
+    return {'n_without': n, 'n_with': len(played), 'estimated': estimated, 'change': change}
+
+
 def absence_adjustments(logs: pd.DataFrame, player_ids, out_ids, stats, shrink: float = 5) -> pd.DataFrame:
     """For each player: the summed with/without change of each stat over the out teammates, each shrunk by
-    n_without / (n_without + shrink) as in lineup_scenario. Index: player id, columns: stats."""
+    n_without / (n_without + shrink) as in lineup_scenario (absence_terms, one per teammate; a teammate the player
+    never played without adds nothing). Index: player id, columns: stats."""
     out = pd.DataFrame(0.0, index=list(player_ids), columns=list(stats))
     for p in player_ids:
         for o in out_ids:
             if p == o:
                 continue
-            games = stint_games(logs, p, o)
-            played, missed = games[games['teammate_played']], games[~games['teammate_played']]
-            n = len(missed)
-            if n and len(played):
-                out.loc[p] += (missed[list(stats)].mean() - played[list(stats)].mean()) * n / (n + shrink)
+            term = absence_terms(logs, p, o, stats, shrink)
+            if term['estimated']:
+                out.loc[p] += term['change']
     return out
+
+
+def absence_breakdown(logs: pd.DataFrame, player_id, out_ids, stat: str, shrink: float = 5) -> list:
+    """absence_adjustments of one player and stat, teammate by teammate, in the same order as the sum:
+    [{'id', 'n_without', 'n_with', 'estimated', 'change' (float, NaN when not estimated)}]; the estimated changes
+    add up to the player's adjustment."""
+    rows = []
+    for o in out_ids:
+        if o == player_id:
+            continue
+        term = absence_terms(logs, player_id, o, [stat], shrink)
+        rows.append({'id': o, 'n_without': term['n_without'], 'n_with': term['n_with'],
+                     'estimated': term['estimated'],
+                     'change': float(term['change'][stat]) if term['estimated'] else np.nan})
+    return rows
 
 
 def wilson_interval(hits: int, n: int, z: float = 1.96):

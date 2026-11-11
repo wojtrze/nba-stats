@@ -56,8 +56,8 @@ def test_no_data_means_no_reason():
     assert not any(t.startswith('Model:') for t in texts(prop_reasons(_bet(odds_at=None), games, _games([]))))
     # teammates out without the games behind the change: no reason
     out = _bet(**{'lineup adj': 2.0, 'out_names': ['B'], 'lineup_at': '2026-10-30T20:00:00Z'})
-    assert not any('B out' in t for t in texts(prop_reasons(out, games, _games([]))))
-    assert any('B out' in t for t in texts(prop_reasons(out | {'out_n': 4}, games, _games([]))))
+    assert not any('RotoWire: B' in t for t in texts(prop_reasons(out, games, _games([]))))
+    assert any('RotoWire: B' in t for t in texts(prop_reasons(out | {'out_n': 4}, games, _games([]))))
     assert not complete({'flag': False, 'kind': 'context', 'group': None, 'value': 1.0, 'reference': 2.0, 'n': 0,
                          'as_of': 'x', 'source': 'ESPN'})
     # the price needs no game count
@@ -309,3 +309,118 @@ def test_game_outcomes_red_only_for_flags():
     assert "Edge over 15 pp" in settled['red flag'].iloc[2]
     early = flag_game_outcomes(edges, games_played=2, rotowire=False)
     assert early['signal'].tolist() == ['🔴'] * 3 and "Early season" in early['red flag'].iloc[0]
+
+
+# --- tonight's absences, teammate by teammate (audit F-02, F-14). Synthetic games: maths and logic only ---
+
+PLAYER, B, C, D, E = 3100001, 3100002, 3100003, 3100004, 3100005
+
+
+def _absence_logs():
+    """Player PLAYER's 12 games. B misses games 4-6, C never misses one, D misses 6-8 and E misses game 2 (each
+    inside his own stint, so they count as 'without him')."""
+    pts = [20.0, 24, 18, 26, 30, 31, 28, 22, 27, 25, 19, 23]
+    rows = [{'player_id_ESPN': PLAYER, 'game_id': g, 'PTS': p, 'MIN': 34.0} for g, p in enumerate(pts)]
+    missed = {B: {4, 5, 6}, C: set(), D: {6, 7, 8}, E: {2}}
+    rows += [{'player_id_ESPN': m, 'game_id': g, 'PTS': 10.0, 'MIN': 25.0}
+             for m, out in missed.items() for g in range(12) if g not in out]
+    logs = pd.DataFrame(rows).assign(team='nyk', season_id=2026, season_type='regular', OPP='BOS', type='home')
+    return logs.assign(Date=pd.Timestamp('2026-10-01') + pd.to_timedelta(logs['game_id'] * 2, unit='D'))
+
+
+def _absence_lineups(out):
+    names = {B: 'B Mate', C: 'C Mate', D: 'D Rotowire', E: None}
+    return pd.DataFrame({'player_id_ESPN': [PLAYER] + out, 'team': 'nyk',
+                         'name': ['A Player'] + [names[o] for o in out],
+                         'role': ['starter'] + ['may_not_play'] * len(out), 'play_pct': [100] + [0] * len(out),
+                         'lineup_status': 'confirmed'})
+
+
+def _absence_bet(out):
+    from metrics import absence_adjustments
+    from reasons import offer_context
+    logs = _absence_logs()
+    games = logs[logs['player_id_ESPN'] == PLAYER]
+    adj = float(absence_adjustments(logs, [PLAYER], out, ['PTS']).loc[PLAYER, 'PTS'])
+    avg = games['PTS'].mean()
+    row = {'player_id': PLAYER, 'name': 'A Player', 'team': 'nyk', 'opp': 'bos', 'bet_type': 'PTS', 'line': 24.5,
+           'side': 'Over', 'side odds': 1.9, 'p win %': 51.0, 'break-even net %': 59.8, 'edge net pp': -8.8,
+           'ev net 100': -14.7, 'cost profile': 'superbet_standard', 'market over %': 50.0, 'avg': avg,
+           'adj avg': avg + adj, 'lineup adj': adj, 'pace factor': 1.0, 'matchup factor': 1.0,
+           'proj avg': avg + adj, 'RotoWire': 'starter', 'is_home': True, 'start_time': '2026-10-25T23:30:00Z'}
+    names = {B: 'B Mate', C: 'C Mate'}                      # ESPN names: not D (RotoWire only), not E (nowhere)
+    bet = offer_context(row, games, logs, _absence_lineups(out), names, '2026-10-25T20:00:00Z',
+                        '2026-10-25T21:00:00Z', coef={'a': 1.0, 'b': 1.0, 'c': 0.0, 'd': 0.0})
+    return bet, games, adj
+
+
+def test_the_breakdown_adds_up_to_the_models_adjustment_and_matches_a_by_hand_count():
+    from metrics import absence_breakdown
+    logs = _absence_logs()
+    rows = absence_breakdown(logs, PLAYER, [B, C, D, E], 'PTS')
+    assert [r['estimated'] for r in rows] == [True, False, True, True] and np.isnan(rows[1]['change'])
+    # by hand: (average without − average with) × n / (n + 5)
+    pts = logs[logs['player_id_ESPN'] == PLAYER].set_index('game_id')['PTS']
+    for r, out in zip([rows[0], rows[2], rows[3]], [{4, 5, 6}, {6, 7, 8}, {2}]):
+        without, with_ = pts[list(out)].mean(), pts.drop(list(out)).mean()
+        assert r['n_without'] == len(out)
+        assert r['change'] == pytest.approx((without - with_) * len(out) / (len(out) + 5))
+    _, _, adj = _absence_bet([B, C, D, E])
+    assert sum(r['change'] for r in rows if r['estimated']) == pytest.approx(adj, abs=1e-12)
+
+
+@pytest.mark.parametrize('lang', ['en', 'pl'])
+def test_an_applied_absence_adjustment_is_always_explained(lang):
+    import re
+    bet, games, adj = _absence_bet([B, C, D, E])
+    assert adj != 0 and bet['out_n'] == 1                         # the fewest games without an ESTIMATED teammate
+    assert bet['out_names'] == ['B Mate', 'C Mate', 'D Rotowire'] and bet['out_unmatched'] == 1
+    reasons = prop_reasons(bet, games, games.iloc[0:0], lang)
+    mates = [r for r in reasons if r['group'] == 'availability' and r['kind'] == 'driver']
+    assert len(mates) == 1 and mates[0]['n'] == 1 and mates[0]['value'] == pytest.approx(bet['avg'] + adj)
+    text = mates[0]['text']
+    assert not re.search(r'\d{5,}', text), text                     # never a raw ESPN id
+    if lang == 'en':
+        assert text.startswith("Out per RotoWire: B Mate, C Mate, D Rotowire, 1 player without a matched name.")
+        assert f"adds {adj:+.1f} PTS" in text and "one with/without difference per teammate" in text
+        assert "(3 games without him)" in text and "a player without a matched name" in text
+        assert "No games without C Mate: their effect is unknown" in text
+        assert "games without them" not in text                     # no joint split is computed (F-14)
+    else:
+        assert text.startswith("Nie grają (RotoWire): B Mate, C Mate, D Rotowire, 1 zawodnik bez dopasowanego")
+        assert "(3 mecze bez niego)" in text and "(1 mecz bez niego)" in text and "Brak meczów bez: C Mate" in text
+
+
+@pytest.mark.parametrize('lang', ['en', 'pl'])
+def test_absences_without_any_estimate_are_a_warning_not_a_zero_effect(lang):
+    bet, games, adj = _absence_bet([C])
+    assert adj == 0 and bet['out_n'] is None
+    reasons = prop_reasons(bet, games, games.iloc[0:0], lang)
+    assert not [r for r in reasons if r['group'] == 'availability' and r['kind'] == 'driver']
+    warning = [r for r in reasons if r['kind'] == 'warning' and r['group'] == 'availability']
+    assert len(warning) == 1
+    assert ("effect is unknown, not zero" if lang == 'en' else "nieznany, a nie zerowy") in warning[0]['text']
+
+
+@pytest.mark.parametrize('lang', ['en', 'pl'])
+def test_the_hit_rate_says_which_rate_the_model_uses_and_what_the_range_is(lang):
+    long = prop_reasons(_bet(), _games([22.0, 25, 27, 24, 21, 26, 23, 28, 25, 24, 22, 26]), _games([]), lang)
+    text = [r for r in long if r['group'] == 'history'][0]['text']
+    if lang == 'en':
+        assert "Over in 10 of the last 10 games (100%; 95% range of this past rate" in text
+        assert "12 of all 12" in text and "The model uses the rate over all 12 games" in text
+        assert "The model uses this rate" not in text and "after costs" in text
+    else:
+        assert "95% przedział tej historycznej częstości" in text and "ze wszystkich 12 meczów" in text
+    short = prop_reasons(_bet(), _games([22.0, 25, 27, 24, 21, 26, 23, 28]), _games([]), lang)
+    text = [r for r in short if r['group'] == 'history'][0]['text']
+    assert ("(the whole sample)" if lang == 'en' else "(to cała próba)") in text
+    assert ("over all 8 games" if lang == 'en' else "ze wszystkich 8 meczów") in text
+
+
+def test_a_mixed_sample_is_disclosed_with_the_projection_too():
+    games = _games([25.0] * 12).assign(top_up=[True] * 3 + [False] * 9,
+                                       season_type=['pre'] * 2 + ['regular'] * 10)
+    reasons = prop_reasons(_bet(), games, _games([]))
+    expected = [r for r in reasons if r['group'] == 'projection'][0]['text']
+    assert "3 of the games are from last season" in expected and "2 are preseason" in expected

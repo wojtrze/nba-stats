@@ -139,9 +139,10 @@ def detail(row: pd.Series, changed=None):
         names = logs.groupby('player_id_ESPN')['player_display_name'].last()
         odds_at = superbet()['fetched_at']
         bet = offer_context(row, games, logs, lineups, names, odds_at, rotowire()['fetched_at'])
-        # where Superbet's prices of this player's lines may be wrong (docs/hipotezy_wyceny.md: H1, H2, H6)
+        # where Superbet's prices of this player's lines may be wrong (docs/hipotezy_wyceny.md: H1, H2, H6), judged
+        # against the break-even of the same cost profile as the rest of the panel (the sidebar's)
         player_lines = table_all[(table_all['player_id'] == pid) & (table_all['event_id'] == row['event_id'])]
-        signals = offer_signals(player_lines, games, logs, odds_at)
+        signals = offer_signals(player_lines, games, logs, odds_at, profile=cost_profile())
         reasons_panel(f"{value(row['side'], lang)} {line:g} {stat}", decision,
                       prop_reasons(bet, games, history, lang, signals=signals), games, stat, line, lang, changed)
         st.markdown(t('detail.built', lang))

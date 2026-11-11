@@ -1324,13 +1324,13 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                 "aktualny i na ile go sprawdzono (docs/hipotezy_wyceny.md)."),
     # mispricing signals (reasons.mispricing_reasons): what each hypothesis says, in the order of its five questions
     # H1: a combo against its parts
-    'mispricing.h1.short': _w("Not enough to cover the tax: {stat} {line:g} differs from its parts' lines by "
-                              "{gap:.1f} pp, and after the tax it takes {needed:.1f} pp.",
-                              "Za mało, by pokryć podatek: {stat} {line:g} różni się od linii składowych o "
-                              "{gap:.1f} pp, a po podatku potrzeba {needed:.1f} pp."),
-    'mispricing.h1.clears': _w("{stat} {line:g} differs from its parts' lines by {gap:.1f} pp; after the tax it "
+    'mispricing.h1.short': _w("Not enough to break even after costs: {stat} {line:g} differs from its parts' lines by "
+                              "{gap:.1f} pp, and with the margin and costs it takes {needed:.1f} pp.",
+                              "Za mało, by wyjść na zero po kosztach: {stat} {line:g} różni się od linii składowych o "
+                              "{gap:.1f} pp, a z marżą i kosztami potrzeba {needed:.1f} pp."),
+    'mispricing.h1.clears': _w("{stat} {line:g} differs from its parts' lines by {gap:.1f} pp; with the margin and costs it "
                                "takes {needed:.1f} pp, and the gap covers it.",
-                               "{stat} {line:g} różni się od linii składowych o {gap:.1f} pp; po podatku potrzeba "
+                               "{stat} {line:g} różni się od linii składowych o {gap:.1f} pp; z marżą i kosztami potrzeba "
                                "{needed:.1f} pp i ta różnica to pokrywa."),
     'mispricing.h1.what': _w("What happened: the lines {parts} (with how this player's numbers go together over "
                              "{n} games) give the bet “{side} {stat} {line:g}” a {p_ours:.0f}% chance; Superbet's "
@@ -1343,15 +1343,15 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "Dlaczego to może być błąd ceny: Superbet wycenia sumę osobno od jej składowych; gdy "
                             "jedna z tych cen nie nadąża, przestają do siebie pasować."),
     # H2: a makes line against its attempts line and the player's shooting
-    'mispricing.h2.short': _w("Not enough to cover the tax: {stat} {line:g} differs by {gap:.1f} pp from what the "
-                              "{part} line and the player's shooting give, and after the tax it takes {needed:.1f} "
+    'mispricing.h2.short': _w("Not enough to break even after costs: {stat} {line:g} differs by {gap:.1f} pp from what the "
+                              "{part} line and the player's shooting give, and with the margin and costs it takes {needed:.1f} "
                               "pp.",
-                              "Za mało, by pokryć podatek: {stat} {line:g} różni się o {gap:.1f} pp od tego, co "
-                              "wynika z linii {part} i skuteczności gracza, a po podatku potrzeba {needed:.1f} pp."),
+                              "Za mało, by wyjść na zero po kosztach: {stat} {line:g} różni się o {gap:.1f} pp od tego, co "
+                              "wynika z linii {part} i skuteczności gracza, a z marżą i kosztami potrzeba {needed:.1f} pp."),
     'mispricing.h2.clears': _w("{stat} {line:g} differs by {gap:.1f} pp from what the {part} line and the player's "
-                               "shooting give; after the tax it takes {needed:.1f} pp, and the gap covers it.",
+                               "shooting give; with the margin and costs it takes {needed:.1f} pp, and the gap covers it.",
                                "{stat} {line:g} różni się o {gap:.1f} pp od tego, co wynika z linii {part} "
-                               "i skuteczności gracza; po podatku potrzeba {needed:.1f} pp i ta różnica to pokrywa."),
+                               "i skuteczności gracza; z marżą i kosztami potrzeba {needed:.1f} pp i ta różnica to pokrywa."),
     'mispricing.h2.what': _w("What happened: the lines {part} {part_line:g} and {stat} {line:g} together assume "
                              "he makes {implied_rate:.0f}% of his shots; he makes {player_rate:.0f}% ({made:.0f} of "
                              "{attempted:.0f} in {games_all:.0f} games, pulled toward the league's "
@@ -1370,17 +1370,17 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "linie; gdy jedna się przesuwa bez drugiej, zakładana skuteczność przestaje pasować do "
                             "gracza."),
     # H6: a small line against how much the player's results spread
-    'mispricing.h6.short': _w("Not enough to cover the tax: with how this player's results spread, “{side} {stat} "
-                              "{line:g}” has a {gap:.1f} pp higher chance than its price, and after the tax it takes "
+    'mispricing.h6.short': _w("Not enough to break even after costs: with how this player's results spread, “{side} {stat} "
+                              "{line:g}” has a {gap:.1f} pp higher chance than its price, and with the margin and costs it takes "
                               "{needed:.1f} pp.",
-                              "Za mało, by pokryć podatek: przy rozrzucie wyników tego gracza zakład „{side} {stat} "
-                              "{line:g}” ma szansę o {gap:.1f} pp wyższą niż w cenie, a po podatku potrzeba "
+                              "Za mało, by wyjść na zero po kosztach: przy rozrzucie wyników tego gracza zakład „{side} {stat} "
+                              "{line:g}” ma szansę o {gap:.1f} pp wyższą niż w cenie, a z marżą i kosztami potrzeba "
                               "{needed:.1f} pp."),
     'mispricing.h6.clears': _w("With how this player's results spread, “{side} {stat} {line:g}” has a {gap:.1f} pp "
-                               "higher chance than its price; after the tax it takes {needed:.1f} pp, and the gap "
+                               "higher chance than its price; with the margin and costs it takes {needed:.1f} pp, and the gap "
                                "covers it.",
                                "Przy rozrzucie wyników tego gracza zakład „{side} {stat} {line:g}” ma szansę "
-                               "o {gap:.1f} pp wyższą niż w cenie; po podatku potrzeba {needed:.1f} pp i ta różnica "
+                               "o {gap:.1f} pp wyższą niż w cenie; z marżą i kosztami potrzeba {needed:.1f} pp i ta różnica "
                                "to pokrywa."),
     'mispricing.h6.what': _w("What happened: in his last {n} games he ended below {line:g} {stat} {below:.0f}% of "
                              "the time. His results swing more than usual for his average: spread {spread:.1f}× "
@@ -1399,17 +1399,17 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "kończy na 0 albo 1. Cena pasuje do typowego rozrzutu; u gracza, którego wyniki wahają "
                             "się mocniej, wynik poniżej linii zdarza się częściej przy tej samej średniej."),
     # H5: tonight's role (RotoWire) against the starts of his last games
-    'mispricing.h5.short': _w("Not enough to cover the tax: with the minutes of tonight's role, “{side} {stat} "
-                              "{line:g}” has a {gap:.1f} pp higher chance than its price, and after the tax it takes "
+    'mispricing.h5.short': _w("Not enough to break even after costs: with the minutes of tonight's role, “{side} {stat} "
+                              "{line:g}” has a {gap:.1f} pp higher chance than its price, and with the margin and costs it takes "
                               "{needed:.1f} pp.",
-                              "Za mało, by pokryć podatek: przy minutach dzisiejszej roli zakład „{side} {stat} "
-                              "{line:g}” ma szansę o {gap:.1f} pp wyższą niż w cenie, a po podatku potrzeba "
+                              "Za mało, by wyjść na zero po kosztach: przy minutach dzisiejszej roli zakład „{side} {stat} "
+                              "{line:g}” ma szansę o {gap:.1f} pp wyższą niż w cenie, a z marżą i kosztami potrzeba "
                               "{needed:.1f} pp."),
     'mispricing.h5.clears': _w("With the minutes of tonight's role, “{side} {stat} {line:g}” has a {gap:.1f} pp "
-                               "higher chance than its price; after the tax it takes {needed:.1f} pp, and the gap "
+                               "higher chance than its price; with the margin and costs it takes {needed:.1f} pp, and the gap "
                                "covers it.",
                                "Przy minutach dzisiejszej roli zakład „{side} {stat} {line:g}” ma szansę o "
-                               "{gap:.1f} pp wyższą niż w cenie; po podatku potrzeba {needed:.1f} pp i ta różnica to "
+                               "{gap:.1f} pp wyższą niż w cenie; z marżą i kosztami potrzeba {needed:.1f} pp i ta różnica to "
                                "pokrywa."),
     'mispricing.h5.what': _w("What happened: RotoWire tonight: {role}. He started {starts} of his last "
                              "{last_games} games and played {usual_minutes:.0f} min in them. In this role he'd play "
@@ -1434,11 +1434,11 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                                 "Aktualne tylko dla tych kursów: znika, gdy zmieni się którakolwiek "
                                                 "z tych linii lub kursów."),
     'mispricing.exploration': _w("On the exploration nights ({nights} nights to {through}) there were {signals} such "
-                                "signals that cleared the tax: {won:.0f}% won, {roi:+.1f} per 100 staked after the "
-                                "tax.",
+                                "signals that cleared the standard 12% stake tax: {won:.0f}% won, {roi:+.1f} per 100 "
+                                "staked after that tax.",
                                 "Na nocach rozpoznania ({nights} nocy do {through}) takich sygnałów, które "
-                                "pokrywały podatek, było {signals}: wygrało {won:.0f}%, wynik {roi:+.1f} zł na 100 zł "
-                                "stawki po podatku."),
+                                "pokrywały standardowy podatek 12%, było {signals}: wygrało {won:.0f}%, wynik "
+                                "{roi:+.1f} zł na 100 zł stawki po tym podatku."),
     'mispricing.status.untested': _w("🧪 Observation, not tested. It's an observation, not a hint to bet: the test on "
                                      "nights it hasn't seen hasn't been run yet.",
                                      "🧪 Obserwacja, niesprawdzona. To obserwacja, nie wskazówka do gry: test na "
@@ -1475,11 +1475,24 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'reason.expected': _w("Expected {proj:.1f} {stat} tonight vs the line {line:g} ({diff:+.1f}); average {avg:.1f}, "
                           "median {median:.1f}", "Oczekiwane dziś {proj:.1f} {stat} wobec linii {line:g} "
                                                  "({diff:+.1f}); średnia {avg:.1f}, mediana {median:.1f}"),
-    'reason.teammates': _w("{names} out: in his games without them {name} averaged {adj:+.1f} {stat} compared with his "
-                           "games with them (after shrinking; fewest games without one of them: {n}; a "
-                           "description, not their effect)",
-                           "{names} nie zagra: w meczach bez nich {name} miał średnio {adj:+.1f} {stat} wobec meczów "
-                           "z nimi (po ściągnięciu; najmniej meczów bez jednego z nich: {n}; opis, nie ich wpływ)"),
+    # tonight's absences: the model adds one shrunk with/without difference per teammate (metrics.absence_terms);
+    # it never looks at games without all of them at once
+    'reason.teammates': _w("Out per RotoWire: {names}. The model adds {adj:+.1f} {stat} to his average: one "
+                           "with/without difference per teammate, each shrunk toward 0 the more, the fewer games it "
+                           "rests on, added up ({parts}). A description of his past games, not their effect",
+                           "Nie grają (RotoWire): {names}. Model dodaje {adj:+.1f} {stat} do jego średniej: osobna "
+                           "różnica z/bez dla każdego kolegi, każda ściągnięta do 0 tym mocniej, im mniej meczów za "
+                           "nią stoi, zsumowane ({parts}). Opis jego dawnych meczów, nie ich wpływ"),
+    'reason.teammates_part': _w("{mate} {change:+.1f} ({n} {n|game|games|games} without him)",
+                                "{mate} {change:+.1f} ({n} {n|mecz|mecze|meczów} bez niego)"),
+    'reason.teammates_fewest': _w("fewest games without one of them: {n}", "najmniej meczów bez jednego z nich: {n}"),
+    'reason.teammates_unknown': _w(". No games without {names}: their effect is unknown, and the model adds nothing "
+                                   "for them",
+                                   ". Brak meczów bez: {names}. Ich wpływ jest nieznany, a model nic za nich nie "
+                                   "dodaje"),
+    'reason.unmatched': _w("{k} {k|player|players|players} without a matched name",
+                           "{k} {k|zawodnik|zawodników|zawodników} bez dopasowanego nazwiska"),
+    'reason.unmatched_one': _w("a player without a matched name", "zawodnik bez dopasowanego nazwiska"),
     'reason.environment': _w("Scoring environment: Superbet expects {team} to score {implied:.0f} (usually "
                              "{usual:.0f})",
                              "Otoczenie punktowe: Superbet oczekuje, że {team} zdobędzie {implied:.0f} (zwykle "
@@ -1492,13 +1505,17 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'reason.position.G': _w("guards", "obrońcom"), 'reason.position.F': _w("forwards", "skrzydłowym"),
     'reason.position.C': _w("centers", "środkowym"), 'reason.position.': _w("this position", "tej pozycji"),
     # context: what the games show that the model doesn't use
-    'reason.history_last': _w("At this line: {side} in {hits} of the last {n} games ({rate:.0f}%, 95% range "
-                              "{low:.0f}–{high:.0f}%)",
-                              "Przy tej linii: {side} w {hits} z ostatnich {n} meczów ({rate:.0f}%, przedział 95% "
-                              "{low:.0f}–{high:.0f}%)"),
+    # the range is the past rate's (Wilson), not the model's chance; the model uses the rate over all the games
+    'reason.history_last': _w("At this line: {side} in {hits} of the last {n} games ({rate:.0f}%; 95% range of this "
+                              "past rate {low:.0f}–{high:.0f}%)",
+                              "Przy tej linii: {side} w {hits} z ostatnich {n} meczów ({rate:.0f}%; 95% przedział tej "
+                              "historycznej częstości {low:.0f}–{high:.0f}%)"),
     'reason.history_all': _w(", {hits} of all {n} ({rate:.0f}%)", ", {hits} ze wszystkich {n} ({rate:.0f}%)"),
-    'reason.history_note': _w("; needs {be:.0f}% after tax. The model uses this rate only pulled toward the price",
-                              "; potrzeba {be:.0f}% po podatku. Model używa tej częstości tylko ściągniętej do ceny"),
+    'reason.history_is_all': _w(" (the whole sample)", " (to cała próba)"),
+    'reason.history_note': _w("; needs {be:.0f}% after costs. The model uses the rate over all {n} games, pulled "
+                              "toward the price as if the price were worth 10 games",
+                              "; potrzeba {be:.0f}% po kosztach. Model używa częstości ze wszystkich {n} meczów, "
+                              "ściągniętej do ceny tak, jakby cena była warta 10 meczów"),
     'reason.sample_last_season': _w("; {n} of the games are from last season", "; {n} z meczów to zeszły sezon"),
     'reason.sample_preseason': _w("; {n} are preseason", "; {n} to przedsezon"),
     'reason.minutes': _w("Minutes: {recent:.1f} per game in the last 5 ({low:.0f}–{high:.0f}) vs {usual:.1f} in his "
@@ -1549,6 +1566,10 @@ TEXTS: Dict[str, Dict[str, str]] = {
                     "pochodzą z innej roli"),
     'warn.stint': _w("Only {k} of the {n} games are with {team}: the rest are from another team",
                      "Tylko {k} z {n} meczów to {team}: reszta to inna drużyna"),
+    'warn.absence_unknown': _w("Out per RotoWire: {names}, but he has no games without them: their effect is unknown, "
+                               "not zero, and the model doesn't adjust for them",
+                               "Nie grają (RotoWire): {names}, ale nie ma meczów bez nich: ich wpływ jest nieznany, "
+                               "a nie zerowy, i model go nie uwzględnia"),
     'warn.lineup_expected': _w("RotoWire's lineup of {team} is expected, not confirmed",
                                "Skład {team} na RotoWire jest przewidywany, nie potwierdzony"),
     # blockers (reasons.prop_flags)

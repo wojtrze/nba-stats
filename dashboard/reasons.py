@@ -26,8 +26,7 @@ import numpy as np
 import pandas as pd
 
 import i18n
-from metrics import (ACTIVE_PROFILE, alpha, calibrate, logit, no_vig, prop_probability, stint_games,
-                     wilson_interval)
+from metrics import ACTIVE_PROFILE, alpha, calibrate, logit, no_vig, prop_probability, wilson_interval
 
 MIN_GAMES = 8
 ESPN, SUPERBET, ROTOWIRE, MODEL = 'ESPN', 'Superbet', 'RotoWire', 'model'
@@ -186,6 +185,25 @@ def _margin(result: str) -> float:
     return abs(int(match.group(1)) - int(match.group(2))) if match else np.nan
 
 
+def _mate_names(absences: List[Dict], lang: str) -> str:
+    """The teammates' names, and how many have no matched name (never a raw id)."""
+    named = [a['name'] for a in absences if a['name']]
+    unmatched = sum(a['name'] is None for a in absences)
+    if unmatched:
+        named.append(i18n.t('reason.unmatched', lang, k=unmatched))
+    return ', '.join(named)
+
+
+def _sample_note(games: pd.DataFrame, lang: str) -> str:
+    """'; 3 of the games are from last season; 2 are preseason' for a sample that mixes them in, else ''."""
+    note = ''
+    if 'top_up' in games and games['top_up'].any():
+        note += i18n.t('reason.sample_last_season', lang, n=int(games['top_up'].sum()))
+    if 'season_type' in games and (games['season_type'] == 'pre').any():
+        note += i18n.t('reason.sample_preseason', lang, n=int((games['season_type'] == 'pre').sum()))
+    return note
+
+
 def _side_market(over: float, side: str) -> float:
     return over if side == 'Over' else 1 - over
 
@@ -195,8 +213,13 @@ def offer_context(row, games: pd.DataFrame, logs: pd.DataFrame, lineups: pd.Data
     """What prop_reasons needs about one priced line (a models.price_props row, with tracking.prop_movement's open
     line, open over / under and first seen when known): the bet dict both dashboards pass it. games: the player's
     games behind the numbers, oldest first; logs: every player's games of the same scope (team schedules,
-    teammates); lineups: RotoWire's rows with player_id_ESPN; names: {player_id: display name}; coef: the
-    calibration (default models.load_calibration())."""
+    teammates); lineups: RotoWire's rows with player_id_ESPN (and name); names: {player_id: display name}; coef: the
+    calibration (default models.load_calibration()).
+
+    absences: tonight's out teammates one by one (metrics.absence_breakdown on the same games price_props adjusts
+    with), each {'id', 'name' (ESPN's, else RotoWire's, else None: never the raw id), 'n_without', 'n_with',
+    'estimated', 'change'}; the estimated changes add up to row['lineup adj']. out_n: the fewest games without one
+    of the estimated teammates (None when none is)."""
     if coef is None:
         from models import load_calibration
         coef = load_calibration()
@@ -209,10 +232,21 @@ def offer_context(row, games: pd.DataFrame, logs: pd.DataFrame, lineups: pd.Data
 
     listed = lineups[lineups['player_id_ESPN'] == pid] if len(lineups) else lineups
     team_rows = lineups[lineups['team'] == team] if len(lineups) and team else lineups.iloc[0:0]
-    from metrics import rotowire_team
+    from metrics import absence_breakdown, rotowire_team
     out_ids = rotowire_team(lineups, team)['out'] if team and len(lineups) else []
-    # the fewest games the player played without one of tonight's out teammates (the change rests on them)
-    missed = [int((~stint_games(logs, pid, o)['teammate_played']).sum()) for o in out_ids if o != pid]
+    # tonight's out teammates one by one, on the games price_props adjusts with (not last season's top-up rows):
+    # what each adds to the player's average, or that it can't be estimated (no games without him)
+    own = logs[~logs['top_up'].astype(bool)] if 'top_up' in logs else logs
+    stat = row['bet_type']
+    listed_names = lineups.dropna(subset=['player_id_ESPN']).drop_duplicates('player_id_ESPN') \
+        .set_index('player_id_ESPN')['name'] if len(lineups) and 'name' in lineups else pd.Series(dtype=object)
+    absences = []
+    for term in (absence_breakdown(own, pid, out_ids, stat) if out_ids and stat in own else []):
+        name = names.get(term['id']) if hasattr(names, 'get') else None
+        name = name if isinstance(name, str) and name else listed_names.get(term['id'])
+        absences.append(term | {'name': name if isinstance(name, str) and name else None})
+    # the change rests on the fewest games without one of the teammates it was estimated for
+    estimated_n = [a['n_without'] for a in absences if a['estimated']]
     status = row.get('RotoWire') or ''
     side = row.get('side') or None
     market_over = row.get('market over %', np.nan) / 100
@@ -229,7 +263,9 @@ def offer_context(row, games: pd.DataFrame, logs: pd.DataFrame, lineups: pd.Data
             'avg': row['avg'], 'proj avg': row['proj avg'], 'lineup adj': row['lineup adj'], 'status': status,
             'play_pct': listed['play_pct'].iloc[0] if len(listed) else np.nan,
             'lineup_status': team_rows['lineup_status'].iloc[0] if len(team_rows) else None,
-            'out_names': [str(names.get(p, p)) for p in out_ids], 'out_n': min(missed) if missed else None,
+            'out_names': [a['name'] for a in absences if a['name']],
+            'out_unmatched': sum(a['name'] is None for a in absences), 'absences': absences,
+            'out_n': min(estimated_n) if estimated_n else None,
             'team_games': row.get('team_games'), 'odds_at': odds_at, 'lineup_at': lineup_at,
             'stats_through': logs['Date'].max() if len(logs) else None,
             'open_line': row.get('open line', np.nan), 'open_over': row.get('open over', np.nan),
@@ -350,14 +386,35 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
     if n:
         proj = bet.get('proj avg', bet['avg'])
         reasons.append(_reason(None, i18n.t('reason.expected', lang, proj=proj, stat=stat, line=line, diff=proj - line,
-                                            avg=bet['avg'], median=values.median()),
+                                            avg=bet['avg'], median=values.median()) + _sample_note(games, lang),
                                value=proj, reference=line, n=n, as_of=played_through, source=f"{MODEL} · {ESPN}",
                                kind=DRIVER, group='projection', used_by_model=True))
 
     adj = bet.get('lineup adj', 0) or 0
-    if adj and bet.get('out_names'):
-        driver('availability', i18n.t('reason.teammates', lang, names=', '.join(bet['out_names']), name=name,
-                                      adj=adj, stat=stat, n=bet.get('out_n') or 0),
+    absences = bet.get('absences')
+    if absences is not None:
+        # teammate by teammate (offer_context): the estimated ones make the adjustment, the others are unknown
+        estimated = [a for a in absences if a['estimated']]
+        unknown = [a for a in absences if not a['estimated']]
+        if adj and estimated:
+            parts = ', '.join(i18n.t('reason.teammates_part', lang, mate=a['name'] or i18n.t('reason.unmatched_one',
+                                                                                              lang),
+                                     change=a['change'], n=a['n_without']) for a in estimated)
+            text = i18n.t('reason.teammates', lang, names=_mate_names(absences, lang), adj=adj, stat=stat,
+                          parts=parts)
+            if unknown:
+                text += i18n.t('reason.teammates_unknown', lang, names=_mate_names(unknown, lang))
+            driver('availability', text, value=bet['avg'] + adj, reference=bet['avg'],
+                   n=min(a['n_without'] for a in estimated), as_of=bet.get('lineup_at'),
+                   source=f"{ROTOWIRE} · {ESPN}")
+        elif unknown:
+            reasons.append(_reason(None, i18n.t('warn.absence_unknown', lang, names=_mate_names(unknown, lang)),
+                                   kind=WARNING, group='availability'))
+    elif adj and bet.get('out_names'):
+        # a caller without the breakdown: the total and the games it rests on
+        driver('availability', i18n.t('reason.teammates', lang, names=', '.join(bet['out_names']), adj=adj,
+                                      stat=stat, parts=i18n.t('reason.teammates_fewest', lang,
+                                                              n=bet.get('out_n') or 0)),
                value=bet['avg'] + adj, reference=bet['avg'], n=bet.get('out_n'), as_of=bet.get('lineup_at'),
                source=f"{ROTOWIRE} · {ESPN}")
 
@@ -384,14 +441,13 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
         low, high = wilson_interval(hits, len(last))
         text = i18n.t('reason.history_last', lang, side=side, hits=hits, n=len(last), rate=100 * hits / len(last),
                       low=100 * low, high=100 * high)
-        if n > 10:
+        # the model's hit rate is over the whole sample (metrics.prop_probability), not the last 10 shown first
+        if n > len(last):
             every = int((values > line).sum() if over else (values < line).sum())
             text += i18n.t('reason.history_all', lang, hits=every, n=n, rate=100 * every / n)
-        text += i18n.t('reason.history_note', lang, be=be)
-        if 'top_up' in games and games['top_up'].any():
-            text += i18n.t('reason.sample_last_season', lang, n=int(games['top_up'].sum()))
-        if 'season_type' in games and (games['season_type'] == 'pre').any():
-            text += i18n.t('reason.sample_preseason', lang, n=int((games['season_type'] == 'pre').sum()))
+        else:
+            text += i18n.t('reason.history_is_all', lang)
+        text += i18n.t('reason.history_note', lang, be=be, n=n) + _sample_note(games, lang)
         context('hits_l10', feature_hits(values, line, bet.get('market over %', np.nan) / 100
                                          if _known(bet.get('market over %')) else np.nan),
                 text, group='history', value=100 * hits / len(last), reference=be, n=n, as_of=played_through,

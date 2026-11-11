@@ -1,6 +1,7 @@
 """Run with: python -m pytest dashboard"""
 import numpy as np
 import pandas as pd
+import pytest
 
 import i18n
 from metrics import count_over
@@ -92,7 +93,7 @@ def test_an_untested_signal_answers_the_five_questions_without_a_direction():
     [r] = _mispricing([_signal()], stat='ARP', line=33.5)
     lines = r['text'].split("  \n")
     assert r['supports'] is None and r['validation'] == UNTESTED
-    assert lines[0].startswith('Za mało, by pokryć podatek') and '7.0 pp' in lines[0] and '11.0 pp' in lines[0]
+    assert lines[0].startswith('Za mało, by wyjść na zero po kosztach') and '7.0 pp' in lines[0] and '11.0 pp' in lines[0]
     assert lines[1].startswith('Co się stało') and 'PTS 21.5' in lines[1] and '58%' in lines[1]
     assert lines[2].startswith('Dlaczego')
     assert 'znika' in lines[3]
@@ -204,8 +205,8 @@ def test_a_signal_that_clears_the_tax_says_how_such_signals_did_on_the_explorati
     explored = {'nights': 12, 'through': '2026-10-31', 'signals': 130, 'won': 54.6, 'roi': -9.8}
     [r] = _mispricing([_signal(clears=True, gap_pp=12.0, exploration=explored)], stat='ARP')
     assert r['text'].split("  \n")[-1] == ("Na nocach rozpoznania (12 nocy do 2026-10-31) takich sygnałów, które "
-                                           "pokrywały podatek, było 130: wygrało 55%, wynik -9.8 zł na 100 zł stawki "
-                                           "po podatku.")
+                                           "pokrywały standardowy podatek 12%, było 130: wygrało 55%, wynik -9.8 zł "
+                                           "na 100 zł stawki po tym podatku.")
     [short] = _mispricing([_signal(exploration=explored)], stat='ARP')
     assert 'rozpoznania' not in short['text']
 
@@ -254,3 +255,32 @@ def test_the_role_message_says_the_role_and_the_minutes():
                                    signals=[h5]) if r['kind'] == MISPRICING]
     assert 'według RotoWire dziś pierwsza piątka. W ostatnich 5 meczach zaczynał 0 razy i grał w nich 18 min' in r['text']
     assert 'około 28 min' in r['text']
+
+
+# --- the cost profile the page prices with (audit F-10). Synthetic quotes and games: maths and logic only ---
+
+def test_signals_use_the_cost_profile_they_are_given_and_never_call_needed_the_tax():
+    from metrics import break_even, no_vig
+    from mispricing import spread_signals
+    from reasons import mispricing_reasons
+    q = pd.DataFrame([('BLK', 0.5, 1.50, 2.60)], columns=['bet_type', 'line', 'over_odds', 'under_odds'])
+    games = pd.DataFrame({'BLK': [0, 0, 3, 0, 2, 0, 0, 4, 0, 1]})
+    std = spread_signals(q, games, {'BLK': 1.2}, status={}, profile='superbet_standard')[0]
+    free = spread_signals(q, games, {'BLK': 1.2}, status={}, profile='superbet_no_tax')[0]
+    p_side = no_vig(1.5, 2.6)[0 if std['side'] == 'Over' else 1]
+    for s, profile in ((std, 'superbet_standard'), (free, 'superbet_no_tax')):
+        assert s['needed_pp'] == pytest.approx(100 * (float(break_even(s['odds'], profile)) - p_side))
+    assert free['needed_pp'] < std['needed_pp']
+    for lang in ('en', 'pl'):
+        first = mispricing_reasons([free], 'BLK', free['side'], lang)[0]['text'].split("  \n")[0]
+        assert 'tax' not in first and 'podat' not in first
+        assert ('with the margin and costs' if lang == 'en' else 'z marżą i kosztami') in first
+
+
+def test_the_props_page_passes_its_cost_profile_to_the_signals():
+    import os
+    import re
+    page = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dashboard_v2', 'views',
+                        'props.py')
+    call = re.search(r'signals = offer_signals\((.*)\)', open(page, encoding='utf-8').read()).group(1)
+    assert 'profile=cost_profile()' in call
