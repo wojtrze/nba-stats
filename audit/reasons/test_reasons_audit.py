@@ -382,7 +382,7 @@ def test_7_not_chosen_is_worded_apart_from_not_qualifying():
 
 def test_B_small_sample_and_no_data():
     from reasons import prop_flag_items
-    assert ('flag.few_games', {'n': 3}) in prop_flag_items(3, False, None, '', pd.Series([30.0] * 3), None, 'Over')
+    assert ('flag.few_games', {'n': 3}) in prop_flag_items(3, False, None, '', pd.Series([30.0] * 3))
     bet = {'name': 'P', 'stat': 'PTS', 'side': 'Over', 'line': 23.5, 'odds': 1.9, 'model %': 52.0,
            'break-even %': 59.8, 'edge pp': -7.8, 'tax': 12.0, 'avg': np.nan, 'proj avg': np.nan, 'opp': 'bos',
            'team': 'nyk', 'odds_at': FETCHED}

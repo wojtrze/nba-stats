@@ -352,7 +352,13 @@ dotychczasowymi blokadami, a zmiana tego, co jest blokowane, bez dowodu zmienia�
 | Nie zagra | RotoWire: szansa gry 0% (linia i tak była pomijana w decyzji i na liście; teraz panel to mówi) |
 | Może nie zagrać | RotoWire: szansa gry między 1% a 99% |
 | Niestabilne minuty | ≥ 5 meczów i współczynnik zmienności minut > **0,35** |
-| Linia przeciw stronie | linia ruszyła się o **≥ 1,5** w stronę przeciwną do ocenianej strony; do oceny przy weryfikacji pod koniec listopada (wynik takich linii wobec ceny), bo w 2022/23 był jeden zapis na linię |
+
+**Ruch linii przeciw stronie nie jest już blokadą (19.11.2026).** Na 29 nocach Superbetu linie, które przed meczem
+ruszyły się o ≥ 1,5 w stronę przeciwną do ocenianej strony (481 rozliczonych), wygrywały częściej, niż mówiła cena,
+o +9,2 pp, wobec +1,5 pp pozostałych (różnica od −0,02 do +13,2 pp, 95%, losowanie całych nocy). Nie wypadały
+gorzej, więc zgodnie z regułą weryfikacji ruch linii jest teraz tylko kontekstem (`reason.line_moved`), bez kierunku.
+Zapis pobrań (`daily_snapshot.py`) i tak nigdy tej blokady nie stawiał, bo liczył flagi bez historii ruchu, więc
+zapisane gwiazdki i te w aplikacji są teraz liczone tak samo.
 
 Domyślnie ukryci są gracze, których rola z RotoWire zaczyna się od „Out” lub „OFS” (filtr `hide_out` działa po tagu
 urazu, nie po szansie gry 0%).
@@ -718,7 +724,6 @@ nocach (koniec listopada), kiedy noce testowe wystarczą też do oceny progu �
 | Projekcja wskazuje | ok. 10% od linii | tylko informacja |
 | Min. meczów (flaga) | 8 | |
 | Niestabilne minuty | CV > 0,35 | |
-| Ruch linii przeciw | ≥ 1,5 | |
 | Ryzyko pogromu | handicap ≥ 10 | |
 | Kalibracja | a = 1,140, b = 0,132 | |
 | Próg 🟢 | brak | 10+ nocy, 50+ zakładów, dolny koniec 95% powyżej progu rentowności |

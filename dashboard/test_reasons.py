@@ -224,12 +224,12 @@ def test_flags_are_blockers():
     assert any('Ques 50%' in t for t in flagged)
 
 
-def test_unstable_minutes_and_line_moving_against_are_flags():
+def test_unstable_minutes_is_a_flag_and_a_line_moving_against_is_not():
     minutes = [10.0, 35, 12, 34, 8, 36, 30, 9]
     reasons = prop_reasons(_bet(line_move=-2.0), _games([25.0] * 8, minutes), _games([]))
     flagged = texts(reasons, flag=True)
     assert any('Minutes swing' in t for t in flagged)
-    assert any('against the pick' in t for t in flagged)
+    assert not any('against the pick' in t for t in flagged)   # context since 2026-11-19, not a blocker
 
 
 def test_game_reasons_for_a_total():
@@ -277,16 +277,14 @@ def test_game_lines_implied_totals():
 def test_prop_flags_each_rule():
     from reasons import prop_flags
     steady = pd.Series([32.0] * 12)
-    assert prop_flags(12, False, np.nan, '', steady, np.nan, 'Over') == []
-    assert prop_flags(5, False, np.nan, '', steady[:5], np.nan, 'Over')[0].startswith("Only 5 games")
-    assert "preseason" in prop_flags(12, True, np.nan, '', steady, np.nan, 'Over')[0]
-    assert prop_flags(12, False, 0, 'Out 0%', steady, np.nan, 'Over') == \
+    assert prop_flags(12, False, np.nan, '', steady) == []
+    assert prop_flags(5, False, np.nan, '', steady[:5])[0].startswith("Only 5 games")
+    assert "preseason" in prop_flags(12, True, np.nan, '', steady)[0]
+    assert prop_flags(12, False, 0, 'Out 0%', steady) == \
         ["RotoWire: Out 0%: won't play (the line is refunded)"]
-    assert prop_flags(12, False, 50, 'Ques 50%', steady, np.nan, 'Over') == \
+    assert prop_flags(12, False, 50, 'Ques 50%', steady) == \
         ["RotoWire: Ques 50%: may sit or play limited minutes"]
-    assert "Minutes swing" in prop_flags(12, False, np.nan, '', pd.Series([10.0, 35.0] * 6), np.nan, 'Over')[0]
-    assert "against the pick" in prop_flags(12, False, np.nan, '', steady, -1.5, 'Over')[0]   # down hurts an Over
-    assert prop_flags(12, False, np.nan, '', steady, -1.5, 'Under') == []                     # ...and helps an Under
+    assert "Minutes swing" in prop_flags(12, False, np.nan, '', pd.Series([10.0, 35.0] * 6))[0]
 
 
 def test_flag_props_turns_flagged_lines_red():

@@ -80,8 +80,8 @@ def test_reasons_and_warnings_in_polish():
     assert len(en) == len(pl)
     assert en[0].startswith("The model estimates Over at 55.0%") and pl[0].startswith("Model szacuje Powyżej na 55.0%")
     assert any(text.startswith("Projekcja modelu: 24.0 PTS") for text in pl)
-    items = prop_flag_items(3, True, 50, 'Ques 50%', pd.Series([10.0, 30, 12]), -2.0, 'Over')
-    assert [k for k, _ in items] == ['flag.few_games', 'flag.preseason', 'flag.may_not_play', 'flag.line_against']
+    items = prop_flag_items(3, True, 50, 'Ques 50%', pd.Series([10.0, 30, 12]))
+    assert [k for k, _ in items] == ['flag.few_games', 'flag.preseason', 'flag.may_not_play']
     assert flag_texts(items)[0] == "Only 3 games in the sample: too few to trust the numbers"
     assert flag_texts(items, 'pl')[0] == "Tylko 3 mecze w próbie: za mało, żeby ufać liczbom"
     assert flag_texts([('flag.few_games', {'n': 5})], 'pl')[0].startswith("Tylko 5 meczów")

@@ -67,7 +67,7 @@ HELP = STAT_HELP | {
               "not a validated one; 🔴 a reason to pass whatever the numbers say (see red flag). The same on every "
               "page; game outcomes only get 🔴, their model isn't calibrated",
     'red flag': "Why not to trust this line, whatever its numbers: too few games, preseason only, may not play, "
-                "minutes swinging, the line moving against the pick (props); early season, no RotoWire lineup, an "
+                "minutes swinging (props); early season, no RotoWire lineup, an "
                 "edge too big to be true (games)",
     'min L5': "Average minutes over the last 5 games: falling minutes are a warning sign for Overs",
     'open line': "The line when daily_snapshot.py first saw it",

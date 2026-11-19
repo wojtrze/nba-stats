@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from core.data import (game_odds, player_decisions, priced_props, settled_lines, settled_props, shortlist_record,
-                       superbet)
+from core.data import (absence_record, absence_window_tonight, game_odds, news_record, news_tonight,
+                       player_decisions, priced_props, settled_lines, settled_props, shortlist_record, superbet)
 from core.analysis import last_game_lines, lookback_summary
 from decisions import CZEKAJ, actionable, offers_table, star_text, stars
 from tracking import star_scorecard
@@ -12,6 +12,8 @@ from core.ui import PAGES, kpis, no_offers, page_header, pl_time, table
 from insights import line_streaks, night_curiosities, tonight_streaks
 from loaders import filtered_logs, player_logs
 from models import calibration_warning, load_calibration, top_up_logs
+import absence_window
+import news
 import night_view
 import whatif
 from i18n import t, value
@@ -177,6 +179,138 @@ def breakeven_block(props: pd.DataFrame):
 
 if len(props):
     breakeven_block(props)
+
+
+# --- the news window (H4, a research hypothesis) and the place for big chances against Superbet ---
+NEWS_COLUMNS = ['player', 'stat', 'before', 'first read', 'close', 'kind', 'minutes']
+
+
+def _pl_clock(ts) -> str:
+    return pd.Timestamp(ts).tz_convert('Europe/Warsaw').strftime('%H:%M')
+
+
+def news_block():
+    st.subheader(t('overview.news', lang), help=t('overview.news_help', lang))
+    st.caption(t('overview.news_note', lang))
+    rec = news_record().get('recognition')
+    if rec and rec.get('signals'):
+        st.caption(t('overview.news_record', lang, nights=rec['nights'], d=news_record()['d'],
+                     reacted=rec.get('reacted by our read %') or 0, other=rec.get('other team moved %') or 0,
+                     signals=rec['signals'], won=rec.get('won %') or 0, clv=rec.get('CLV after tax %') or 0,
+                     closes=rec.get('with a close') or 0, n=news_record()['evaluation']['nights']))
+    else:
+        st.caption(t('overview.news_record_none', lang))
+    found = news_tonight()
+    if not found:
+        st.caption(t('overview.news_none', lang))
+        return
+    for e in found:
+        lines = e['lines']
+        kinds = lines['kind'].value_counts() if len(lines) else pd.Series(dtype=int)
+        st.markdown(t('overview.news_event' if len(lines) else 'overview.news_event_alone', lang,
+                      name=e['name'], team=e['team'].upper(),
+                      kind=t(f"news.{e['kind']}", lang), seen=_pl_clock(e['seen_at']),
+                      own=t(f"news.own.{e['own']}", lang), early=int(kinds.get(news.MOVED_EARLY, 0)),
+                      gone=int(kinds.get(news.WITHDRAWN, 0)), later=int(kinds.get(news.MOVED_LATER, 0)),
+                      never=int(kinds.get(news.NEVER, 0))))
+        if len(lines):
+            with st.expander(t('overview.news_lines', lang)):
+                shown = lines.assign(kind=lines['kind'].map(lambda k: t(f'news.kind.{k}', lang)),
+                                     stat=lines['stat'].map(STAT),
+                                     minutes=lines['minutes to move'].round())[NEWS_COLUMNS]
+                st.dataframe(shown.rename(columns={c: t(f'news.col.{c}', lang) for c in NEWS_COLUMNS}),
+                             hide_index=True, use_container_width=True)
+
+
+news_block()
+
+
+# --- big chances vs Superbet: the expert's recipe (H10, a research hypothesis) ---
+BIG_COLUMNS = ['name', 'bet_type', 'line', 'side', 'odds', 'usual', 'without', 'change', 'share %', 'n without',
+               'previous line', 'shift', 'new line', 'p side %', 'price %', 'gap pp', 'break-even net %']
+BIG_FORMATS = {'line': '%g', 'odds': '%.2f', 'usual': '%.1f', 'without': '%.1f', 'change': '%+.1f',
+               'share %': '%+.0f', 'previous line': '%g', 'shift': '%+g', 'p side %': '%.0f', 'price %': '%.0f',
+               'gap pp': '%+.1f', 'break-even net %': '%.0f'}
+
+
+def big_record_caption():
+    rec = absence_record()
+    every, first, old = rec.get('recognition · all'), rec.get('recognition · first game'), rec.get('2022')
+    if not every or not every.get('signals'):
+        st.caption(t('overview.big_record_none', lang))
+        return
+    num = lambda v: v if v is not None else float('nan')
+    st.caption(t('overview.big_record', lang, nights=every['nights'], d=rec['d'], signals=every['signals'],
+                 won=num(every['won %']), diff=num(every['won − price pp']), roi=num(every['ROI after tax %']),
+                 clv=num(every['CLV after tax %']), f_signals=(first or {}).get('signals') or 0,
+                 f_diff=num((first or {}).get('won − price pp')), f_roi=num((first or {}).get('ROI after tax %')),
+                 h_diff=num((old or {}).get('won − price pp')), h_lines=(old or {}).get('lines') or 0,
+                 n=rec.get('evaluation · all', {}).get('nights') or 0))
+
+
+def _entry(r) -> str:
+    """'**Name** PTS +3.1 (+24%, 14 g., line 9.5)'."""
+    line = t('overview.big_line', lang, line=r['line']) if r['line'] is not None else t('overview.big_no_line', lang)
+    return t('overview.big_entry', lang, name=r['name'], stat=r['stat'], change=r['change'], share=r['share %'],
+             n=r['n_without'], line=line)
+
+
+def gains_text(gains) -> list:
+    """The lines under an absence: his likely replacements at his position, then whom the with/without moves most."""
+    if not gains:
+        return []
+    if gains['too_few']:
+        return [t('overview.big_too_few', lang)]
+    out = []
+    if gains['replacements']:
+        names = [f"**{r['name']}**" + (', ' + t('overview.big_promoted', lang) if r['promoted'] else '')
+                 + ', ' + t('overview.big_minutes', lang, minutes=r['min_change'], n=r['n_without'])
+                 for r in gains['replacements']]
+        out.append(t('overview.big_replacements', lang, position=t(f"position.{gains['position']}", lang),
+                     names='; '.join(names)))
+    if gains['affected']:
+        out.append(t('overview.big_affected', lang, names=', '.join(_entry(r) for r in gains['affected'])))
+    return out
+
+
+def big_block(props: pd.DataFrame):
+    st.subheader(t('overview.big', lang))
+    st.caption(t('overview.big_note', lang))
+    big_record_caption()
+    found = absence_window_tonight(seasons, season_types, props)
+    out = absence_window.fresh(found['out']) if len(found['out']) else found['out']
+    if out.empty:
+        st.caption(t('overview.big_none', lang))
+        return
+    lines = found['lines']
+    for _, o in out.sort_values(['game_no', 'since']).iterrows():
+        game = t('overview.big_first', lang) if o['game_no'] == 1 else t('overview.big_nth', lang, n=int(o['game_no']))
+        text = t('overview.big_out', lang, name=o['name'], team=o['team'].upper(), since=_pl_clock(o['since']),
+                 game=game, ques=t('overview.big_ques', lang) if o['now_ques'] else '')
+        gains = found.get('gains', {}).get(int(o['player_id_ESPN']))
+        st.markdown("  \n".join([text] + gains_text(gains)))
+    if lines.empty:
+        st.caption(t('overview.big_no_lines', lang))
+        return
+    above = int((lines['p side %'] > lines['break-even net %']).sum())
+    if above:
+        st.caption(t('overview.big_above', lang, n=above))
+    for team, part in lines.groupby('team', sort=False):
+        part = part.reset_index(drop=True)
+        with st.expander(f"{team.upper()} · {part['out'].iloc[0]} · " + t('overview.big_lines', lang, n=len(part))):
+            shown = part.assign(bet_type=part['bet_type'].map(STAT), side=part['side'].map(lambda v: value(v, lang)),
+                                **{'new line': part['new line'].map({True: '✓', False: ''})})
+            picked = table(shown, BIG_COLUMNS, BIG_FORMATS, key=f'big_{team}', select=True, context='absence')
+            if picked is not None:
+                r = part.iloc[picked]
+                focus(r['event_id'], r['name_ESPN'], r['bet_type'])
+
+
+if len(props):
+    big_block(props)
+else:
+    st.subheader(t('overview.big', lang))
+    st.caption(t('overview.big_note', lang))
 
 # --- last night: how the lines, the rated bets and the games resolved ---
 latest = night_view.latest_night()

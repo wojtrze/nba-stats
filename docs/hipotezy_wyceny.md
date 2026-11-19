@@ -259,6 +259,57 @@ i to w kierunku, który w rozpoznaniu przegrywał. Działa tylko w ocenie (`back
 
 ---
 
+## H10: Ważny zawodnik Out, a linie kolegów (mechanizm C)
+
+**Data D: 2026-11-19** (reguła zapisana 19.11, zanim zobaczyliśmy noce oceny). Ocena na nocach od 20.11, co
+najmniej 10. Kod: `dashboard/absence_window.py` (ten sam w aplikacji i w ocenie), ocena:
+`python -m backtest.absence_shift` → `data/backtest/absence_shift.md` i `.json`.
+
+**Skąd:** przepis eksperta od zakładów, który przekazał użytkownik (15.11, zakład Walker REB Over 6,5 @ 1,97 bez
+Embiida). (1) „Out” w RotoWire, nawet kilka godzin przed meczem, traktujemy jako pewne; (2) macierz with/without
+pokazuje kolegów z największą |zmianą| bez tego zawodnika; (3) w pierwszym meczu bez niego Superbet może być
+niedostrojony.
+
+**Mechanizm:** Superbet ustawia linie kolegów pod skład, w którym ten zawodnik gra, i nie przelicza ich (albo
+przelicza za mało), gdy wypada, zwłaszcza w pierwszym meczu bez niego.
+
+**Definicja** (wersje RotoWire tej nocy, mecze sprzed tej nocy):
+1. **Nieobecny:** gracz z ≥ 20 min (średnio w swoich 10 ostatnich meczach) z `play_pct` 0 w najnowszej wersji
+   RotoWire. Gdy wcześniej był Out, a najnowsza wersja mówi „Ques”, zostaje, z dopiskiem (Embiid 15.11: od 21:00 UTC
+   „Ques, 100%”, a nie zagrał). *Od kiedy:* nasz pierwszy odczyt z Out. *Mecz bez niego nr:* 1 + mecze drużyny,
+   które opuścił tuż przed dziś. Liczą się tylko świeże nieobecności, nr 1–3: dłuższą Superbet wycenia od tygodni
+   (zmiana wobec planu, 19.11, przed oceną: bez tego 15.11 dawał 116 linii, w tym nieobecnych od 184 meczów).
+2. **Koledzy:** ich linie PTS / REB / AST / PRA / 3PM; zmiana = suma po świeżych nieobecnych (średnia bez − z nim,
+   w okresie wspólnej gry, × n / (n + 5), `metrics.absence_breakdown`). Linia trafia na listę, gdy |zmiana| ≥ 10%
+   zwykłej średniej i choć jeden nieobecny ma ≥ 3 mecze bez niego.
+3. **Strona:** zgodna ze znakiem zmiany (Over, gdy rośnie, Under, gdy maleje). Bez progu opłacalności: tak działa
+   przepis.
+4. **Sygnał (test a):** każda taka linia przy jej pierwszym odczycie harmonogramu po tym, jak Out był znany (także
+   linia wystawiona później, jak Walkera o 17:20 UTC), liczona i oceniana jak H1/H2/H4/H5/H6
+   (`mispricing_eval.signals` i `economic`). Raport podaje też „pierwszy mecz bez niego” osobno oraz wygrane − cena.
+
+**Rozpoznanie** (19.11, opis, nic nie ustawia):
+- **Unibet 2022/23** (`2022_lines.csv`, wariant *absences*: nieobecności znane z góry, czyli górna granica): pierwszy
+  mecz bez gracza z ≥ 20 min, linie ze zmianą ≥ 10%: 3670 linii, 129 nocy, wygrane − cena **+0,1 pp** (95%: −2,1…+2,1),
+  ROI po podatku −17%. Mecze 2–3: −0,6 pp, 4+: −4,6 pp. Ze zmianą ≥ 20% to samo (+0,1 pp w pierwszym meczu).
+- **Superbet** (15 nocy z harmonogramu ≤ D): 527 sygnałów do wzięcia, wygrało 51,8% (+1,7 pp ponad cenę), ROI po
+  podatku −14,8% (99%: −25,8…−7,1), CLV po podatku −18,5% (235 z zamknięciem). Pierwszy mecz bez niego: 344 sygnały,
+  +4,5 pp ponad cenę, ROI −10,4% (−24,0…+3,5), CLV −18,2%. 289 linii nie dało się wziąć (przy następnym odczycie
+  linia albo kurs już się zmieniły): Superbet dociąga linie w ciągu godziny.
+- **Przypadek Walkera (15.11):** Embiid Out od 08:46 UTC; Superbet wystawił linie Walkera dopiero o 17:20, po tym, jak
+  RotoWire wpisał go do pierwszej piątki (17:00). REB 6,5 przy zwykłej średniej 3,2 i +0,8 z macierzy (39 meczów bez
+  Embiida): linia była wyżej, niż mówi macierz, czyli Superbet uwzględnił brak. Wynik 7 zbiórek, zakład wszedł o włos.
+
+**Przewidywanie zapisane przed oceną:** ❌ odrzucona (2022/23 daje +0,1 pp, a do zysku po podatku trzeba ok. 8–11 pp;
+w rozpoznaniu Superbetu CLV −18%, tak samo jak H4).
+
+**W aplikacji:** Overview → „Duże szanse vs Superbet” pokazuje każdą sytuację z reguły (decyzja użytkownika 19.11), z
+oznaczeniem 🧪, z bilansem z `absence_shift.json` i z liczbami do oceny: linia Superbetu z ostatniego meczu z nim
+i przesunięcie, „nowa po wiadomości”, nasza szansa (z korektą na nieobecność) wobec ceny bez marży i próg po
+podatku. Nie wpływa na decyzje ani gwiazdki.
+
+---
+
 ## H3–H9: definicje do uzupełnienia przed ich testem
 
 Każda dostanie tu własną datę D, progi i wynik rozpoznania, zanim jej detektor trafi do aplikacji.
@@ -282,6 +333,31 @@ jeszcze w ofercie w 3; linie kolegów ruszyły się do naszego odczytu w 83% (t�
 które stały i ruszyły się później przy tej samej linii (21), przesunęły się o medianę 1,2 pp (maks. 6,5) wobec
 ok. 11 pp potrzebnych po podatku. Na razie Superbet reaguje w tej samej godzinie, co nasz odczyt RotoWire; czy
 reaguje szybciej niż wiadomość z RotoWire, rozstrzygnie dopiero etap 1 przy gęstszym odczycie RotoWire.
+
+**H4, etap 1 (19.11, D = 2026-11-19).** `python -m backtest.news_lag` → `data/backtest/news_lag.md` (i
+`news_lag.json` dla okna newsów w Overview). Zdarzenia i reakcje liczy ten sam kod co aplikacja
+(`dashboard/news.py`). Ustalone przed jakąkolwiek nocą oceny:
+- **Zdarzenia:** gracz z ≥ 20 min przechodzi z „gra” na „nie zagra” (*out*) albo z „nie zagra” na „gra” (*return*)
+  między dwiema wersjami RotoWire najwyżej 2 h od siebie; tylko mecze czytane przez harmonogram przed wiadomością
+  i w jej terminie (najwyżej 10 min po niej).
+- **Strona:** po *out* Over linii PTS/REB/AST/PRA kolegów z drużyny, po *return* Under. Kierunek z mechanizmu, nie
+  z modelu (stopień „+ absences” w ablacji nic nie dodaje) ani z ruchu do zamknięcia (to wiedza z przyszłości).
+- **Sygnał:** linia kolegi, która przy naszym pierwszym odczycie po wiadomości stała jak przed nią (ta sama linia,
+  szansa bez marży zmieniona < 0,5 pp), po kursie z tego odczytu; liczona i oceniana jak sygnały H1/H2/H5/H6
+  (`mispricing_eval.signals` i `economic`: musi dać się postawić, CLV i ROI po podatku, zakres 99%, progi rejestru).
+- **Noce:** ≤ D to rozpoznanie (opis), > D ocena (co najmniej 10 nocy, ok. początek grudnia).
+
+Rozpoznanie (15 nocy z harmonogramu, 60 zdarzeń: 55 *out*, 5 *return*; 953 linie kolegów): do naszego odczytu
+Superbet ruszył albo zdjął 86% linii kolegów (tło: 70% linii drugiej drużyny w tych samych odczytach). Ruszyło się
+później 123 (mediana 60 min po naszym odczycie, mediana ruchu 1,0 pp wobec ok. 11 pp potrzebnych po podatku), a 12 nie
+ruszyło się wcale. Sygnałów do wzięcia: 65, z czego 61 rozliczonych: wygrało 44,3%, ROI po podatku −26,8% (99%: od
+−73,6 do −1,3), CLV po podatku −18,8% (od −19,6 do −18,0, 29 z ważnym zamknięciem). Na nocach rozpoznania sygnał
+traci, a Superbet reaguje zwykle w tym samym terminie, w którym my widzimy wiadomość. To tylko opis; werdykt
+dadzą noce po D. Status zostaje `untested` do decyzji użytkownika.
+
+*Poprawka 19.11 (przed nocami oceny):* rynek PRA Superbet nazywa `ARP`, a `news.STATS` szukał `PRA`, więc linie PRA
+kolegów w ogóle nie wchodziły do H4, choć definicja je obejmuje. Po poprawce liczby wyżej (wcześniej: 746 linii,
+52 sygnały, ROI −34,0%, CLV −18,8%). Definicja się nie zmienia, wnioski też nie.
 
 **Kolejność:** H4 etap 1 i H7 (H5 opisana wyżej), potem H3, H8 i H9 (koniec listopada, razem z weryfikacją modelu zliczeń).
 

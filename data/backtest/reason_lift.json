@@ -1,4 +1,70 @@
 {
+  "meta": {
+    "schema_version": 1,
+    "model_version": "2026-10-26-count",
+    "calibration": "refitted on each source's fit range (backtest/calibrate.fit_coefficients); not the dashboards' calibration file",
+    "ranges": {
+      "2022": {
+        "fit": [
+          "2022-11-09",
+          "2023-01-31"
+        ],
+        "test": [
+          "2023-02-01",
+          "2023-05-08"
+        ]
+      },
+      "superbet": {
+        "fit": [
+          "2026-10-20",
+          "2026-11-09"
+        ],
+        "test": [
+          "2026-11-10",
+          "2026-11-18"
+        ]
+      }
+    },
+    "features": {
+      "hits_l10": {
+        "definition": "33b496773b2e",
+        "tested": true
+      },
+      "minutes": {
+        "definition": "1c936ccec54c",
+        "tested": true
+      },
+      "venue": {
+        "definition": "2f14ac23a0fc",
+        "tested": true
+      },
+      "rest": {
+        "definition": "a4b326f5aa95",
+        "tested": true
+      },
+      "vs_opp": {
+        "definition": "13d5bed8dd4b",
+        "tested": true
+      },
+      "volume": {
+        "definition": "1377b81f4977",
+        "tested": true
+      },
+      "role": {
+        "definition": null,
+        "tested": false
+      },
+      "blowout": {
+        "definition": null,
+        "tested": false
+      }
+    },
+    "created_at": "2026-11-19T18:13:40Z",
+    "code_version": {
+      "commit": "8d0d73efffd51c049e5c66852c98444587f14b48",
+      "dirty": false
+    }
+  },
   "features": {
     "hits_l10": {
       "status": "no_lift",

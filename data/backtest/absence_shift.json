@@ -1,0 +1,68 @@
+{
+  "d": "2026-11-19",
+  "updated": "2026-11-19T19:26+00:00",
+  "recognition · all": {
+    "nights": 15,
+    "signals": 527,
+    "settled": 521,
+    "won %": 51.82341650671785,
+    "won − price pp": 1.6999283719133638,
+    "ROI after tax %": -14.824107485604605,
+    "with a close": 235,
+    "CLV after tax %": -18.53207943817338,
+    "CLV low": -19.31019671345314,
+    "CLV high": -17.867593085253052,
+    "verdict": "rejected",
+    "why": "the high end of the 99% range of the CLV is below 0"
+  },
+  "recognition · first game": {
+    "nights": 15,
+    "signals": 344,
+    "settled": 342,
+    "won %": 54.67836257309941,
+    "won − price pp": 4.521793105793439,
+    "ROI after tax %": -10.378947368421054,
+    "with a close": 159,
+    "CLV after tax %": -18.163296274835883,
+    "CLV low": -18.647757728252426,
+    "CLV high": -17.808782574338196,
+    "verdict": "rejected",
+    "why": "the high end of the 99% range of the CLV is below 0"
+  },
+  "evaluation · all": {
+    "nights": 0,
+    "signals": 0,
+    "settled": 0,
+    "won %": null,
+    "won − price pp": null,
+    "ROI after tax %": null,
+    "with a close": 0,
+    "CLV after tax %": null,
+    "CLV low": null,
+    "CLV high": null,
+    "verdict": "wait",
+    "why": "0 of the 10 nights a verdict needs"
+  },
+  "evaluation · first game": {
+    "nights": 0,
+    "signals": 0,
+    "settled": 0,
+    "won %": null,
+    "won − price pp": null,
+    "ROI after tax %": null,
+    "with a close": 0,
+    "CLV after tax %": null,
+    "CLV low": null,
+    "CLV high": null,
+    "verdict": "wait",
+    "why": "0 of the 10 nights a verdict needs"
+  },
+  "2022": {
+    "lines": 3670,
+    "nights": 129,
+    "won − price pp": 0.05564327909707091,
+    "low": -2.1155097796775424,
+    "high": 2.1326103211431313,
+    "ROI after tax %": -17.04669209809264
+  }
+}
