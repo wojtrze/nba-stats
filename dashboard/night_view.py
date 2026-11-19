@@ -15,8 +15,8 @@ from glossary import column_config, tinted
 from i18n import t, value
 from loaders import games, name_resolver, player_logs, snapshot_history
 from metrics import grouped_rates
-from nightly import (GROUP_AXES, pre_tip, group_outcomes, lineups_before_tip, night_games, night_props,
-                     night_summary, nights, recompute_projection, recompute_props)
+from nightly import (GROUP_AXES, pre_tip, group_outcomes, last_lines_since, lineups_before_tip, night_games,
+                     night_props, night_summary, nights, recompute_projection, recompute_props)
 from tracking import PROP_KEY, settle_stars
 
 WIN, LOSS, PUSH, OVER, UNDER = '#16a34a', '#dc2626', '#9aa5b1', '#2563eb', '#f59e0b'
@@ -140,6 +140,17 @@ def latest_night(now=None) -> Dict:
     if len(settled):
         newer = newer[newer['night'] > settled['night'].iloc[0]]
     return {'settled': day(settled), 'pending': day(newer)}
+
+
+# from this night on the fetches saved our projections, so a season's numbers need no recomputing
+SAVED_SINCE = '2026-10-21'
+
+
+@st.cache_data(ttl=600, show_spinner="Counting the season...")
+def season_spot_on() -> Dict:
+    """insights.spot_on_stats of every line since SAVED_SINCE, settled in one go ({} when none)."""
+    from insights import spot_on_stats
+    return spot_on_stats(last_lines_since(snapshot_history('superbet_props'), player_logs(), games(), SAVED_SINCE))
 
 
 def summary_kpis(s: Dict, lang: str = 'en'):

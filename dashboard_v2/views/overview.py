@@ -9,7 +9,7 @@ from tracking import star_scorecard
 from core.columns import OVERVIEW_LOOKBACK, OVERVIEW_NEAREST, OVERVIEW_PROPS, SHORTLIST
 from core.state import language
 from core.ui import PAGES, kpis, no_offers, page_header, pl_time, table
-from insights import line_streaks, night_curiosities, tonight_streaks
+from insights import line_streaks, night_curiosities, spot_on_stats, tonight_streaks
 from loaders import filtered_logs, player_logs
 from models import calibration_warning, load_calibration, top_up_logs
 import absence_window
@@ -312,6 +312,26 @@ else:
     st.subheader(t('overview.big', lang))
     st.caption(t('overview.big_note', lang))
 
+def spot_lines(s, season):
+    """The Spot on numbers: last night's (s) and the season's, from insights.spot_on_stats."""
+    out = []
+    if s:
+        out.append(t('overview.spot.hit', lang, n=s['lines'], ours=s['our spot %'], line=s['line spot %']))
+        out.append(t('overview.spot.closer', lang, ours=s['closer %'], line=s['line closer %'], tie=s['tie %']))
+        sides = [t(key, lang, stats=', '.join(map(STAT, s[part])))
+                 for key, part in (('overview.spot.we_in', 'we closer'), ('overview.spot.line_in', 'line closer'))
+                 if s[part]]
+        if sides:
+            out.append('; '.join(sides))
+        bias = 'none' if abs(s['bias']) < 0.05 else 'low' if s['bias'] > 0 else 'high'   # rounds to 0.0
+        out.append(t(f'overview.spot.bias_{bias}', lang, bias=abs(s['bias']), over=s['over %']))
+    if season:
+        out.append(t('overview.spot.season', lang, nights=season['nights'], n=season['lines'],
+                     ours=season['our spot %'], line=season['line spot %'], closer=season['closer %'],
+                     line_closer=season['line closer %']))
+    return out
+
+
 # --- last night: how the lines, the rated bets and the games resolved ---
 latest = night_view.latest_night()
 if latest['pending']:
@@ -351,6 +371,7 @@ else:
                              line=r['line']))
         with right:
             st.markdown(f"**{t('overview.spot_on', lang)}**", help=t('overview.spot_on_help', lang))
+            st.caption("  \n".join(spot_lines(spot_on_stats(night_props), night_view.season_spot_on())))
             lines = [f"- {said(r)}" for _, r in c['spot_on'].iterrows()]
             if c['best_total'] is not None:
                 g = c['best_total']
@@ -370,8 +391,14 @@ if len(props):
         st.caption(t('overview.streaks_none', lang))
     else:
         def streak_button(r, i):
-            text = t('overview.streak', lang, name=r['name'], n=int(r['n']), stat=STAT(r['bet_type']),
-                     side=t(f"overview.side.{r['side']}", lang), line=r['tonight line'])
+            words = dict(name=r['name'], n=int(r['n']), stat=STAT(r['bet_type']),
+                         side=t(f"overview.side.{r['side']}", lang), line=r['tonight line'])
+            m = r.get('matchup_info')
+            if isinstance(m, dict) and m and pd.notna(r.get('opp')):
+                text = t('overview.streak_vs', lang, **words, opp=str(r['opp']).upper(),
+                         pct=100 * (m['ratio'] - 1), position=t(f"reason.position.{m.get('group', '')}", lang))
+            else:
+                text = t('overview.streak', lang, **words)
             if st.button(text, key=f'streak_{i}', type='tertiary'):
                 focus(r['event_id'], r['name_ESPN'], r['bet_type'])
 

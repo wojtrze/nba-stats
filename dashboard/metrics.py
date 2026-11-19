@@ -559,7 +559,7 @@ def matchup_verdict(diff: float, average: float):
 
 def matchup(allowed: pd.DataFrame, defense: str, group: str) -> Dict:
     """What `defense` allows to a position group vs the league average, from an allowed_by_position table:
-    value, average, diff, ratio, rank (1 = allows the most), word, colour and games (the defense's games behind
+    value, average, diff, ratio, group, rank (1 = allows the most), word, colour and games (the defense's games behind
     it). Empty when unknown."""
     if defense not in allowed.index or group not in ('G', 'F', 'C') or pd.isna(allowed.loc[defense, group]):
         return {}
@@ -568,7 +568,7 @@ def matchup(allowed: pd.DataFrame, defense: str, group: str) -> Dict:
     rank = int(allowed[group].rank(ascending=False, method='min')[defense])
     games = allowed.loc[defense, 'games'] if 'games' in allowed else np.nan
     return {'value': value, 'average': average, 'diff': value - average, 'ratio': value / average if average else 1.0,
-            'rank': rank, 'teams': int(allowed[group].notna().sum()), 'word': word, 'colour': colour,
+            'group': group, 'rank': rank, 'teams': int(allowed[group].notna().sum()), 'word': word, 'colour': colour,
             'games': int(games) if pd.notna(games) else None}
 
 

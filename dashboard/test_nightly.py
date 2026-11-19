@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from nightly import (lineups_before_tip, night_games, night_props, night_summary, nights, recompute_projection)
+from nightly import (last_lines_since, lineups_before_tip, night_games, night_props, night_summary, nights, recompute_projection)
 
 TIP = '2026-10-21T23:30:00Z'          # Oct 21 in New York
 
@@ -42,6 +42,19 @@ def test_night_props_judges_the_last_fetch_before_tip_off():
     assert r['closer than line']                                              # 3.0 off vs the line's 4.5
     assert r['signal'] == '🟡'                                                 # not saved: from the edges
     assert (r['position'], r['team'], r['venue'], r['recomputed']) == ('G', 'NY', 'away', False)
+
+
+def test_last_lines_since_settles_every_night_like_night_props():
+    snaps = pd.DataFrame([_prop('2026-10-20T10:00:00Z', start='2026-10-20T23:30:00Z', proj_avg=18.0),   # before since
+                          _prop('2026-10-21T10:00:00Z', line=19.5, proj_avg=21.0),
+                          _prop('2026-10-21T22:00:00Z', line=20.5, proj_avg=22.0),
+                          _prop('2026-10-21T23:45:00Z', line=30.5, proj_avg=30.0)])     # after tip-off: ignored
+    out = last_lines_since(snaps, LOGS, GAMES, '2026-10-21')
+    one = night_props(snaps, LOGS, GAMES, '2026-10-21')
+    assert len(out) == 1 and out['night'].iloc[0] == pd.Timestamp('2026-10-21')
+    assert (out['line'].iloc[0], out['proj_avg'].iloc[0], out['actual'].iloc[0]) == (20.5, 22.0, 25)
+    assert out[['line', 'actual', 'status', 'proj_avg']].equals(one[['line', 'actual', 'status', 'proj_avg']])
+    assert last_lines_since(snaps.iloc[0:0], LOGS, GAMES, '2026-10-21').empty
 
 
 def test_night_props_keeps_a_saved_red_signal_and_pending_lines():
