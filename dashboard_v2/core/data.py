@@ -6,7 +6,8 @@ Fetch now and Save snapshot), and every fetch is saved; the pages read the newes
 RotoWire comes from loaders.fetch_rotowire too (live at most every 30 minutes, saved whenever it changed).
 """
 import logging
-from typing import Dict, List
+import os
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -189,3 +190,54 @@ def priced_games(prior_games=GAME_DEFAULTS['prior_games'], regress=GAME_DEFAULTS
     if game_odds().empty:
         return []
     return _priced_games(game_odds(), lineups(), prior_games, regress, home_court, shrink, out_max, all_lines)
+
+
+@st.cache_data(ttl=600, show_spinner="Reading tonight's RotoWire news...")
+def news_tonight(night: Optional[str] = None) -> List[Dict]:
+    """news.find_events and news.reactions of tonight (today's US/Eastern date, or `night`) from the saved RotoWire versions and
+    the scheduled Superbet reads: one dict per event (its fields, then reactions' before / after / close / own /
+    others / lines), newest news first. The Overview's news window reads it; nothing is fetched here."""
+    import news
+    night = pd.Timestamp(night) if night else pd.Timestamp.now(tz='US/Eastern').tz_localize(None).normalize()
+    rw = snapshot_history('rotowire_lineups')
+    fetches = snapshot_history('superbet_event_fetches')
+    if rw.empty or fetches.empty:
+        return []
+    rw = rw[pd.to_datetime(rw['game_date']) == night]
+    tips = pd.to_datetime(fetches['start_time'], utc=True)
+    fetches = fetches[news._night(tips) == night]
+    if rw.empty or fetches.empty:
+        return []
+    logs = player_logs()
+    logs = logs[logs['season_type'] != 'pre'].assign(Date=lambda x: pd.to_datetime(x['Date']))
+    logs['player_id_ESPN'] = logs['player_id_ESPN'].astype('Int64')
+    versions = news.lineup_versions(name_resolver().add_ids(rw))
+    events = news.find_events(versions, news.regulars_by_night(logs, [night]))
+    if events.empty:
+        return []
+    props_ = snapshot_history('superbet_props')
+    ids = set(fetches['event_id'])
+    quotes = snapshot_history('superbet_prop_quotes')
+    offered = news.offers(props_[props_['event_id'].isin(ids)], quotes[quotes['event_id'].isin(ids)], fetches)
+    offered = offered[offered['source'] == 'schedule'].copy()
+    if offered.empty:
+        return []
+    offered['player_id_ESPN'] = news.player_ids(offered, props_, logs)
+    team_of = logs.sort_values('Date').drop_duplicates('player_id_ESPN', keep='last') \
+        .set_index('player_id_ESPN')['team'].to_dict()
+    teams = props_.drop_duplicates('event_id', keep='last').set_index('event_id')[['home', 'away']]
+    found = news.cases(events, offered, teams, team_of)
+    return sorted([{**{k: v for k, v in e._asdict().items() if k != 'Index'}, **c} for e, c in found],
+                  key=lambda x: x['seen_at'], reverse=True)
+
+
+def news_record() -> Dict:
+    """data/backtest/news_lag.json (backtest/news_lag.py's summary of H4), {} when it hasn't been written."""
+    import json
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data',
+                        'backtest', 'news_lag.json')
+    try:
+        with open(path, encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}

@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from core.data import (game_odds, player_decisions, priced_props, settled_lines, settled_props, shortlist_record,
-                       superbet)
+from core.data import (game_odds, news_record, news_tonight, player_decisions, priced_props, settled_lines,
+                       settled_props, shortlist_record, superbet)
 from core.analysis import last_game_lines, lookback_summary
 from decisions import CZEKAJ, actionable, offers_table, star_text, stars
 from tracking import star_scorecard
@@ -12,6 +12,7 @@ from core.ui import PAGES, kpis, no_offers, page_header, pl_time, table
 from insights import line_streaks, night_curiosities, tonight_streaks
 from loaders import filtered_logs, player_logs
 from models import calibration_warning, load_calibration, top_up_logs
+import news
 import night_view
 import whatif
 from i18n import t, value
@@ -177,6 +178,52 @@ def breakeven_block(props: pd.DataFrame):
 
 if len(props):
     breakeven_block(props)
+
+
+# --- the news window (H4, a research hypothesis) and the place for big chances against Superbet ---
+NEWS_COLUMNS = ['player', 'stat', 'before', 'first read', 'close', 'kind', 'minutes']
+
+
+def _pl_clock(ts) -> str:
+    return pd.Timestamp(ts).tz_convert('Europe/Warsaw').strftime('%H:%M')
+
+
+def news_block():
+    st.subheader(t('overview.news', lang), help=t('overview.news_help', lang))
+    st.caption(t('overview.news_note', lang))
+    rec = news_record().get('recognition')
+    if rec and rec.get('signals'):
+        st.caption(t('overview.news_record', lang, nights=rec['nights'], d=news_record()['d'],
+                     reacted=rec.get('reacted by our read %') or 0, other=rec.get('other team moved %') or 0,
+                     signals=rec['signals'], won=rec.get('won %') or 0, clv=rec.get('CLV after tax %') or 0,
+                     closes=rec.get('with a close') or 0, n=news_record()['evaluation']['nights']))
+    else:
+        st.caption(t('overview.news_record_none', lang))
+    found = news_tonight()
+    if not found:
+        st.caption(t('overview.news_none', lang))
+        return
+    for e in found:
+        lines = e['lines']
+        kinds = lines['kind'].value_counts() if len(lines) else pd.Series(dtype=int)
+        st.markdown(t('overview.news_event' if len(lines) else 'overview.news_event_alone', lang,
+                      name=e['name'], team=e['team'].upper(),
+                      kind=t(f"news.{e['kind']}", lang), seen=_pl_clock(e['seen_at']),
+                      own=t(f"news.own.{e['own']}", lang), early=int(kinds.get(news.MOVED_EARLY, 0)),
+                      gone=int(kinds.get(news.WITHDRAWN, 0)), later=int(kinds.get(news.MOVED_LATER, 0)),
+                      never=int(kinds.get(news.NEVER, 0))))
+        if len(lines):
+            with st.expander(t('overview.news_lines', lang)):
+                shown = lines.assign(kind=lines['kind'].map(lambda k: t(f'news.kind.{k}', lang)),
+                                     minutes=lines['minutes to move'].round())[NEWS_COLUMNS]
+                st.dataframe(shown.rename(columns={c: t(f'news.col.{c}', lang) for c in NEWS_COLUMNS}),
+                             hide_index=True, use_container_width=True)
+
+
+news_block()
+
+st.subheader(t('overview.big', lang))
+st.caption(t('overview.big_note', lang))
 
 # --- last night: how the lines, the rated bets and the games resolved ---
 latest = night_view.latest_night()
