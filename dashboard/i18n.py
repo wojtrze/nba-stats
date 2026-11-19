@@ -270,10 +270,9 @@ TERMS: Dict[str, Term] = {
                     "informacja: samo w sobie nie pokonało kursów Superbetu.")),
     'red flag': Term(_w("⚠️ warning", "⚠️ ostrzeżenie"),
                      _w("A reason to pass whatever the numbers say: too few games, preseason only, may not play, "
-                        "minutes swinging, the line moving against the pick. A line with a warning gets 0★.",
+                        "minutes swinging. A line with a warning gets 0★.",
                         "Powód, żeby odpuścić, cokolwiek mówią liczby: za mało meczów, tylko przedsezon, może nie "
-                        "zagrać, wahające się minuty, linia ruszyła przeciw typowi. Linia z ostrzeżeniem dostaje "
-                        "0★.")),
+                        "zagrać, wahające się minuty. Linia z ostrzeżeniem dostaje 0★.")),
     'RotoWire': Term(_w("tonight's role", "rola dziś"),
                      _w("From RotoWire: starter (✔ = lineup confirmed), bench, or the injury tag with the chance to "
                         "play (Out 0%, Doubt 25%, Ques 50%, Prob 75%). Empty = RotoWire doesn't list the game yet.",
@@ -1678,9 +1677,6 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "RotoWire: {status}: może nie zagrać albo zagrać mało minut"),
     'flag.minutes': _w("Minutes swing a lot ({low:.0f}–{high:.0f}): the role isn't settled",
                        "Minuty bardzo się wahają ({low:.0f}–{high:.0f}): rola nie jest ustalona"),
-    'flag.line_against': _w("The line moved {move:g} against the pick: the market may know something (injury, "
-                            "minutes)", "Linia ruszyła o {move:g} przeciw typowi: rynek może coś wiedzieć "
-                                        "(kontuzja, minuty)"),
 
     # game outcomes (core/labels.py) and their reasons (reasons.game_reasons)
     'market.ML': _w("Winner", "Zwycięzca"), 'market.SPREAD': _w("Handicap", "Handicap"),
