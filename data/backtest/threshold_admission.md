@@ -15,6 +15,6 @@ Ranges are 95% from resampling whole nights. D defaults to the last night that l
 The report never sets ADMITTED_THRESHOLD: that's done by hand after reading it. Writes
 data/backtest/threshold_admission.md.
 
-Superbet lines: 15837 over 12 nights.
+Superbet lines: 41142 over 29 nights.
 
-**Result: none** (too few nights: 12, the check needs more than 20 after the choice and 10+ to choose on).
+**Result: none** (too few nights: 29 of the 30 it needs (10 to choose on, 20 after them to judge on)).
