@@ -1,12 +1,12 @@
 # Calibration of the props model
 
-The model's chance for a side is mapped to sigmoid(a·logit(market) + b·(logit(model) − logit(market)) + c·[Over] + d): a = weight of the bookmaker's margin-free chance, b = weight of the model's opinion beyond it, c = Over/Under bias, d = offset. Identity: a = b = 1, c = d = 0. Lines: Unibet 2022/23 29331, Superbet 2026/27 28180.
+The model's chance for a side is mapped to sigmoid(a·logit(market) + b·(logit(model) − logit(market)) + c·[Over] + d): a = weight of the bookmaker's margin-free chance, b = weight of the model's opinion beyond it, c = Over/Under bias, d = offset. Identity: a = b = 1, c = d = 0. Lines: Unibet 2022/23 29331, Superbet 2026/27 41142.
 
 How to read b: it's how much of the model's disagreement with the price held up on past lines (b = 0.1 keeps a tenth of it). It calibrates the model's point chance only; it says nothing about whether the model's 95% range (edge low) is right, and a well-calibrated chance close to the price is not a betting edge.
 
 ## Held-out check
 
-Coefficients fitted on the earlier lines of every source: a = 1.200, b = 0.153, c = 0.000, d = 0.000
+Coefficients fitted on the earlier lines of every source: a = 1.187, b = 0.177, c = 0.000, d = 0.000
 
 ### Unibet 2022/23: fitted on Nov 09 2022 – Jan 31 2023 (15568 lines), scored on Feb 01 2023 – May 08 2023 (13763 lines)
 
@@ -24,64 +24,64 @@ Betting the unseen lines (1 unit each, at the line's odds):
 |---|---|---|---|---|---|---|
 | Always Under | 13763 | 53.4 | 52.6 | 54.2 | -0.6 | 1.9 |
 | Always Over | 13763 | 46.6 | 45.8 | 47.4 | -11.4 | 1.9 |
-| Calibrated pick, every line | 13763 | 52.9 | 52.0 | 53.7 | -3.6 | 1.8 |
-| Calibrated pick, edge > 0 | 1034 | 55.7 | 52.7 | 58.7 | 0.6 | 1.8 |
+| Calibrated pick, every line | 13763 | 52.6 | 51.8 | 53.5 | -3.5 | 1.8 |
+| Calibrated pick, edge > 0 | 1402 | 54.9 | 52.3 | 57.5 | -0.3 | 1.8 |
 
 Signal efficiency: every line whose calibrated edge reaches the threshold (cumulative):
 
 | edge ≥ pp | expected % | bets | hit % | ci low % | ci high % | ROI % | avg odds | break-even % | nights |
 |---|---|---|---|---|---|---|---|---|---|
-| 0 | 56.5 | 1034 | 55.7 | 52.7 | 58.7 | 0.6 | 1.8 | 55.4 | 73 |
-| 1 | 56.5 | 446 | 53.6 | 48.9 | 58.2 | -2.2 | 1.8 | 54.6 | 61 |
-| 2 | 57.4 | 147 | 55.1 | 47.0 | 62.9 | 0.6 | 1.8 | 54.4 | 38 |
-| 3 | 58.4 | 61 | 54.1 | 41.7 | 66.0 | -1.5 | 1.8 | 54.4 | 22 |
-| 4 | 59.7 | 24 | 41.7 | 24.5 | 61.2 | -25.9 | 1.8 | 54.9 | 9 |
-| 5 | 60.0 | 7 | 42.9 | 15.8 | 75.0 | -21.1 | 1.8 | 54.6 | 4 |
+| 0 | 56.4 | 1402 | 54.9 | 52.3 | 57.5 | -0.3 | 1.8 | 55.1 | 77 |
+| 1 | 56.7 | 678 | 55.0 | 51.3 | 58.7 | 1.0 | 1.8 | 54.4 | 67 |
+| 2 | 57.1 | 313 | 54.6 | 49.1 | 60.1 | 0.8 | 1.9 | 54.0 | 54 |
+| 3 | 58.3 | 122 | 56.6 | 47.7 | 65.0 | 3.8 | 1.9 | 54.1 | 35 |
+| 4 | 59.5 | 54 | 55.6 | 42.4 | 68.0 | 1.3 | 1.8 | 54.4 | 19 |
+| 5 | 60.2 | 27 | 48.1 | 30.7 | 66.0 | -12.1 | 1.9 | 54.3 | 9 |
 
 Calibration on the unseen lines (both sides of every line):
 
 | chance | rows | predicted % | won % |
 |---|---|---|---|
-| 15–20% | 1 | 17.1 | 0.0 |
-| 20–25% | 2 | 21.1 | 50.0 |
-| 25–30% | 16 | 28.3 | 31.2 |
-| 30–35% | 166 | 33.4 | 33.1 |
-| 35–40% | 1094 | 38.1 | 41.7 |
-| 40–45% | 3228 | 42.9 | 44.9 |
-| 45–50% | 9256 | 47.9 | 48.3 |
-| 50–55% | 9256 | 52.1 | 51.7 |
-| 55–60% | 3228 | 57.1 | 55.1 |
-| 60–65% | 1094 | 61.9 | 58.3 |
-| 65–70% | 166 | 66.6 | 66.9 |
-| 70–75% | 16 | 71.7 | 68.8 |
-| 75–80% | 2 | 78.9 | 50.0 |
-| 80–85% | 1 | 82.9 | 100.0 |
+| 15–20% | 1 | 17.3 | 0.0 |
+| 20–25% | 2 | 21.5 | 50.0 |
+| 25–30% | 15 | 28.3 | 33.3 |
+| 30–35% | 171 | 33.4 | 34.5 |
+| 35–40% | 1093 | 38.1 | 41.3 |
+| 40–45% | 3294 | 42.9 | 44.7 |
+| 45–50% | 9187 | 47.8 | 48.2 |
+| 50–55% | 9187 | 52.2 | 51.8 |
+| 55–60% | 3294 | 57.1 | 55.3 |
+| 60–65% | 1093 | 61.9 | 58.7 |
+| 65–70% | 171 | 66.6 | 65.5 |
+| 70–75% | 15 | 71.7 | 66.7 |
+| 75–80% | 2 | 78.5 | 50.0 |
+| 80–85% | 1 | 82.7 | 100.0 |
 
-### Superbet 2026/27: fitted on Oct 20 2026 – Nov 02 2026 (19308 lines), scored on Nov 04 2026 – Nov 09 2026 (8872 lines)
+### Superbet 2026/27: fitted on Oct 20 2026 – Nov 09 2026 (28180 lines), scored on Nov 10 2026 – Nov 18 2026 (12962 lines)
 
 How well the chances predict the results (lower is better):
 
 | chances | log loss | Brier |
 |---|---|---|
-| Market (margin-free price) | 0.6848 | 0.2459 |
-| Uncalibrated model | 0.6890 | 0.2479 |
-| Calibrated model | 0.6838 | 0.2454 |
+| Market (margin-free price) | 0.6843 | 0.2456 |
+| Uncalibrated model | 0.6934 | 0.2500 |
+| Calibrated model | 0.6841 | 0.2456 |
 
 Betting the unseen lines (1 unit each, at the line's odds):
 
 | strategy | bets | hit % | ci low % | ci high % | ROI % | avg odds |
 |---|---|---|---|---|---|---|
-| Always Under | 8872 | 53.0 | 52.0 | 54.1 | -3.1 | 1.9 |
-| Always Over | 8872 | 47.0 | 45.9 | 48.0 | -12.7 | 1.9 |
-| Calibrated pick, every line | 8872 | 53.9 | 52.8 | 54.9 | -4.8 | 1.8 |
-| Calibrated pick, edge > 0 | 6 | 66.7 | 30.0 | 90.3 | 9.8 | 1.7 |
+| Always Under | 12962 | 52.1 | 51.3 | 53.0 | -4.8 | 1.9 |
+| Always Over | 12962 | 47.9 | 47.0 | 48.7 | -11.0 | 1.9 |
+| Calibrated pick, every line | 12962 | 53.3 | 52.4 | 54.2 | -5.3 | 1.8 |
+| Calibrated pick, edge > 0 | 72 | 43.1 | 32.3 | 54.6 | -27.8 | 1.7 |
 
 Signal efficiency: every line whose calibrated edge reaches the threshold (cumulative):
 
 | edge ≥ pp | expected % | bets | hit % | ci low % | ci high % | ROI % | avg odds | break-even % | nights |
 |---|---|---|---|---|---|---|---|---|---|
-| 0 | 59.5 | 6 | 66.7 | 30.0 | 90.3 | 9.8 | 1.7 | 59.2 | 5 |
-| 1 | – | 0 | – | – | – | – | – | – | 0 |
+| 0 | 59.0 | 72 | 43.1 | 32.3 | 54.6 | -27.8 | 1.7 | 58.5 | 9 |
+| 1 | 58.3 | 12 | 25.0 | 8.9 | 53.2 | -55.9 | 1.8 | 57.2 | 3 |
 | 2 | – | 0 | – | – | – | – | – | – | 0 |
 | 3 | – | 0 | – | – | – | – | – | – | 0 |
 | 4 | – | 0 | – | – | – | – | – | – | 0 |
@@ -91,22 +91,22 @@ Calibration on the unseen lines (both sides of every line):
 
 | chance | rows | predicted % | won % |
 |---|---|---|---|
-| 10–15% | 1 | 14.3 | 0.0 |
-| 15–20% | 7 | 17.6 | 14.3 |
-| 20–25% | 13 | 22.0 | 15.4 |
-| 25–30% | 35 | 28.0 | 28.6 |
-| 30–35% | 285 | 33.0 | 33.0 |
-| 35–40% | 927 | 37.8 | 38.4 |
-| 40–45% | 2256 | 42.8 | 43.2 |
-| 45–50% | 5348 | 47.8 | 48.4 |
-| 50–55% | 5348 | 52.2 | 51.6 |
-| 55–60% | 2256 | 57.2 | 56.8 |
-| 60–65% | 927 | 62.2 | 61.6 |
-| 65–70% | 285 | 67.0 | 67.0 |
-| 70–75% | 35 | 72.0 | 71.4 |
-| 75–80% | 13 | 78.0 | 84.6 |
-| 80–85% | 7 | 82.4 | 85.7 |
-| 85–90% | 1 | 85.7 | 100.0 |
+| 10–15% | 5 | 13.6 | 0.0 |
+| 15–20% | 18 | 17.5 | 16.7 |
+| 20–25% | 27 | 22.5 | 29.6 |
+| 25–30% | 49 | 28.2 | 32.7 |
+| 30–35% | 410 | 33.0 | 30.5 |
+| 35–40% | 1426 | 37.9 | 37.5 |
+| 40–45% | 3394 | 42.8 | 43.8 |
+| 45–50% | 7633 | 47.8 | 48.9 |
+| 50–55% | 7633 | 52.2 | 51.1 |
+| 55–60% | 3394 | 57.2 | 56.2 |
+| 60–65% | 1426 | 62.1 | 62.5 |
+| 65–70% | 410 | 67.0 | 69.5 |
+| 70–75% | 49 | 71.8 | 67.3 |
+| 75–80% | 27 | 77.5 | 70.4 |
+| 80–85% | 18 | 82.5 | 83.3 |
+| 85–90% | 5 | 86.4 | 100.0 |
 
 ### 🟢 threshold
 
@@ -116,32 +116,32 @@ Selection policy: one bet per line (its last fetch before tip-off), the calibrat
 
 ## Used by the dashboards (fitted on every line)
 
-a = 1.139, b = 0.170, c = 0.000, d = 0.000 (115022 line sides); no 🟢; Superbet lines through 2026-11-09
+a = 1.142, b = 0.161, c = 0.000, d = 0.000 (140946 line sides); no 🟢; Superbet lines through 2026-11-18
 
 ## Game markets (not calibrated)
 
-2268 settled main-line outcomes on 19 nights (Oct 21 2026 – Nov 09 2026); a calibration is fitted from 300+ outcomes on 10+ nights. Until then game outcomes get no 🟢 / 🟡 and no stake: the model's edges are estimates for research.
+3468 settled main-line outcomes on 28 nights (Oct 21 2026 – Nov 18 2026); a calibration is fitted from 300+ outcomes on 10+ nights. Until then game outcomes get no 🟢 / 🟡 and no stake: the model's edges are estimates for research.
 
 How well the chances predict the results (lower is better; both sides of each market count, so the rows aren't independent):
 
 | chances | log loss | Brier |
 |---|---|---|
-| Market (margin-free price) | 0.6730 | 0.2408 |
-| Game model | 0.7549 | 0.2727 |
+| Market (margin-free price) | 0.6768 | 0.2425 |
+| Game model | 0.7362 | 0.2653 |
 
 Betting every outcome whose model edge reached the threshold (1 unit at the saved odds):
 
 | bets | n | nights | expected % | hit % | ci low % | ci high % | break-even % | ROI % |
 |---|---|---|---|---|---|---|---|---|
-| edge > 0 | 960 | 19 | 65.7 | 49.8 | 46.6 | 52.9 | 52.5 | -6.4 |
-| edge ≥ +5 pp (the old 🟢) | 710 | 18 | 69.3 | 47.3 | 43.7 | 51.0 | 52.2 | -10.9 |
+| edge > 0 | 1472 | 28 | 66.5 | 52.4 | 49.9 | 55.0 | 52.6 | -1.2 |
+| edge ≥ +5 pp (the old 🟢) | 1140 | 27 | 69.6 | 51.1 | 48.2 | 54.0 | 52.4 | -3.1 |
 
 By market:
 
 | market | outcomes | model log loss | market log loss |
 |---|---|---|---|
-| AWAY_TOTAL | 532 | 0.7739 | 0.6971 |
-| HOME_TOTAL | 558 | 0.7773 | 0.6884 |
-| ML | 290 | 0.6854 | 0.5491 |
-| SPREAD | 248 | 0.7830 | 0.6881 |
-| TOTAL | 640 | 0.7401 | 0.6899 |
+| AWAY_TOTAL | 824 | 0.7330 | 0.6910 |
+| HOME_TOTAL | 842 | 0.7529 | 0.6912 |
+| ML | 426 | 0.6759 | 0.5742 |
+| SPREAD | 382 | 0.7750 | 0.6906 |
+| TOTAL | 994 | 0.7356 | 0.6915 |

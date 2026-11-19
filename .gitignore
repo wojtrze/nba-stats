@@ -10,3 +10,6 @@ data/superbet_contact.txt
 data/scrape_state.json
 data/fetch_worker.json
 data/fetch_worker_settings.json
+
+# stacks of hung scheduled fetches (fetch_loop) - local diagnostics
+data/fetch_hangs.log
