@@ -14,6 +14,8 @@ SURPRISE_STATS = ['PTS', 'REB', 'AST', '3PM', 'ARP']
 # the stats streaks are counted in: the main ones and their sums, not fouls or attempts
 STREAK_STATS = ['PTS', 'REB', 'AST', '3PM', 'ARP', 'PR', 'PA', 'RA']
 MIN_STREAK = 4
+# spot on: within 10% of the result, but at least half a unit (else a 0 could never be hit)
+SPOT_ON_SHARE, SPOT_ON_FLOOR = 0.10, 0.5
 
 
 def night_curiosities(props: pd.DataFrame, games: pd.DataFrame, spot_on: int = 5) -> Dict:
@@ -42,6 +44,37 @@ def night_curiosities(props: pd.DataFrame, games: pd.DataFrame, spot_on: int = 5
             out['best_total'] = known.loc[known['total error'].abs().idxmin()]
             out['best_margin'] = known.loc[known['margin error'].abs().idxmin()]
     return out
+
+
+def _near(guess: pd.Series, actual: pd.Series) -> pd.Series:
+    """Within SPOT_ON_SHARE of the result (at least SPOT_ON_FLOOR, so a 0 can be hit)."""
+    return (actual - guess).abs() <= np.maximum(SPOT_ON_SHARE * actual.abs(), SPOT_ON_FLOOR)
+
+
+def spot_on_stats(props: pd.DataFrame) -> Dict:
+    """How close our projections and Superbet's lines came to the results. props: nightly.night_props of one or
+    more nights; the settled SURPRISE_STATS lines with a projection count. Returns {} when there are none, else
+    lines, nights, 'our spot %' / 'line spot %' (within 10% of the result, at least 0.5; our projection is taken
+    as the half-point line it falls in, like Superbet's, else every line next to a small result counts and ours
+    rarely does), 'closer %' /
+    'line closer %' / 'tie %' (whose number was closer), 'we closer' / 'line closer' (the stats where each was
+    closer more often, in SURPRISE_STATS order), 'bias' (mean result − projection: < 0 = we expected too much) and
+    'over %' (lines that went Over)."""
+    if props.empty:
+        return {}
+    rows = props[(props['status'] == 'settled') & props['bet_type'].isin(SURPRISE_STATS) & props['proj_avg'].notna()]
+    if rows.empty:
+        return {}
+    actual, proj, line = (pd.to_numeric(rows[c], errors='coerce') for c in ('actual', 'proj_avg', 'line'))
+    ours, theirs = (actual - proj).abs(), (actual - line).abs()
+    pct = lambda mask: 100 * float(mask.mean())
+    by_stat = pd.DataFrame({'stat': rows['bet_type'], 'win': np.sign(theirs - ours)}).groupby('stat')['win'].sum()
+    order = [s for s in SURPRISE_STATS if s in by_stat.index]
+    return {'lines': len(rows), 'nights': rows['night'].nunique() if 'night' in rows else 1,
+            'our spot %': pct(_near(np.floor(proj) + 0.5, actual)), 'line spot %': pct(_near(line, actual)),
+            'closer %': pct(ours < theirs), 'line closer %': pct(theirs < ours), 'tie %': pct(ours == theirs),
+            'we closer': [s for s in order if by_stat[s] > 0], 'line closer': [s for s in order if by_stat[s] < 0],
+            'bias': float((actual - proj).mean()), 'over %': pct(actual > line)}
 
 
 def line_streaks(settled: pd.DataFrame, min_len: int = MIN_STREAK) -> pd.DataFrame:
@@ -74,11 +107,12 @@ def line_streaks(settled: pd.DataFrame, min_len: int = MIN_STREAK) -> pd.DataFra
 
 def tonight_streaks(streaks: pd.DataFrame, tonight: pd.DataFrame) -> pd.DataFrame:
     """The streaks of players who have that stat's line tonight. tonight: priced props (player_id, bet_type, line,
-    name, event_id, name_ESPN; stars when rated). Adds 'tonight line' and the line's keys; tonight's name (ESPN's
-    spelling) replaces Superbet's."""
+    name, event_id, name_ESPN; stars, opp and matchup_info when there). Adds 'tonight line' and the line's keys;
+    tonight's name (ESPN's spelling) replaces Superbet's."""
     if streaks.empty or tonight.empty:
         return streaks.iloc[0:0].assign(**{'tonight line': pd.Series(dtype=float)})
-    keep = [c for c in ['player_id', 'bet_type', 'line', 'name', 'event_id', 'name_ESPN', 'stars'] if c in tonight]
+    keep = [c for c in ['player_id', 'bet_type', 'line', 'name', 'event_id', 'name_ESPN', 'stars', 'opp',
+                        'matchup_info'] if c in tonight]
     lines = tonight[keep].dropna(subset=['player_id']).drop_duplicates(['player_id', 'bet_type']) \
         .rename(columns={'line': 'tonight line', 'name': 'tonight name'})
     lines['player_id'] = lines['player_id'].astype('Int64')

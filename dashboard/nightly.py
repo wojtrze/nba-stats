@@ -29,6 +29,24 @@ def pre_tip(snapshots: pd.DataFrame, night) -> pd.DataFrame:
     return rows[fetched < pd.to_datetime(rows['start_time'], utc=True)].sort_values('fetched_at', kind='stable')
 
 
+def last_lines_since(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame, since) -> pd.DataFrame:
+    """Every line of the nights from `since` on, judged by its last fetch before tip-off, settled in one go (a
+    season's worth, where night_props would settle night by night): settle_props columns plus proj_avg (the saved
+    projection, never recomputed) and night (ET date)."""
+    if snapshots.empty:
+        return pd.DataFrame()
+    night = et_night(snapshots['start_time'])
+    fetched = pd.to_datetime(snapshots['fetched_at'], utc=True)
+    rows = snapshots[(night >= pd.Timestamp(since)) & (fetched < pd.to_datetime(snapshots['start_time'], utc=True))]
+    if rows.empty:
+        return pd.DataFrame()
+    last = rows.sort_values('fetched_at', kind='stable').drop_duplicates(PROP_KEY, keep='last').reset_index(drop=True)
+    out = settle_props(snapshots, logs, games, bets=last)
+    assert len(out) == len(last)   # settle_props keeps the order of the bets it's given
+    proj = pd.to_numeric(last['proj_avg'], errors='coerce') if 'proj_avg' in last else np.nan
+    return out.assign(proj_avg=np.asarray(proj), night=et_night(last['start_time']).values)
+
+
 def nights(prop_snapshots: pd.DataFrame, games: pd.DataFrame, now) -> pd.DataFrame:
     """Nights with saved lines whose first game has tipped off, newest first: night, games, lines and settled (the
     stored stats hold that night's games)."""

@@ -3178,8 +3178,35 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                   "tip-off", "W każdej statystyce linia, w której wynik był najdalej od tego, czego "
                                              "oczekiwaliśmy przed startem"),
     'overview.spot_on': _w("Spot on", "W punkt"),
-    'overview.spot_on_help': _w("The lines and games where our expectation was closest to the result",
-                                "Linie i mecze, w których nasze oczekiwanie było najbliżej wyniku"),
+    'overview.spot_on_help': _w("The lines and games where our expectation was closest to the result. Above them: "
+                                "how often our projection and Superbet's line were spot on (within 10% of the "
+                                "result, at least 0.5; our projection taken as its half-point line, e.g. 7.8 → 7.5, as Superbet's lines are), "
+                                "whose number was closer, in PTS, REB, AST, 3PM and PRA",
+                                "Linie i mecze, w których nasze oczekiwanie było najbliżej wyniku. Nad nimi: jak "
+                                "często nasza projekcja i linia Superbetu trafiły w punkt (do 10% od wyniku, co "
+                                "najmniej 0,5; nasza projekcja jako jej linia z połówką, np. 7,8 → 7,5, jak linie Superbetu) i "
+                                "czyja liczba była bliżej, w PTS, REB, AST, 3PM i PRA"),
+    'overview.spot.hit': _w("Within 10% of the result: we {ours:.0f}% of {n} {n|line|lines|lines} · Superbet's line "
+                            "{line:.0f}%",
+                            "Do 10% od wyniku: my {ours:.0f}% z {n} {n|linii|linii|linii} · linia Superbetu "
+                            "{line:.0f}%"),
+    'overview.spot.closer': _w("Closer to the result: we {ours:.0f}% · Superbet {line:.0f}% · tie {tie:.0f}%",
+                               "Bliżej wyniku: my {ours:.0f}% · Superbet {line:.0f}% · remis {tie:.0f}%"),
+    'overview.spot.we_in': _w("We were closer more often in {stats}", "Częściej bliżej byliśmy my w {stats}"),
+    'overview.spot.line_in': _w("Superbet more often in {stats}", "Superbet częściej w {stats}"),
+    'overview.spot.bias_high': _w("On average we expected {bias:.1f} too much; {over:.0f}% of lines went Over",
+                                  "Średnio oczekiwaliśmy o {bias:.1f} za dużo; {over:.0f}% linii skończyło się "
+                                  "powyżej"),
+    'overview.spot.bias_low': _w("On average we expected {bias:.1f} too little; {over:.0f}% of lines went Over",
+                                 "Średnio oczekiwaliśmy o {bias:.1f} za mało; {over:.0f}% linii skończyło się "
+                                 "powyżej"),
+    'overview.spot.bias_none': _w("On average our expectation was on target; {over:.0f}% of lines went Over",
+                                  "Średnio nasze oczekiwanie było trafne; {over:.0f}% linii skończyło się powyżej"),
+    'overview.spot.season': _w("Season so far ({nights} {nights|night|nights|nights}, {n} lines): within 10% we "
+                               "{ours:.0f}% · Superbet {line:.0f}%; closer we {closer:.0f}% vs {line_closer:.0f}%",
+                               "Sezon do tej pory ({nights} {nights|noc|noce|nocy}, {n} linii): do 10% my "
+                               "{ours:.0f}% · Superbet {line:.0f}%; bliżej my {closer:.0f}% wobec "
+                               "{line_closer:.0f}%"),
     'overview.said': _w("**{name}** {stat}: {actual:g}, we expected {proj:.1f} (line {line:g})",
                         "**{name}** {stat}: {actual:g}, oczekiwaliśmy {proj:.1f} (linia {line:g})"),
     'overview.line_miss': _w("Superbet's line furthest from the result: {name} {stat} {actual:g} against {line:g}.",
@@ -3192,14 +3219,23 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'overview.streaks_help': _w("Tonight's players whose latest saved Superbet lines in a stat all went the same way "
                                 "(4 or more in a row), judged at the last line before tip-off; a push ends a streak. "
                                 "Lines are saved since Oct 21, so streaks are short. A streak isn't a reason to bet: "
-                                "Superbet sees it too. Click one to open tonight's line.",
+                                "Superbet sees it too. The % after tonight's line: how much more (+) or less (−) of "
+                                "that stat tonight's opponent allows per game to the player's position this season "
+                                "than the average team. Click one to open tonight's line.",
                                 "Dzisiejsi zawodnicy, których ostatnie zapisane linie Superbetu w danej statystyce "
                                 "kończyły się tak samo (4 lub więcej z rzędu), oceniane przy ostatniej linii przed "
                                 "startem; zwrot przerywa serię. Linie zapisujemy od 21.10, więc serie są krótkie. Seria "
-                                "to nie powód do gry: Superbet też ją widzi. Kliknij, by otworzyć dzisiejszą linię."),
+                                "to nie powód do gry: Superbet też ją widzi. % po dzisiejszej linii: o ile więcej (+) "
+                                "lub mniej (−) tej statystyki dzisiejszy rywal pozwala na mecz zawodnikom tej pozycji w "
+                                "tym sezonie niż przeciętna drużyna. Kliknij, by otworzyć dzisiejszą linię."),
     'overview.streak': _w("**{name}**: {stat} {side} Superbet's line {n} games in a row · tonight {line:g}",
                           "**{name}**: {stat} {side} linii Superbetu {n} {n|mecz|mecze|meczów} z rzędu · dziś "
                           "{line:g}"),
+    'overview.streak_vs': _w("**{name}**: {stat} {side} Superbet's line {n} games in a row · tonight {line:g} vs "
+                             "{opp}, who allow {pct:+.0f}% {stat} to {position} compared with the league average",
+                             "**{name}**: {stat} {side} linii Superbetu {n} {n|mecz|mecze|meczów} z rzędu · dziś "
+                             "{line:g} z {opp}, którzy pozwalają {position} na {pct:+.0f}% {stat} względem średniej "
+                             "ligi"),
     'overview.side.Over': _w("over", "powyżej"), 'overview.side.Under': _w("under", "poniżej"),
     'overview.streaks_none': _w("No player with a line tonight has 4 or more in a row on the same side.",
                                 "Żaden zawodnik z dzisiejszą linią nie ma 4 lub więcej z rzędu po tej samej stronie."),
