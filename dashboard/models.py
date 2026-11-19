@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 
 from espn_scraper import CURRENT_SEASON, NBA_TEAM_ABBRS
-from metrics import (ACTIVE_PROFILE, IDENTITY_CALIBRATION, LEGACY, POSITION_GROUPS, STATS, absence_adjustments,
+from metrics import (ABSENCE_WEIGHT, ACTIVE_PROFILE, IDENTITY_CALIBRATION, LEGACY, POSITION_GROUPS, STATS,
+                     _is_starter, absence_adjustments, minutes_rate,
                      absence_impact, add_combined_stats, allowed_by_position, best_by_ev, blended_ratings, break_even,
                      calibrate, context_factor, expected_return_100, game_lines, game_projection, hit_rates,
                      line_percentile, market_edges, matchup, no_vig, percentile_band, prop_probability, prop_signal,
@@ -21,7 +22,9 @@ from superbet_fetcher import main_lines
 CALIBRATION_FILE = os.path.join('data', 'backtest', 'calibration.json')
 # which model priced a line: bump it whenever price_props / price_games change what they return, so a calibration
 # is only fitted on (and trusted for) chances of one model (nightly.LINEAGE_COLUMNS, backtest/calibrate.py)
-MODEL_VERSION = '2026-10-26-count'   # count distribution in metrics.prop_probability (was '2026-10-26': normal)
+# 2026-11-20-minutes: proj avg = minutes × rate + half the absence change, no game factors (backtest/projection_eval.py);
+# 2026-10-26-count: count distribution in metrics.prop_probability (was '2026-10-26': normal)
+MODEL_VERSION = '2026-11-20-minutes'
 # calibration_status: fitted for this model; no file (the raw chances are used); fitted for another model version
 FITTED, MISSING, VERSION_MISMATCH, GIVEN = 'fitted', 'missing', 'version mismatch', 'given'
 FROM_FILE = object()   # price_props' default green_edge: the one saved in CALIBRATION_FILE
@@ -214,14 +217,19 @@ def price_line(values: pd.Series, line: float, proj_avg: float, over_odds: float
 
 def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, game_odds: pd.DataFrame,
                 games: pd.DataFrame, adjust: Optional[Callable] = None,
-                calibration: Optional[Dict] = None, green_edge=FROM_FILE, profile: str = ACTIVE_PROFILE) -> pd.DataFrame:
+                calibration: Optional[Dict] = None, green_edge=FROM_FILE, profile: str = ACTIVE_PROFILE,
+                history: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     """Every Superbet line (props with player_id_ESPN) compared with the player's game logs and priced.
 
     logs: prepare_logs output in the seasons and game types to use, optionally top_up_logs output (the topped-up
     rows feed the player's own numbers, not the matchup or the absence adjustments); games: games.csv rows of
-    the same. adjust(logs, players, out, stats): absence_adjustments, or a cached version of it.
-    Adds, per line: the player's numbers (avg, sd, hit rates, percentile...), RotoWire status, lineup adj and adj avg,
-    the game context (opponent, spread, implied total, matchup) and proj avg, and the pick: best side (the side
+    the same. adjust(logs, players, out, stats): absence_adjustments, or a cached version of it. history: every
+    stored game before tonight (prepare_logs, all seasons) for the projection's minutes and last season's rate;
+    default: logs.
+    Adds, per line: the player's numbers (avg, sd, hit rates, percentile...), RotoWire status, the projection's core
+    (metrics.minutes_rate: starter = tonight's role, proj min, rate, base), lineup adj (ABSENCE_WEIGHT of the
+    absence adjustment) and adj avg = base + lineup adj = proj avg, the game context (opponent, spread, implied
+    total, matchup, pace factor, matchup factor: shown, not part of proj avg), and the pick: best side (the side
     with the bigger edge, even a negative one), model %, market % (margin-free), break-even %, edge pp, ev 100 (the
     expected return of 100 staked on it: model % × pick odds − 100), edge low,
     pick odds, signal (metrics.prop_signal with green_edge, default: the one in CALIBRATION_FILE), bet (best side
@@ -242,6 +250,9 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     # last season's games of a few players would distort opponents' defense and teammates' absence effects
     own = logs[~logs['top_up']] if 'top_up' in logs else logs
     by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
+    history = logs if history is None else history
+    by_history = {pid: g for pid, g in history.groupby('player_id_ESPN')}
+    season = int(own['season_id'].max()) if len(own) else CURRENT_SEASON
     current_team = logs.groupby('player_id_ESPN')['team'].last()
     position = logs.groupby('player_id_ESPN')['position_group'].last()
     empty = logs.iloc[0:0]
@@ -263,7 +274,24 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
     table['game'] = table['away'].str.upper() + ' @ ' + table['home'].str.upper()
     table['RotoWire'] = [rotowire_status(lineups, p, t) for p, t in zip(table['player_id'], table['team'])]
 
-    # tonight's absences: each player's usual change when RotoWire's out teammates miss games
+    # the projection's core: tonight's minutes in his role × his per-minute rate (metrics.minutes_rate). The role is
+    # RotoWire's (listed as a starter or not); a team RotoWire lists no starters for yet: his last game's
+    starters = {t: set(rotowire_team(lineups, t)['starters']) for t in table['team'].dropna().unique()}         if len(lineups) else {}
+    core = []
+    for _, row in table.iterrows():
+        past = by_history.get(row['player_id'], empty)
+        listed = starters.get(row['team'])
+        if listed:
+            starter = row['player_id'] in listed
+        elif len(past) and 'starter' in past:
+            starter = bool(_is_starter(past['starter'].tail(1)).iloc[0])
+        else:
+            starter = None
+        core.append({'starter': starter, **minutes_rate(past, season, starter, row['bet_type'])})
+    table = table.join(pd.DataFrame(core, index=table.index))
+
+    # tonight's absences: half (ABSENCE_WEIGHT) of each player's usual change when RotoWire's out teammates miss
+    # games; the rest already shows in his role and minutes
     table['lineup adj'] = 0.0
     for team, rows in table.groupby('team'):
         out = rotowire_team(lineups, team)['out']
@@ -274,8 +302,8 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
         adj = adjust(part, players, tuple(sorted(out)), STATS)
         for i, row in rows.iterrows():
             if row['player_id'] in adj.index and row['bet_type'] in adj.columns:
-                table.loc[i, 'lineup adj'] = adj.loc[row['player_id'], row['bet_type']]
-    table['adj avg'] = table['avg'] + table['lineup adj']
+                table.loc[i, 'lineup adj'] = ABSENCE_WEIGHT * adj.loc[row['player_id'], row['bet_type']]
+    table['adj avg'] = table['base'] + table['lineup adj']
 
     # the game: Superbet's main handicap and total, and the opponent's defense against the player's position
     lines = game_lines(pd.DataFrame(main_lines(game_odds.to_dict('records')))) if len(game_odds) else pd.DataFrame()
@@ -308,7 +336,9 @@ def price_props(props: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame, 
                         'pace factor': context_factor(implied / team_pts if team_pts else np.nan),
                         'matchup factor': context_factor(m.get('ratio', np.nan))})
     table = table.join(pd.DataFrame(context, index=table.index))
-    table['proj avg'] = table['adj avg'] * table['pace factor'] * table['matchup factor']
+    # the game factors are shown, not used: on 29 Superbet nights the matchup factor made every stat's projection
+    # worse and the pace factor changed nothing (backtest/projection_eval.py)
+    table['proj avg'] = table['adj avg']
 
     coef = load_calibration() if calibration is None else calibration
     status = calibration_status() if calibration is None else GIVEN

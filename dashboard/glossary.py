@@ -34,8 +34,9 @@ HELP = STAT_HELP | {
     'under_odds': "Superbet's decimal odds for Under. Implied chance = 1 / odds.",
     'games': "Number of games behind the numbers in this row",
     'avg': "Player's average of this stat in the games shown (sidebar seasons and game types)",
-    'adj avg': "avg plus the player's usual change when tonight's out teammates miss games, shrunk toward 0 "
-               "when there are few such games. Equal to avg when nobody is out. Uses RotoWire's out list as input.",
+    'adj avg': "The projection's core (minutes in tonight's role × his per-minute rate this season) plus half the "
+               "player's usual change when tonight's out teammates miss games, shrunk toward 0 when there are few "
+               "such games. Uses RotoWire's lineup and out list as input. Equals proj avg.",
     'avg L5': "Average over the player's last 5 games",
     'over %': "Share of games above the line", 'under %': "Share of games below the line",
     'over % L10': "Share of the last 10 games above the line", 'under % L10': "Share of the last 10 games below the line",
@@ -74,8 +75,10 @@ HELP = STAT_HELP | {
     'line move': "Current line minus the opening line: + = the line went up (the market expects more), − = down. "
                  "Empty without an earlier snapshot.",
     'gap sd': "(proj avg − line) / sd of the player's games; empty with fewer than 5 games",
-    'proj avg': "adj avg × the game factors: Superbet's implied team total vs the team's usual points, and what "
-                "the opponent allows to the player's position vs the league. Each counts half and at most ±8%.",
+    'proj avg': "What we expect tonight: minutes (recent games in tonight's role, starter or bench, per RotoWire) "
+                "× his per-minute rate this season (last season's rate counts as 5 games), plus half the change "
+                "when tonight's out teammates miss games. The game total and the matchup are shown, not used: they "
+                "didn't bring the projection closer to the results.",
     'matchup': "soft / tough: the opponent allows at least 5% more / less of this stat to the player's position "
                "than the average NBA defense",
     'spread': "The player's team handicap on Superbet's main line: −8.5 = favoured by 8.5. 10+ either way = "

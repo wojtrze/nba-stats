@@ -176,7 +176,6 @@ def test_settling_a_night_isnt_described_as_the_users_profit():
 def test_the_interface_says_what_the_range_and_the_factor_are():
     assert 'nie jest przedział pewności modelu' in i18n.tooltip('edge low', 'pl')
     assert "isn't a confidence range of the model" in i18n.tooltip('edge low', 'en')
-    assert 'tempo' not in i18n.t('detail.kpi.game_help', 'pl', pace=1.0, matchup=1.0, word='x').lower()
     assert 'Opis' in i18n.t('reason.teammates', 'pl', names='B', adj=1.0, stat='PTS', parts='B +1.0 (4 mecze bez niego)')
     assert 'nie wpływ' in i18n.t('mates.col.change_help', 'pl', stat='PTS')
 

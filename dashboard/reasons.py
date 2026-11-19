@@ -330,7 +330,10 @@ def offer_context(row, games: pd.DataFrame, logs: pd.DataFrame, lineups: pd.Data
     listed_names = lineups.dropna(subset=['player_id_ESPN']).drop_duplicates('player_id_ESPN') \
         .set_index('player_id_ESPN')['name'] if len(lineups) and 'name' in lineups else pd.Series(dtype=object)
     absences = []
+    from metrics import ABSENCE_WEIGHT
     for term in (absence_breakdown(own, pid, out_ids, stat) if out_ids and stat in own else []):
+        # the model adds ABSENCE_WEIGHT of each change (models.price_props), so the parts add up to lineup adj
+        term = term | {'change': ABSENCE_WEIGHT * term['change']}
         name = names.get(term['id']) if hasattr(names, 'get') else None
         name = name if isinstance(name, str) and name else listed_names.get(term['id'])
         absences.append(term | {'name': name if isinstance(name, str) and name else None})
@@ -342,8 +345,10 @@ def offer_context(row, games: pd.DataFrame, logs: pd.DataFrame, lineups: pd.Data
     stat, line = row['bet_type'], row['line']
     impacts = {}
     if side and _known(market_over) and len(games):
+        # the game factors are shown but not part of proj avg (models.price_props): no impact of their own
         impacts = driver_impacts(games[stat], line, side, _side_market(market_over, side), row['adj avg'],
-                                 row['lineup adj'], row.get('pace factor'), row.get('matchup factor'), coef)
+                                 row['lineup adj'], None, None, coef)
+        impacts = {k: v for k, v in impacts.items() if k not in ('environment', 'opponent')}
     profile = row.get('cost profile') or ACTIVE_PROFILE
     sides = main_sides(games[stat] if len(games) else pd.Series(dtype=float), line, row.get('over_odds'),
                        row.get('under_odds'), row.get('proj avg'), coef, profile, row.get('p push %'))
@@ -351,7 +356,8 @@ def offer_context(row, games: pd.DataFrame, logs: pd.DataFrame, lineups: pd.Data
             'model %': row.get('p win %'), 'break-even %': row.get('break-even net %'),
             'edge pp': row.get('edge net pp'), 'ev': row.get('ev net 100'), 'tax': 100 * (1 - alpha(profile)),
             'market over %': row.get('market over %'), 'impacts': impacts, 'sides': sides,
-            'avg': row['avg'], 'proj avg': row['proj avg'], 'lineup adj': row['lineup adj'], 'status': status,
+            'avg': row['avg'], 'base': row.get('base'), 'proj min': row.get('proj min'),
+            'proj avg': row['proj avg'], 'lineup adj': row['lineup adj'], 'status': status,
             'play_pct': listed['play_pct'].iloc[0] if len(listed) else np.nan,
             'lineup_status': team_rows['lineup_status'].iloc[0] if len(team_rows) else None,
             'out_names': [a['name'] for a in absences if a['name']],
@@ -563,6 +569,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                                kind=DRIVER, group='projection', used_by_model=True, key='reason.expected'))
 
     adj = bet.get('lineup adj', 0) or 0
+    base = bet.get('base') if _known(bet.get('base')) else bet['avg']
     absences = bet.get('absences')
     if absences is not None:
         # teammate by teammate (offer_context): the estimated ones make the adjustment, the others are unknown
@@ -576,7 +583,7 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
                           parts=parts)
             if unknown:
                 text += i18n.t('reason.teammates_unknown', lang, names=_mate_names(unknown, lang))
-            driver('availability', text, value=bet['avg'] + adj, reference=bet['avg'],
+            driver('availability', text, value=base + adj, reference=base,
                    n=min(a['n_without'] for a in estimated), as_of=bet.get('lineup_at'),
                    source=f"{ROTOWIRE} · {ESPN}", key='reason.teammates')
         elif unknown:
@@ -587,25 +594,29 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
         driver('availability', i18n.t('reason.teammates', lang, names=', '.join(bet['out_names']), adj=adj,
                                       stat=stat, parts=i18n.t('reason.teammates_fewest', lang,
                                                               n=bet.get('out_n') or 0)),
-               value=bet['avg'] + adj, reference=bet['avg'], n=bet.get('out_n'), as_of=bet.get('lineup_at'),
+               value=base + adj, reference=base, n=bet.get('out_n'), as_of=bet.get('lineup_at'),
                source=f"{ROTOWIRE} · {ESPN}", key='reason.teammates')
 
     implied, usual = bet.get('implied'), bet.get('team_pts')
     if _known(implied) and _known(usual) and usual:
-        driver('environment', i18n.t('reason.environment', lang, team=bet['team'].upper(), implied=implied,
-                                     usual=usual),
-               value=implied, reference=usual, n=bet.get('team_games'), as_of=odds_at, source=f"{SUPERBET} · {ESPN}",
-               key='reason.environment')
+        # shown as context: the projection doesn't use it (models.price_props)
+        reasons.append(_reason(None, i18n.t('reason.environment', lang, team=bet['team'].upper(), implied=implied,
+                                            usual=usual),
+                               value=implied, reference=usual, n=bet.get('team_games'), as_of=odds_at,
+                               source=f"{SUPERBET} · {ESPN}", kind=CONTEXT, group='environment',
+                               key='reason.environment'))
 
     m = bet.get('matchup') or {}
     if m:
         position = bet.get('position') if bet.get('position') in ('G', 'F', 'C') else ''
-        driver('opponent', i18n.t('reason.matchup', lang, opp=bet['opp'].upper(), value=m['value'], stat=stat,
-                                  position=i18n.t(f'reason.position.{position}', lang), diff=abs(m['diff']),
-                                  more=i18n.t('reason.more' if m['diff'] > 0 else 'reason.fewer', lang),
-                                  rank=m['rank'], teams=m['teams'], word=i18n.value(m['word'], lang)),
-               value=m['value'], reference=m['average'], n=m.get('games'),
-               as_of=bet.get('stats_through') or played_through, source=ESPN, key='reason.matchup')
+        reasons.append(_reason(None, i18n.t('reason.matchup', lang, opp=bet['opp'].upper(), value=m['value'],
+                                            stat=stat, position=i18n.t(f'reason.position.{position}', lang),
+                                            diff=abs(m['diff']),
+                                            more=i18n.t('reason.more' if m['diff'] > 0 else 'reason.fewer', lang),
+                                            rank=m['rank'], teams=m['teams'], word=i18n.value(m['word'], lang)),
+                               value=m['value'], reference=m['average'], n=m.get('games'),
+                               as_of=bet.get('stats_through') or played_through, source=ESPN, kind=CONTEXT,
+                               group='opponent', key='reason.matchup'))
 
     # --- context: what the games show that the model doesn't use (or uses only as part of its hit rate) ---
     if n >= 3:

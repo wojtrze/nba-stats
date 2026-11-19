@@ -221,7 +221,8 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
                               logs, CURRENT_SEASON, props['player_id_ESPN'].dropna().unique())
         played = games[(games['season_id'] == CURRENT_SEASON) & games['season_type'].isin(DEFAULT_SEASON_TYPES)]
         # the red flags known at fetch time (the line hasn't moved yet)
-        table = flag_props(price_props(props, current, lineups, game_odds, played), current, lineups)
+        table = flag_props(price_props(props, current, lineups, game_odds, played, history=logs), current,
+                           lineups)
         # the decision for each game's players as of this fetch (decisions.py): what the pages show now
         now = pd.Timestamp.now(tz='UTC')
         decided = game_decisions(table, calibration_status(), lineups, now, now)

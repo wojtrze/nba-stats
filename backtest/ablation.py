@@ -255,6 +255,15 @@ def lines_2022(path: str = COMPONENTS_2022) -> Dict[str, pd.DataFrame]:
     return {variant: eligible(part).assign(source='2022') for variant, part in t.groupby('variant')}
 
 
+def last_pretip_lines(snaps: pd.DataFrame) -> pd.DataFrame:
+    """Each saved line's last fetch before tip-off, in the order superbet_components saves them (its rows line up
+    with these)."""
+    from tracking import PROP_KEY
+    fetched = pd.to_datetime(snaps['fetched_at'], utc=True)
+    return snaps[fetched < pd.to_datetime(snaps['start_time'], utc=True)].sort_values('fetched_at', kind='stable') \
+        .drop_duplicates(PROP_KEY, keep='last').reset_index(drop=True)
+
+
 def superbet_components(refresh: bool = False) -> pd.DataFrame:
     """Every saved Superbet line judged by its last fetch before tip-off, priced again with the current model as of
     that fetch (nightly.recompute_props, full table) and settled. Saved as superbet_props_components.csv (with
@@ -264,13 +273,11 @@ def superbet_components(refresh: bool = False) -> pd.DataFrame:
     from models import MODEL_VERSION, prepare_logs
     from name_resolver import NameResolver
     from nightly import et_night, lineups_before_tip, recompute_props
-    from tracking import PROP_KEY, settle_props
+    from tracking import settle_props
 
     cache = snapshot_file(CURRENT_SEASON, 'superbet_props_components')
     snaps = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_props'))
-    fetched = pd.to_datetime(snaps['fetched_at'], utc=True)
-    last = snaps[fetched < pd.to_datetime(snaps['start_time'], utc=True)].sort_values('fetched_at', kind='stable') \
-        .drop_duplicates(PROP_KEY, keep='last').reset_index(drop=True)
+    last = last_pretip_lines(snaps)
     if not refresh and os.path.exists(cache):
         saved = pd.read_csv(cache, parse_dates=['game_date'])
         if len(saved) and (saved['model_version'] == MODEL_VERSION).all() and len(saved) == len(last):
