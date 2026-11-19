@@ -371,8 +371,7 @@ else:
                              line=r['line']))
         with right:
             st.markdown(f"**{t('overview.spot_on', lang)}**", help=t('overview.spot_on_help', lang))
-            st.caption("  
-".join(spot_lines(spot_on_stats(night_props), night_view.season_spot_on())))
+            st.caption("  \n".join(spot_lines(spot_on_stats(night_props), night_view.season_spot_on())))
             lines = [f"- {said(r)}" for _, r in c['spot_on'].iterrows()]
             if c['best_total'] is not None:
                 g = c['best_total']
