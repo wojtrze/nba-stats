@@ -366,3 +366,279 @@ started_at,job,command,exit_code,seconds,summary
 2026-11-10T18:00:00Z,snapshot,scheduled hourly,0,61.9,"6 games read, 667 prop and 376 game quotes changed; 8 requests (200×7), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1103 lines, 848 game odds"
 2026-11-10T18:14:48Z,quotes,scheduled start,0,29.4,"6 games read, 145 prop and 132 game quotes changed; 7 requests (200×7), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
 2026-11-10T19:00:00Z,quotes,scheduled hourly,0,40.8,"6 games read, 585 prop and 428 game quotes changed; 8 requests (200×7), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 96 players for Nov 10: 3 changes – new: Josh Green (UTAH, starter); Ace Bailey (UTAH): starter → starter; Lauri Markkanen (UTAH): starter → Out 0%"
+2026-11-10T20:00:00Z,snapshot,scheduled hourly,0,57.4,"6 games read, 878 prop and 355 game quotes changed; 8 requests (200×7), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 96 players for Nov 10: 2 changes – new: Landry Shamet (NY, starter); Josh Hart (NY): starter → Doubt 25%; snapshot: 1083 lines, 850 game odds"
+2026-11-10T21:00:00Z,quotes,scheduled hourly,0,41.0,"6 games read, 793 prop and 228 game quotes changed; 8 requests (200×7), 1 retries, 0 unchanged, 2 s HTTP; RotoWire: saved 93 players for Nov 10: 3 changes – Domantas Sabonis (SAC): starter → starter; no longer listed: Jordan Goodwin (PHX); no longer listed: Keegan Murray (SAC)"
+2026-11-10T22:00:00Z,snapshot,scheduled hourly,0,60.2,"6 games read, 682 prop and 259 game quotes changed; 8 requests (200×7), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1104 lines, 848 game odds"
+2026-11-10T23:00:00Z,quotes,scheduled hourly,0,54.0,"9 games read, 757 prop and 739 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 93 players for Nov 10: 1 change – Josh Hart (NY): Doubt 25% → Out 0%"
+2026-11-10T23:18:35Z,lineups,RotoWire lineups (dashboard),0,1.0,"saved 93 players for Nov 10: 4 changes – new: Ryan Rollins (MIL, starter); Brayden Burries (MIL): starter → starter; Tyler Herro (MIL): starter → Ques 100%; …and 1 more"
+2026-11-10T23:30:00Z,snapshot,scheduled T-60,0,77.2,"9 games read, 476 prop and 312 game quotes changed; 11 requests (200×7, 304×3), 1 retries, 3 unchanged, 1 s HTTP; RotoWire: saved 92 players for Nov 10: 2 changes – Tyler Herro (MIL): Ques 100% → Out 0%; no longer listed: Kel'el Ware (MIL); snapshot: 1122 lines, 1276 game odds"
+2026-11-10T23:50:00Z,quotes,scheduled T-40,0,17.3,"1 games read, 150 prop and 38 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-11T00:00:00Z,snapshot,scheduled T-60+hourly,0,69.2,"9 games read, 605 prop and 229 game quotes changed; 10 requests (200×8, 304×2), 0 retries, 2 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1235 lines, 1274 game odds"
+2026-11-11T00:10:00Z,quotes,scheduled T-20,0,6.5,"1 games read, 82 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 92 players for Nov 10: 1 change – MIL lineup confirmed"
+2026-11-11T08:45:34Z,snapshot,scheduled start,0,72.4,"10 games read, 1498 prop and 1418 game quotes changed; 11 requests (200×11), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 161 players for Nov 11 (first fetch of the day); snapshot: 1509 lines, 1420 game odds"
+2026-11-11T09:00:00Z,quotes,scheduled hourly,0,60.0,"10 games read, 584 prop and 682 game quotes changed; 12 requests (200×11), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-11T10:00:00Z,snapshot,scheduled hourly,0,88.3,"10 games read, 1116 prop and 438 game quotes changed; 12 requests (200×11), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1711 lines, 1420 game odds"
+2026-11-11T11:00:00Z,quotes,scheduled hourly,0,58.1,"10 games read, 1032 prop and 337 game quotes changed; 12 requests (200×11), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-11T11:44:08Z,stats,python -m espn_scraper,0,10.8,"2026/27: added 6 games, 141 player lines. 10 games not final yet."
+2026-11-11T11:45:05Z,snapshot,scheduled start,0,98.0,"10 games read, 581 prop and 316 game quotes changed; 11 requests (200×11), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1763 lines, 1420 game odds"
+2026-11-11T12:00:00Z,snapshot,scheduled hourly,0,95.1,"10 games read, 397 prop and 21 game quotes changed; 12 requests (200×10, 304×1), 1 retries, 1 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1753 lines, 1420 game odds"
+2026-11-11T15:21:35Z,quotes,scheduled hourly,1,0,skipped: 13:00 UTC was missed
+2026-11-11T15:21:35Z,quotes,scheduled hourly,1,0,skipped: 14:00 UTC was missed
+2026-11-11T15:21:35Z,quotes,scheduled hourly,1,0,skipped: 15:00 UTC was missed
+2026-11-11T18:59:36Z,quotes,scheduled restart,1,13081.3,restart: the loop was stuck since 15:21 UTC (state: waiting)
+2026-11-11T18:59:37Z,snapshot,scheduled start,0,88.3,"10 games read, 1732 prop and 1444 game quotes changed; 11 requests (200×11), 0 retries, 0 unchanged, 2 s HTTP; RotoWire: saved 165 players for Nov 11: 37 changes – new: Braden Smith (IND, starter); Josh Hart (NY): starter → starter; Karl-Anthony Towns (NY): starter → starter; …and 34 more; snapshot:"
+2026-11-11T19:02:06Z,quotes,scheduled hourly,1,0.0,skipped: Superbet can't be contacted for 1 more min
+2026-11-11T20:00:00Z,snapshot,scheduled hourly,0,89.5,"10 games read, 1280 prop and 520 game quotes changed; 12 requests (200×11), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 167 players for Nov 11: 6 changes – Tobe Awaka (CHI): Ques 50% → Out 0%; Quentin Grimes (LAL): Ques 50% → Out 0%; new: Kel'el Ware (MIL, starter); …and 3 more; snapshot: 1746"
+2026-11-11T21:00:00Z,quotes,scheduled hourly,0,56.3,"10 games read, 1104 prop and 676 game quotes changed; 12 requests (200×11), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 167 players for Nov 11: 2 changes – Keyonte George (UTAH): Doubt 25% → starter; no longer listed: Isaiah Collier (UTAH)"
+2026-11-11T22:00:00Z,snapshot,scheduled hourly,0,95.4,"10 games read, 954 prop and 691 game quotes changed; 12 requests (200×11), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 169 players for Nov 11: 8 changes – Egor Demin (BKN): starter → starter; Michael Porter (BKN): starter → starter; new: Danny Wolf (BKN, starter); …and 5 more; snapshot: 1687 l"
+2026-11-11T22:26:29Z,lineups,RotoWire lineups (dashboard),0,0.8,saved 167 players for Nov 11: 2 changes – Immanuel Quickley (TOR): starter → starter; Collin Murray-Boyles (TOR): starter → starter
+2026-11-11T23:00:00Z,snapshot,scheduled T-60+hourly,0,93.6,"10 games read, 1379 prop and 902 game quotes changed; 12 requests (200×11), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 164 players for Nov 11: 4 changes – NY lineup confirmed; Josh Hart (NY): starter → starter; Karl-Anthony Towns (NY): starter → starter; …and 1 more; snapshot: 1797 lines, 142"
+2026-11-11T23:04:16Z,lineups,RotoWire lineups (dashboard),0,1.0,"saved 165 players for Nov 11: 1 change – new: Dailyn Swain (CHI, Ques 50%)"
+2026-11-11T23:20:00Z,quotes,scheduled T-40,0,28.2,"3 games read, 449 prop and 223 game quotes changed; 5 requests (200×4), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-11T23:40:00Z,quotes,scheduled T-20,0,23.8,"3 games read, 413 prop and 0 game quotes changed; 5 requests (200×4), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 164 players for Nov 11: 16 changes – WSH lineup confirmed; IND lineup confirmed; CLE lineup confirmed; …and 13 more"
+2026-11-11T23:50:00Z,quotes,scheduled T-10,0,15.0,"3 games read, 360 prop and 0 game quotes changed; 4 requests (200×4), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 164 players for Nov 11: 1 change – Trey Murphy (NO): Doubt 25% → Out 0%"
+2026-11-11T23:55:00Z,quotes,scheduled T-5,0,17.9,"3 games read, 239 prop and 0 game quotes changed; 4 requests (200×4), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-12T00:00:00Z,snapshot,scheduled T-60+hourly,0,79.9,"10 games read, 1350 prop and 930 game quotes changed; 11 requests (200×11), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1614 lines, 1420 game odds"
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 01:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 02:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 03:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 04:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 05:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 06:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 07:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 08:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 09:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 10:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 11:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 12:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 13:00 UTC was missed
+2026-11-12T15:02:03Z,quotes,scheduled hourly,1,0,skipped: 14:00 UTC was missed
+2026-11-12T15:02:17Z,quotes,scheduled hourly,1,0.0,skipped: Superbet can't be contacted for 3 more min
+2026-11-12T16:00:00Z,snapshot,scheduled hourly,0,58.2,"4 games read, 791 prop and 566 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 67 players for Nov 12 (first fetch of the day); snapshot: 791 lines, 566 game odds"
+2026-11-12T17:00:00Z,quotes,scheduled hourly,0,34.0,"4 games read, 595 prop and 97 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-12T18:00:00Z,snapshot,scheduled hourly,0,52.4,"4 games read, 514 prop and 246 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 697 lines, 426 game odds"
+2026-11-12T19:00:00Z,quotes,scheduled hourly,0,28.6,"4 games read, 400 prop and 232 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 65 players for Nov 12: 7 changes – new: Collin Murray-Boyles (TOR, starter); Scottie Barnes (TOR): starter → Out 0%; Trayce Jackson-Davis (TOR): Ques 50% → Out 0%; …and 4 more"
+2026-11-12T20:00:00Z,snapshot,scheduled hourly,0,56.8,"4 games read, 473 prop and 200 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 809 lines, 568 game odds"
+2026-11-12T21:00:00Z,quotes,scheduled hourly,0,33.3,"4 games read, 581 prop and 315 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-12T22:00:00Z,snapshot,scheduled hourly,0,51.1,"4 games read, 651 prop and 89 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 795 lines, 568 game odds"
+2026-11-12T23:00:00Z,snapshot,scheduled T-60+hourly,0,49.9,"4 games read, 571 prop and 211 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 828 lines, 568 game odds"
+2026-11-12T23:04:13Z,stats,python -m espn_scraper,0,20.8,"2026/27: added 10 games, 223 player lines. 4 games not final yet."
+2026-11-12T23:20:00Z,quotes,scheduled T-40,0,51.3,"2 games read, 302 prop and 208 game quotes changed; 4 requests (200×3), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-12T23:40:00Z,quotes,scheduled T-20,0,21.2,"2 games read, 348 prop and 234 game quotes changed; 4 requests (200×3), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 63 players for Nov 12: 6 changes – TOR lineup confirmed; PHI lineup confirmed; DET lineup confirmed; …and 3 more"
+2026-11-12T23:50:00Z,quotes,scheduled T-10,0,11.0,"2 games read, 185 prop and 0 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-12T23:56:00Z,quotes,scheduled T-5,0,41.3,"2 games read, 290 prop and 0 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-13T00:00:00Z,snapshot,scheduled T-60+hourly,0,48.0,"5 games read, 749 prop and 276 game quotes changed; 6 requests (200×6), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged; snapshot: 808 lines, 568 game odds"
+2026-11-13T00:20:00Z,quotes,scheduled T-40,0,16.1,"1 games read, 141 prop and 36 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-13T00:40:00Z,quotes,scheduled T-20,0,17.1,"1 games read, 91 prop and 119 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 63 players for Nov 12: 2 changes – DAL lineup confirmed; MIN lineup confirmed"
+2026-11-13T00:51:00Z,quotes,scheduled T-10,0,18.7,"1 games read, 158 prop and 0 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-13T00:55:00Z,quotes,scheduled T-5,0,7.0,"1 games read, 31 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-13T01:00:00Z,snapshot,scheduled T-60+hourly,0,46.0,"7 games read, 705 prop and 150 game quotes changed; 8 requests (200×7, 304×1), 0 retries, 1 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 862 lines, 284 game odds"
+2026-11-13T01:20:00Z,quotes,scheduled T-40,0,16.6,"1 games read, 176 prop and 110 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-13T01:40:00Z,quotes,scheduled T-20,0,19.6,"1 games read, 159 prop and 89 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 63 players for Nov 12: 2 changes – CHA lineup confirmed; PHX lineup confirmed"
+2026-11-13T01:50:00Z,quotes,scheduled T-10,0,7.3,"1 games read, 45 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-13T01:55:00Z,snapshot,scheduled T-5+hourly,0,45.1,"7 games read, 118 prop and 0 game quotes changed; 8 requests (200×6, 304×2), 0 retries, 2 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 728 lines, 142 game odds"
+2026-11-13T03:00:00Z,quotes,scheduled hourly,0,47.2,"7 games read, 508 prop and 0 game quotes changed; 9 requests (200×8), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-13T09:04:32Z,quotes,scheduled hourly,1,0,skipped: 04:00 UTC was missed
+2026-11-13T09:04:32Z,quotes,scheduled hourly,1,0,skipped: 05:00 UTC was missed
+2026-11-13T09:04:32Z,quotes,scheduled hourly,1,0,skipped: 06:00 UTC was missed
+2026-11-13T09:04:32Z,quotes,scheduled hourly,1,0,skipped: 07:00 UTC was missed
+2026-11-13T09:04:32Z,quotes,scheduled hourly,1,0,skipped: 08:00 UTC was missed
+2026-11-13T09:04:32Z,quotes,scheduled hourly,1,0,skipped: 09:00 UTC was missed
+2026-11-13T09:04:48Z,lineups,RotoWire lineups (dashboard),0,1.2,saved 158 players for Nov 13 (first fetch of the day)
+2026-11-13T09:05:03Z,stats,python -m espn_scraper,0,10.6,"2026/27: added 4 games, 90 player lines. 9 games not final yet."
+2026-11-13T09:05:14Z,snapshot,python daily_snapshot.py,0,228.2,"rotowire_lineups: 158 rows, superbet_props: 1564 rows, superbet_game_odds: 1278 rows"
+2026-11-13T10:00:00Z,snapshot,scheduled hourly,0,80.8,"9 games read, 1520 prop and 1278 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1606 lines, 1278 game odds"
+2026-11-13T11:00:00Z,quotes,scheduled hourly,0,53.6,"9 games read, 771 prop and 481 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-13T11:20:10Z,snapshot,scheduled start,0,106.3,"9 games read, 361 prop and 226 game quotes changed; 11 requests (200×8, 304×2), 1 retries, 2 unchanged, 2 s HTTP; RotoWire: unchanged; snapshot: 1617 lines, 1278 game odds"
+2026-11-13T12:00:00Z,snapshot,scheduled hourly,0,82.7,"9 games read, 456 prop and 111 game quotes changed; 11 requests (200×9, 304×1), 1 retries, 1 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1617 lines, 1278 game odds"
+2026-11-13T13:00:00Z,quotes,scheduled hourly,0,53.7,"9 games read, 856 prop and 588 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-13T14:00:00Z,snapshot,scheduled hourly,0,85.3,"9 games read, 1186 prop and 933 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1661 lines, 1278 game odds"
+2026-11-13T15:00:00Z,quotes,scheduled hourly,0,55.9,"9 games read, 916 prop and 977 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-13T16:00:00Z,snapshot,scheduled hourly,0,82.5,"9 games read, 1374 prop and 743 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 158 players for Nov 13: 3 changes – new: Jared McCain (OKC, starter); Ajay Mitchell (OKC): starter → starter; no longer listed: Alex Caruso (OKC); snapshot: 1735 lines, 1278 g"
+2026-11-13T17:00:00Z,quotes,scheduled hourly,0,55.5,"9 games read, 977 prop and 551 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-13T18:00:00Z,snapshot,scheduled hourly,0,84.3,"9 games read, 928 prop and 360 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1797 lines, 1278 game odds"
+2026-11-13T20:46:13Z,quotes,scheduled restart,1,7518.0,restart: the loop was stuck since 18:40 UTC (state: waiting)
+2026-11-13T20:46:14Z,snapshot,scheduled start,0,81.0,"9 games read, 1527 prop and 952 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 158 players for Nov 13: 11 changes – Herbert Jones (NO): starter → starter; new: Saddiq Bey (NO, starter); Bennedict Mathurin (NO): Doubt 25% → Ques 50%; …and 8 more; snapshot"
+2026-11-13T21:00:00Z,quotes,scheduled hourly,0,52.7,"9 games read, 269 prop and 10 game quotes changed; 11 requests (200×7, 304×3), 1 retries, 3 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-13T22:00:00Z,snapshot,scheduled hourly,0,88.2,"9 games read, 1269 prop and 491 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 158 players for Nov 13: 2 changes – new: Keegan Murray (SAC, starter); Precious Achiuwa (SAC): starter → Out 0%; snapshot: 1759 lines, 1278 game odds"
+2026-11-13T23:00:00Z,snapshot,scheduled T-60+hourly,0,86.8,"9 games read, 1194 prop and 371 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 155 players for Nov 13: 3 changes – Jalen Suggs (ORL): starter → starter; no longer listed: Jamal Cain (ORL); no longer listed: Tristan da Silva (ORL); snapshot: 1761 lines, 1"
+2026-11-13T23:20:00Z,quotes,scheduled T-40,0,22.8,"2 games read, 318 prop and 189 game quotes changed; 4 requests (200×3), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 152 players for Nov 13: 6 changes – Aaron Nesmith (IND): starter → starter; Norman Powell (CHI): starter → starter; new: Tim Hardaway (MIA, starter); …and 3 more"
+2026-11-13T23:40:00Z,quotes,scheduled T-20,0,19.6,"2 games read, 202 prop and 0 game quotes changed; 4 requests (200×3), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 151 players for Nov 13: 13 changes – MIL lineup confirmed; ORL lineup confirmed; CHI lineup confirmed; …and 10 more"
+2026-11-13T23:50:00Z,quotes,scheduled T-10,0,12.4,"2 games read, 214 prop and 55 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 150 players for Nov 13: 3 changes – NY lineup confirmed; IND lineup confirmed; no longer listed: Bennedict Mathurin (NO)"
+2026-11-13T23:55:00Z,quotes,scheduled T-5,0,12.4,"2 games read, 18 prop and 0 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-14T00:00:00Z,snapshot,scheduled T-60+hourly,0,78.1,"7 games read, 902 prop and 395 game quotes changed; 8 requests (200×8), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1422 lines, 994 game odds"
+2026-11-14T00:20:00Z,quotes,scheduled T-40,0,27.2,"3 games read, 253 prop and 78 game quotes changed; 5 requests (200×4), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 150 players for Nov 13: 1 change – Dailyn Swain (CHI): Ques 100% → Out 0%"
+2026-11-14T00:30:00Z,snapshot,scheduled T-60,0,69.6,"7 games read, 394 prop and 306 game quotes changed; 8 requests (200×8), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1467 lines, 994 game odds"
+2026-11-14T00:40:00Z,quotes,scheduled T-20,0,14.7,"3 games read, 428 prop and 119 game quotes changed; 4 requests (200×4), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 150 players for Nov 13: 7 changes – MEM lineup confirmed; CLE lineup confirmed; MIA lineup confirmed; …and 4 more"
+2026-11-14T00:50:00Z,quotes,scheduled T-10+T-40,0,23.0,"4 games read, 407 prop and 8 game quotes changed; 5 requests (200×5), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 150 players for Nov 13: 4 changes – NO lineup confirmed; ATL lineup confirmed; new: DeAndre Jordan (NO, starter); …and 1 more"
+2026-11-14T00:55:00Z,quotes,scheduled T-5+hourly,0,29.7,"7 games read, 392 prop and 35 game quotes changed; 8 requests (200×7, 304×1), 0 retries, 1 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-14T01:10:00Z,quotes,scheduled T-20,0,17.6,"1 games read, 171 prop and 87 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 150 players for Nov 13: 4 changes – UTAH lineup confirmed; HOU lineup confirmed; new: Josh Okogie (UTAH, starter); …and 1 more"
+2026-11-14T01:21:00Z,quotes,scheduled T-10,0,16.9,"1 games read, 79 prop and 0 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-14T01:25:00Z,quotes,scheduled T-5,0,5.1,"1 games read, 0 prop and 0 game quotes changed; 2 requests (200×1, 304×1), 0 retries, 1 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-14T01:30:00Z,snapshot,scheduled T-60,0,42.9,"4 games read, 458 prop and 275 game quotes changed; 5 requests (200×5), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged; snapshot: 867 lines, 568 game odds"
+2026-11-14T01:50:00Z,quotes,scheduled T-40,0,16.9,"1 games read, 207 prop and 125 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 147 players for Nov 13: 3 changes – De'Aaron Fox (SA): starter → starter; Devin Vassell (SA): starter → starter; no longer listed: Charles Bassey (GS)"
+2026-11-14T02:00:00Z,snapshot,scheduled T-60+hourly,0,35.8,"3 games read, 129 prop and 40 game quotes changed; 4 requests (200×3, 304×1), 0 retries, 1 unchanged, 0 s HTTP; RotoWire: unchanged; snapshot: 673 lines, 426 game odds"
+2026-11-14T02:10:00Z,quotes,scheduled T-20,0,5.6,"1 games read, 154 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 147 players for Nov 13: 5 changes – GS lineup confirmed; new: Will Richard (GS, starter); De'Anthony Melton (GS): starter → starter; …and 2 more"
+2026-11-14T02:20:00Z,quotes,scheduled T-10+T-40,0,10.3,"2 games read, 170 prop and 0 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 147 players for Nov 13: 1 change – SA lineup confirmed"
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 03:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 04:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 05:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 06:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 07:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 08:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 09:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 10:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 11:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 12:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 13:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 14:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 15:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 16:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 17:00 UTC was missed
+2026-11-14T18:47:29Z,quotes,scheduled hourly,1,0,skipped: 18:00 UTC was missed
+2026-11-14T19:00:00Z,quotes,scheduled hourly,0,66.5,"5 games read, 849 prop and 710 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 85 players for Nov 14 (first fetch of the day)"
+2026-11-14T20:00:00Z,snapshot,scheduled hourly,0,55.4,"5 games read, 638 prop and 286 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 87 players for Nov 14: 5 changes – new: Cam Spencer (MEM, starter); Zach Edey (MEM): starter → starter; new: Jerami Grant (MEM, Ques 50%); …and 2 more; snapshot: 810 lines, 710 g"
+2026-11-14T21:00:00Z,quotes,scheduled hourly,0,36.9,"5 games read, 559 prop and 328 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-14T22:00:00Z,snapshot,scheduled hourly,0,60.1,"5 games read, 719 prop and 346 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 890 lines, 710 game odds"
+2026-11-14T23:00:00Z,snapshot,scheduled T-60+hourly,0,51.5,"5 games read, 765 prop and 409 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 85 players for Nov 14: 12 changes – Yves Missi (NO): starter → starter; Max Christie (DAL): Doubt 25% → Doubt 100%; new: Craig Porter (CLE, starter); …and 9 more; snapshot: 886 l"
+2026-11-14T23:07:12Z,lineups,RotoWire lineups (dashboard),0,0.6,"saved 86 players for Nov 14: 2 changes – new: Bennedict Mathurin (NO, Out 0%); Max Christie (DAL): Doubt 100% → Out 0%"
+2026-11-14T23:20:00Z,quotes,scheduled T-40,0,18.8,"1 games read, 165 prop and 123 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 86 players for Nov 14: 2 changes – Giannis Antetokounmpo (MIA): starter → starter; Michael Porter (BKN): starter → starter"
+2026-11-14T23:30:00Z,snapshot,scheduled T-60,0,46.2,"5 games read, 494 prop and 271 game quotes changed; 6 requests (200×5, 304×1), 0 retries, 1 unchanged, 0 s HTTP; RotoWire: saved 83 players for Nov 14: 4 changes – Klay Thompson (MIA): starter → starter; Pelle Larsson (MIA): Doubt 25% → Out 0%; Nolan Traore (BKN): starter → starter; …and 1 more; sna"
+2026-11-14T23:40:00Z,quotes,scheduled T-20,0,5.2,"1 games read, 137 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 83 players for Nov 14: 5 changes – DEN lineup confirmed; NO lineup confirmed; new: Zach Collins (CHI, starter); …and 2 more"
+2026-11-14T23:50:00Z,quotes,scheduled T-10+T-40,0,11.2,"2 games read, 132 prop and 0 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 82 players for Nov 14: 2 changes – Norman Powell (CHI): starter → starter; Nic Claxton (CHI): Ques 100% → Out 0%"
+2026-11-14T23:55:00Z,quotes,scheduled T-5,0,6.5,"1 games read, 52 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-15T00:00:00Z,snapshot,scheduled T-60+hourly,0,48.2,"5 games read, 565 prop and 279 game quotes changed; 6 requests (200×6), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 774 lines, 568 game odds"
+2026-11-15T00:10:00Z,quotes,scheduled T-20,0,5.2,"1 games read, 103 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-15T00:20:00Z,quotes,scheduled T-10+T-40,0,18.4,"4 games read, 371 prop and 352 game quotes changed; 5 requests (200×5), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 82 players for Nov 14: 6 changes – DAL lineup confirmed; CLE lineup confirmed; new: Tyrese Proctor (CLE, starter); …and 3 more"
+2026-11-15T00:25:00Z,quotes,scheduled T-5,0,4.8,"1 games read, 61 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-15T00:40:00Z,quotes,scheduled T-20,0,26.9,"3 games read, 459 prop and 57 game quotes changed; 5 requests (200×4), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 82 players for Nov 14: 5 changes – DET lineup confirmed; MIA lineup confirmed; CHI lineup confirmed; …and 2 more"
+2026-11-15T00:50:00Z,quotes,scheduled T-10,0,14.0,"3 games read, 305 prop and 86 game quotes changed; 4 requests (200×4), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 82 players for Nov 14: 7 changes – BKN lineup confirmed; MEM lineup confirmed; Egor Demin (BKN): starter → starter; …and 4 more"
+2026-11-15T00:55:00Z,quotes,scheduled T-5+hourly,0,20.8,"4 games read, 198 prop and 0 game quotes changed; 5 requests (200×5), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-15T02:00:00Z,snapshot,scheduled hourly,0,38.6,"4 games read, 303 prop and 0 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 83 players for Nov 14: 1 change – new: GG Jackson (MEM, Out 0%); snapshot: 300 lines, 0 game odds"
+2026-11-15T08:30:46Z,quotes,scheduled hourly,1,0,skipped: 03:00 UTC was missed
+2026-11-15T08:30:46Z,quotes,scheduled hourly,1,0,skipped: 04:00 UTC was missed
+2026-11-15T08:30:46Z,quotes,scheduled hourly,1,0,skipped: 05:00 UTC was missed
+2026-11-15T08:30:46Z,quotes,scheduled hourly,1,0,skipped: 06:00 UTC was missed
+2026-11-15T08:30:46Z,quotes,scheduled hourly,1,0,skipped: 07:00 UTC was missed
+2026-11-15T08:30:46Z,quotes,scheduled hourly,1,0,skipped: 08:00 UTC was missed
+2026-11-15T08:46:48Z,snapshot,scheduled start,0,94.1,"9 games read, 1519 prop and 1278 game quotes changed; 10 requests (200×10), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 153 players for Nov 15 (first fetch of the day); snapshot: 1546 lines, 1278 game odds"
+2026-11-15T08:48:08Z,stats,python -m espn_scraper,0,20.4,"2026/27: added 14 games, 300 player lines. 9 games not final yet."
+2026-11-15T09:00:00Z,quotes,scheduled hourly,0,56.7,"9 games read, 262 prop and 2 game quotes changed; 11 requests (200×6, 304×4), 1 retries, 4 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-15T10:00:00Z,snapshot,scheduled hourly,0,90.5,"9 games read, 842 prop and 226 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1581 lines, 1278 game odds"
+2026-11-15T11:00:00Z,quotes,scheduled hourly,0,51.3,"9 games read, 741 prop and 383 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-15T12:00:00Z,snapshot,scheduled hourly,0,84.9,"9 games read, 600 prop and 457 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1610 lines, 1278 game odds"
+2026-11-15T13:00:00Z,quotes,scheduled hourly,0,57.1,"9 games read, 693 prop and 157 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-15T14:00:00Z,snapshot,scheduled hourly,0,92.3,"9 games read, 876 prop and 878 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1644 lines, 1278 game odds"
+2026-11-15T15:00:00Z,quotes,scheduled hourly,0,55.5,"9 games read, 986 prop and 573 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 2 s HTTP; RotoWire: unchanged"
+2026-11-15T16:00:00Z,snapshot,scheduled hourly,0,83.0,"9 games read, 978 prop and 668 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 153 players for Nov 15: 4 changes – Luka Doncic (LAL): starter → starter; Adou Thiero (LAL): Ques 100% → Ques 50%; Daniel Gafford (DAL): starter → starter; …and 1 more; snapsho"
+2026-11-15T17:00:00Z,snapshot,scheduled T-60+hourly,0,76.4,"9 games read, 1083 prop and 661 game quotes changed; 11 requests (200×10), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 153 players for Nov 15: 15 changes – new: Quenton Jackson (IND, starter); Andrew Nembhard (IND): starter → Out 0%; LeBron James (PHI): starter → starter; …and 12 more; snapsho"
+2026-11-15T17:20:00Z,quotes,scheduled T-40,0,18.4,"1 games read, 140 prop and 111 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 152 players for Nov 15: 3 changes – Aaron Nesmith (IND): starter → starter; new: Ryan Rollins (MIL, Ques 100%); no longer listed: T.J. McConnell (IND)"
+2026-11-15T17:36:32Z,lineups,RotoWire lineups (dashboard),0,0.9,saved 151 players for Nov 15: 2 changes – PHI lineup confirmed; no longer listed: Steven Adams (HOU)
+2026-11-15T17:40:00Z,quotes,scheduled T-20,0,17.6,"1 games read, 157 prop and 0 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 151 players for Nov 15: 1 change – IND lineup confirmed"
+2026-11-15T17:51:00Z,quotes,scheduled T-10,0,19.7,"1 games read, 132 prop and 60 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-15T17:55:00Z,snapshot,scheduled T-5+hourly,0,76.6,"9 games read, 898 prop and 576 game quotes changed; 10 requests (200×10), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 152 players for Nov 15: 1 change – new: Jock Landale (ATL, Ques 100%); snapshot: 1715 lines, 1278 game odds"
+2026-11-15T19:00:00Z,quotes,scheduled hourly,0,51.8,"8 games read, 607 prop and 389 game quotes changed; 10 requests (200×9), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 155 players for Nov 15: 5 changes – De'Aaron Fox (SA): starter → starter; Kyrie Irving (DAL): starter → starter; Daniel Gafford (DAL): starter → starter; …and 2 more"
+2026-11-15T20:00:00Z,snapshot,scheduled T-60+hourly,0,81.0,"8 games read, 802 prop and 464 game quotes changed; 10 requests (200×9), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 149 players for Nov 15: 6 changes – Alex Sarr (WSH): starter → starter; Keegan Murray (SAC): starter → starter; no longer listed: Bronny James (LAL); …and 3 more; snapshot: 1537"
+2026-11-15T20:20:00Z,quotes,scheduled T-40,0,19.8,"1 games read, 114 prop and 0 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-15T20:30:00Z,snapshot,scheduled T-60,0,68.3,"8 games read, 564 prop and 283 game quotes changed; 9 requests (200×9), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 1533 lines, 1136 game odds"
+2026-11-15T20:40:00Z,quotes,scheduled T-20,0,4.9,"1 games read, 109 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 149 players for Nov 15: 6 changes – LAL lineup confirmed; PHX lineup confirmed; Stephon Castle (SA): starter → starter; …and 3 more"
+2026-11-15T20:50:00Z,quotes,scheduled T-10+T-40,0,11.5,"2 games read, 71 prop and 0 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-15T20:55:00Z,quotes,scheduled T-5,0,6.3,"1 games read, 14 prop and 8 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-15T21:00:00Z,snapshot,scheduled T-60+hourly,0,65.9,"8 games read, 359 prop and 415 game quotes changed; 9 requests (200×7, 304×2), 0 retries, 2 unchanged, 1 s HTTP; RotoWire: saved 149 players for Nov 15: 2 changes – Andrew Nembhard (IND): Out 0% → Ques 100%; Joel Embiid (PHI): Out 0% → Ques 100%; snapshot: 1545 lines, 1136 game odds"
+2026-11-15T21:10:00Z,quotes,scheduled T-20,0,6.7,"1 games read, 98 prop and 114 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 149 players for Nov 15: 4 changes – CHA lineup confirmed; LAC lineup confirmed; new: Sion James (CHA, starter); …and 1 more"
+2026-11-15T21:20:00Z,quotes,scheduled T-10+T-40,0,9.7,"2 games read, 324 prop and 142 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 149 players for Nov 15: 2 changes – new: Marcus Sasser (DAL, starter); Kyrie Irving (DAL): starter → Out 0%"
+2026-11-15T21:26:00Z,quotes,scheduled T-5,0,5.0,"1 games read, 17 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 149 players for Nov 15: 1 change – Max Christie (DAL): Doubt 50% → Out 0%"
+2026-11-15T21:40:00Z,quotes,scheduled T-20,0,16.8,"1 games read, 149 prop and 142 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 149 players for Nov 15: 2 changes – new: Josh Green (UTAH, starter); no longer listed: Josh Okogie (UTAH)"
+2026-11-15T21:51:00Z,quotes,scheduled T-10,0,17.6,"1 games read, 106 prop and 0 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 149 players for Nov 15: 3 changes – SA lineup confirmed; UTAH lineup confirmed; Scottie Barnes (TOR): starter → starter"
+2026-11-15T21:55:00Z,quotes,scheduled T-5,0,6.8,"1 games read, 3 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-15T22:00:00Z,snapshot,scheduled T-60+hourly,0,49.8,"5 games read, 587 prop and 367 game quotes changed; 6 requests (200×5, 304×1), 0 retries, 1 unchanged, 0 s HTTP; RotoWire: unchanged; snapshot: 952 lines, 686 game odds"
+2026-11-15T22:20:00Z,quotes,scheduled T-40,0,21.3,"2 games read, 230 prop and 0 game quotes changed; 4 requests (200×3), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-15T22:41:00Z,quotes,scheduled T-20,0,23.6,"2 games read, 303 prop and 0 game quotes changed; 4 requests (200×3), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 147 players for Nov 15: 16 changes – BOS lineup confirmed; NY lineup confirmed; TOR lineup confirmed; …and 13 more"
+2026-11-15T22:50:00Z,quotes,scheduled T-10,0,11.6,"2 games read, 63 prop and 0 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 147 players for Nov 15: 4 changes – DAL lineup confirmed; Cooper Flagg (DAL): starter → starter; new: Naji Marshall (DAL, starter); …and 1 more"
+2026-11-15T22:55:00Z,quotes,scheduled T-5,0,10.0,"2 games read, 212 prop and 0 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 147 players for Nov 15: 1 change – Keegan Murray (SAC): starter → starter"
+2026-11-15T23:00:00Z,snapshot,scheduled T-60+hourly,0,49.4,"5 games read, 741 prop and 311 game quotes changed; 6 requests (200×6), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged; snapshot: 957 lines, 686 game odds"
+2026-11-15T23:20:00Z,quotes,scheduled T-40,0,18.2,"1 games read, 100 prop and 0 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 147 players for Nov 15: 1 change – Ryan Rollins (MIL): Ques 100% → Out 0%"
+2026-11-15T23:40:00Z,quotes,scheduled T-20,0,20.2,"1 games read, 68 prop and 0 game quotes changed; 3 requests (200×2), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 147 players for Nov 15: 3 changes – HOU lineup confirmed; WSH lineup confirmed; Jock Landale (ATL): Ques 100% → Out 0%"
+2026-11-15T23:50:00Z,quotes,scheduled T-10,0,7.5,"1 games read, 60 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-15T23:55:00Z,quotes,scheduled T-5,0,6.8,"1 games read, 24 prop and 0 game quotes changed; 2 requests (200×2), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-16T00:00:00Z,snapshot,scheduled T-60+hourly,0,33.4,"2 games read, 344 prop and 96 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged; snapshot: 377 lines, 284 game odds"
+2026-11-16T17:57:02Z,quotes,scheduled restart,1,64288.3,restart: the loop was stuck since 00:05 UTC (state: waiting)
+2026-11-16T17:57:05Z,snapshot,scheduled start,0,110.2,"8 games read, 1523 prop and 1126 game quotes changed; 9 requests (200×9), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 132 players for Nov 16 (first fetch of the day); snapshot: 1523 lines, 1126 game odds"
+2026-11-16T18:00:00Z,snapshot,scheduled hourly,1,0.0,skipped: Superbet can't be contacted for 0 more min
+2026-11-16T23:55:10Z,stats,python -m espn_scraper,0,13.2,"2026/27: added 9 games, 199 player lines. 8 games not final yet."
+2026-11-16T23:54:33Z,snapshot,scheduled start,0,105.0,"8 games read, 1514 prop and 956 game quotes changed; 9 requests (200×9), 0 retries, 0 unchanged, 3 s HTTP; RotoWire: saved 131 players for Nov 16: 33 changes – ORL lineup confirmed; BOS lineup confirmed; CHI lineup confirmed; …and 30 more; snapshot: 1531 lines, 1136 game odds"
+2026-11-16T23:54:32Z,quotes,scheduled missed,1,0,skipped: 9 slots nobody ran (19:00 hourly to 23:50 T-10+T-40 UTC): the dashboard was off or busy
+2026-11-16T23:57:18Z,quotes,scheduled T-5,1,0.0,skipped: Superbet can't be contacted for 0 more min
+2026-11-17T00:01:00Z,snapshot,scheduled T-60+hourly,0,47.1,"5 games read, 198 prop and 0 game quotes changed; 6 requests (200×4, 304×2), 0 retries, 2 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 952 lines, 710 game odds"
+2026-11-17T00:10:00Z,quotes,scheduled T-20,0,10.1,"2 games read, 333 prop and 125 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 130 players for Nov 16: 12 changes – HOU lineup confirmed; MIA lineup confirmed; PHI lineup confirmed; …and 9 more"
+2026-11-17T00:21:00Z,quotes,scheduled T-10+T-40,0,29.7,"4 games read, 401 prop and 91 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 129 players for Nov 16: 1 change – no longer listed: Gui Santos (GS)"
+2026-11-17T00:25:00Z,quotes,scheduled T-5,0,8.7,"2 games read, 20 prop and 0 game quotes changed; 3 requests (200×2, 304×1), 0 retries, 1 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-17T00:40:00Z,quotes,scheduled T-20,0,24.4,"2 games read, 242 prop and 6 game quotes changed; 4 requests (200×3), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 129 players for Nov 16: 9 changes – GS lineup confirmed; POR lineup confirmed; MIN lineup confirmed; …and 6 more"
+2026-11-17T00:50:00Z,quotes,scheduled T-10,0,12.7,"2 games read, 185 prop and 99 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: saved 129 players for Nov 16: 1 change – NO lineup confirmed"
+2026-11-17T00:55:00Z,quotes,scheduled T-5,0,12.9,"2 games read, 76 prop and 48 game quotes changed; 3 requests (200×2, 304×1), 0 retries, 1 unchanged, 0 s HTTP; RotoWire: unchanged"
+2026-11-17T01:00:00Z,snapshot,scheduled T-60+hourly,0,21.3,"2 games read, 178 prop and 96 game quotes changed; 3 requests (200×3), 0 retries, 0 unchanged, 0 s HTTP; RotoWire: unchanged; snapshot: 300 lines, 142 game odds"
+2026-11-17T04:06:52Z,quotes,scheduled T-40,1,0,skipped: 01:20 UTC was missed
+2026-11-17T04:06:52Z,quotes,scheduled T-20,1,0,skipped: 01:40 UTC was missed
+2026-11-17T04:06:52Z,quotes,scheduled T-10,1,0,skipped: 01:50 UTC was missed
+2026-11-17T04:06:52Z,quotes,scheduled T-5+hourly,1,0,skipped: 01:55 UTC was missed
+2026-11-17T04:06:52Z,quotes,scheduled hourly,1,0,skipped: 03:00 UTC was missed
+2026-11-17T04:06:52Z,quotes,scheduled hourly,1,0,skipped: 04:00 UTC was missed
+2026-11-17T07:12:21Z,lineups,RotoWire lineups (dashboard),0,1.3,saved 134 players for Nov 16: 30 changes – PHX lineup confirmed; DEN lineup confirmed; Izaiyah Nelson (ORL): Out 0% → Doubt 100%; …and 27 more
+2026-11-17T07:12:35Z,quotes,scheduled hourly,1,0,skipped: 05:00 UTC was missed
+2026-11-17T07:12:35Z,quotes,scheduled hourly,1,0,skipped: 06:00 UTC was missed
+2026-11-17T07:12:35Z,quotes,scheduled hourly,1,0,skipped: 07:00 UTC was missed
+2026-11-17T08:07:45Z,lineups,RotoWire lineups (dashboard),0,1.1,saved 79 players for Nov 17 (first fetch of the day)
+2026-11-17T08:07:57Z,quotes,scheduled hourly,1,0,skipped: 08:00 UTC was missed
+2026-11-17T08:08:05Z,stats,python -m espn_scraper,0,18.1,"2026/27: added 8 games, 186 player lines. 5 games not final yet."
+2026-11-17T08:08:23Z,snapshot,python daily_snapshot.py,0,156.1,"rotowire_lineups: 79 rows, superbet_props: 836 rows, superbet_game_odds: 710 rows"
+2026-11-17T12:43:51Z,quotes,scheduled hourly,1,0,skipped: 09:00 UTC was missed
+2026-11-17T12:43:51Z,quotes,scheduled hourly,1,0,skipped: 10:00 UTC was missed
+2026-11-17T12:43:51Z,quotes,scheduled hourly,1,0,skipped: 11:00 UTC was missed
+2026-11-17T12:43:51Z,quotes,scheduled hourly,1,0,skipped: 12:00 UTC was missed
+2026-11-17T13:00:00Z,quotes,scheduled hourly,0,22.3,"5 games read, 931 prop and 710 game quotes changed; 6 requests (200×6), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-17T14:00:00Z,snapshot,scheduled hourly,0,61.8,"5 games read, 572 prop and 446 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 938 lines, 710 game odds"
+2026-11-17T15:00:00Z,quotes,scheduled hourly,0,35.0,"5 games read, 643 prop and 124 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-17T16:00:00Z,snapshot,scheduled hourly,0,59.9,"5 games read, 571 prop and 88 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 79 players for Nov 17: 2 changes – new: Sion James (CHA, starter); no longer listed: Grayson Allen (CHA); snapshot: 964 lines, 710 game odds"
+2026-11-17T17:01:00Z,quotes,scheduled hourly,0,33.8,"5 games read, 450 prop and 262 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 79 players for Nov 17: 4 changes – Ausar Thompson (DET): starter → starter; John Collins (DET): starter → starter; new: Paul Reed (DET, starter); …and 1 more"
+2026-11-17T18:02:23Z,lineups,RotoWire lineups (dashboard),0,1.1,"saved 80 players for Nov 17: 5 changes – Scottie Barnes (TOR): starter → starter; new: Kevin Huerter (DET, starter); Ausar Thompson (DET): starter → starter; …and 2 more"
+2026-11-17T18:02:43Z,snapshot,scheduled hourly,0,58.1,"5 games read, 549 prop and 566 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 967 lines, 710 game odds"
+2026-11-17T19:00:00Z,quotes,scheduled hourly,0,32.8,"5 games read, 712 prop and 241 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 80 players for Nov 17: 1 change – Isaiah Joe (DET): Doubt 25% → Out 0%"
+2026-11-17T20:00:00Z,snapshot,scheduled hourly,0,53.8,"5 games read, 573 prop and 410 game quotes changed; 7 requests (200×6), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 82 players for Nov 17: 5 changes – Deni Avdija (POR): starter → starter; Chris Youngblood (POR): Ques 50% → Out 0%; new: Terrence Shannon (MIN, starter); …and 2 more; snapshot: 9"
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 00:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 01:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 02:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 03:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 04:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 05:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 06:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 07:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 08:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 09:00 UTC was missed
+2026-11-18T10:56:05Z,quotes,scheduled hourly,1,0,skipped: 10:00 UTC was missed
+2026-11-18T10:56:13Z,lineups,RotoWire lineups (dashboard),0,31.2,saved 204 players for Nov 18 (first fetch of the day)
+2026-11-18T11:00:00Z,quotes,scheduled hourly,0,57.3,"12 games read, 1978 prop and 1704 game quotes changed; 13 requests (200×13), 0 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-18T12:00:00Z,snapshot,scheduled hourly,0,107.5,"12 games read, 859 prop and 747 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 2 s HTTP; RotoWire: unchanged; snapshot: 1994 lines, 1702 game odds"
+2026-11-18T13:00:00Z,quotes,scheduled hourly,0,65.0,"12 games read, 1345 prop and 829 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-18T14:00:00Z,snapshot,scheduled hourly,0,110.5,"12 games read, 1281 prop and 1156 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 2109 lines, 1702 game odds"
+2026-11-18T14:25:00Z,snapshot,python daily_snapshot.py,0,299.5,"rotowire_lineups: 204 rows, superbet_props: 2129 rows, superbet_game_odds: 1704 rows"
+2026-11-18T14:48:58Z,stats,python -m espn_scraper,0,15.4,"2026/27: added 5 games, 103 player lines. 12 games not final yet."
+2026-11-18T15:00:00Z,quotes,scheduled hourly,0,66.5,"12 games read, 1370 prop and 1246 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 204 players for Nov 18: 1 change – Jaxson Hayes (UTAH): starter → starter"
+2026-11-18T16:00:00Z,snapshot,scheduled hourly,0,117.2,"12 games read, 1173 prop and 862 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 204 players for Nov 18: 5 changes – Ronald Holland (DET): Out 0% → Ques 50%; Taurean Prince (DET): Out 0% → Ques 50%; Isaiah Joe (DET): Out 0% → Doubt 25%; …and 2 more; snaps"
+2026-11-18T17:00:00Z,quotes,scheduled hourly,0,68.6,"12 games read, 1068 prop and 753 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 2 s HTTP; RotoWire: unchanged"
+2026-11-18T18:00:00Z,snapshot,scheduled hourly,0,114.1,"12 games read, 968 prop and 640 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 206 players for Nov 18: 4 changes – RJ Barrett (TOR): starter → starter; Collin Murray-Boyles (TOR): starter → starter; new: Jakob Poeltl (TOR, starter); …and 1 more; snapshot"
+2026-11-18T19:00:00Z,quotes,scheduled hourly,0,70.0,"12 games read, 1405 prop and 955 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 2 s HTTP; RotoWire: saved 206 players for Nov 18: 8 changes – new: Mario Hezonja (CLE, starter); Peyton Watson (CLE): starter → Doubt 25%; Jaylon Tyson (CLE): Doubt 25% → Out 0%; …and 5 more"
+2026-11-18T20:00:00Z,snapshot,scheduled hourly,0,121.3,"12 games read, 817 prop and 702 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 2 s HTTP; RotoWire: saved 207 players for Nov 18: 4 changes – Cade Cunningham (DET): starter → starter; Isaiah Joe (DET): Doubt 25% → Ques 50%; Ronald Holland (DET): Ques 50% → Out 0%; …and 1 more; sna"
+2026-11-18T21:01:00Z,quotes,scheduled hourly,0,66.8,"12 games read, 1360 prop and 998 game quotes changed; 14 requests (200×13), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-18T22:00:00Z,snapshot,scheduled hourly,0,112.2,"12 games read, 1169 prop and 912 game quotes changed; 14 requests (200×12, 304×1), 1 retries, 1 unchanged, 1 s HTTP; RotoWire: saved 204 players for Nov 18: 5 changes – new: Quentin Grimes (LAL, starter); Walker Kessler (LAL): starter → starter; Austin Reaves (LAL): starter → Out 0%; …and 2 more; sn"
+2026-11-19T11:41:05Z,quotes,scheduled restart,1,46961.7,restart: the loop was stuck since 22:38 UTC (state: waiting)
+2026-11-19T11:41:07Z,snapshot,scheduled start,0,53.1,"4 games read, 755 prop and 568 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 3 s HTTP; RotoWire: saved 70 players for Nov 19 (first fetch of the day); snapshot: 755 lines, 568 game odds"
+2026-11-19T12:00:00Z,snapshot,scheduled hourly,0,55.2,"4 games read, 168 prop and 195 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 753 lines, 568 game odds"
+2026-11-19T14:29:46Z,quotes,scheduled restart,1,5508.6,restart: the loop was stuck since 12:57 UTC (state: waiting)
+2026-11-19T14:29:47Z,snapshot,scheduled start,0,47.3,"4 games read, 624 prop and 510 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 761 lines, 568 game odds"
+2026-11-19T15:00:00Z,quotes,scheduled hourly,0,31.6,"4 games read, 526 prop and 298 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: saved 70 players for Nov 19: 5 changes – Chris Youngblood (POR): Ques 100% → Out 0%; Ryan Rollins (MIL): Out 0% → Ques 50%; Al Horford (GS): starter → starter; …and 2 more"
+2026-11-19T15:55:05Z,stats,python -m espn_scraper,0,23.3,"2026/27: added 12 games, 279 player lines. 4 games not final yet."
+2026-11-19T15:55:34Z,lineups,RotoWire lineups (dashboard),0,0.6,"saved 71 players for Nov 19: 2 changes – Al Horford (GS): starter → starter; new: Draymond Green (GS, Doubt 25%)"
+2026-11-19T15:55:40Z,snapshot,python daily_snapshot.py,0,124.6,"rotowire_lineups: 71 rows, superbet_props: 782 rows, superbet_game_odds: 568 rows"
+2026-11-19T16:00:00Z,snapshot,scheduled hourly,0,54.0,"4 games read, 459 prop and 265 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 782 lines, 568 game odds"
+2026-11-19T17:00:00Z,quotes,scheduled hourly,0,31.6,"4 games read, 575 prop and 232 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged"
+2026-11-19T18:00:00Z,snapshot,scheduled hourly,0,48.6,"4 games read, 462 prop and 267 game quotes changed; 6 requests (200×5), 1 retries, 0 unchanged, 1 s HTTP; RotoWire: unchanged; snapshot: 778 lines, 568 game odds"

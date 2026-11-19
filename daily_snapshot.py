@@ -3,6 +3,7 @@
     python daily_snapshot.py              # today's games
     python daily_snapshot.py --tomorrow   # RotoWire's lineups for tomorrow (Superbet always covers the next 36h)
     python daily_snapshot.py --reprice    # price every saved line again after a model change (to a replay file)
+    python daily_snapshot.py --log-reasons 2026-11-10T20:00:00Z   # rebuild a saved fetch's reason log
 
 Each run appends rows with a fetched_at timestamp (UTC), so running it several times a day keeps line movement
 and lineup changes. Each line also gets the dashboard's pick and edge at that moment (the default settings of
@@ -177,11 +178,16 @@ def save_lineups_if_changed(lineups: pd.DataFrame, fetched_at: str) -> str:
     return f"saved {len(lineups)} players for {when}: {len(changes)} change{'s' * (len(changes) > 1)} – {shown}"
 
 
-def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.DataFrame):
+def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.DataFrame,
+                      evaluation: Optional[dict] = None):
     """props with player_id_ESPN and nightly.MODEL_COLUMNS (pick, model_pct, edge_pp, edge_low, proj_avg, signal
     🟢/🟡/🔴, red_flag and the raw chances the calibration is refit from); game_odds with model_pct, edge_pp and
     the game's projected score (proj_home_pts, proj_away_pts). Same models and defaults as the dashboard pages
-    (current season without preseason, players with few games topped up with last season's)."""
+    (current season without preseason, players with few games topped up with last season's).
+
+    evaluation: a dict that gets what the props were priced and decided with (the table, the decisions, the games,
+    the lineups, and the calibration, statuses and versions read at that moment), for the reason log
+    (log_reasons)."""
     from models import (DEFAULT_SEASON_TYPES, GAME_DEFAULTS, GAME_TYPES, game_ratings, prepare_logs, price_games,
                         price_props, top_up_logs)
     from name_resolver import NameResolver
@@ -197,6 +203,15 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
     # once a newer night has settled, the calibration and 🟢 threshold are refitted with its lines first
     from backtest.calibrate import refresh
     refresh(logs, games)
+    if evaluation is not None:
+        # what the pricing below rests on, read now (a refit or a status edit later must not pass for it)
+        import reason_log
+        from mispricing import hypothesis_status
+        from models import load_calibration
+        from reasons import lift_status
+        arts = reason_log.artefacts()
+        evaluation.update(arts=arts, version=reason_log.versions(arts), coef=load_calibration(),
+                          lifts=lift_status(), statuses=hypothesis_status())
     resolver = NameResolver(logs)
     if not lineups.empty:
         lineups = resolver.add_ids(lineups)
@@ -218,6 +233,9 @@ def add_model_columns(props: pd.DataFrame, game_odds: pd.DataFrame, lineups: pd.
                              **{c: listed[c] for c in SHORTLIST_COLUMNS})
         props['stars'] = props['stars'].astype('Int64')
         props['night_rank'] = props['night_rank'].astype('Int64')
+        if evaluation is not None:
+            evaluation.update(table=table, decisions=decided, scope=current, every_game=logs, lineups=lineups,
+                              evaluated_at=now, profile=ACTIVE_PROFILE)
     if not game_odds.empty:
         model = game_ratings(games, CURRENT_SEASON, GAME_DEFAULTS['prior_games'], GAME_DEFAULTS['regress'])
         recent = logs[logs['season_id'].isin([CURRENT_SEASON - 1, CURRENT_SEASON]) & logs['season_type'].isin(GAME_TYPES)]
@@ -245,10 +263,11 @@ def take_snapshot(date: str = 'today') -> dict:
 
     fetched_at = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     counts = {}
-    lineups = pd.DataFrame()
+    lineups, lineup_at = pd.DataFrame(), None
     try:
         lineups = pd.DataFrame(fetch_lineups(date))
         counts['rotowire_lineups'] = _append('rotowire_lineups', lineups.copy(), fetched_at)
+        lineup_at = fetched_at
     except Exception as e:
         log.error("RotoWire failed: %s", e)
         counts['rotowire_lineups'] = None
@@ -264,20 +283,59 @@ def take_snapshot(date: str = 'today') -> dict:
         log.error("Superbet failed: %s", e)
         counts['superbet_props'] = counts['superbet_game_odds'] = None
         return counts
-    return counts | save_superbet(offers, lineups, fetched_at)
+    return counts | save_superbet(offers, lineups, fetched_at, reasons='wait', lineup_at=lineup_at)
 
 
-def save_superbet(offers: dict, lineups: pd.DataFrame, fetched_at: str) -> dict:
+def save_superbet(offers: dict, lineups: pd.DataFrame, fetched_at: str, reasons: str = 'background',
+                  lineup_at=None) -> dict:
     """Append one Superbet fetch (superbet_fetcher.todays_offers output) to the snapshot files, each line with the
-    dashboard's pick and edge. The dashboards save every on-demand fetch through this too."""
+    dashboard's pick and edge. The dashboards save every on-demand fetch through this too.
+
+    reasons: when to write the fetch's reason log (log_reasons) once the snapshot is saved: 'background' (a
+    thread, so a scheduled slot isn't held up by it: about 1.5 min for a full night), 'wait' (before returning,
+    e.g. the command line, whose process would end the thread) or 'off'. lineup_at: when `lineups` were fetched
+    (for the log's data times; default their fetched_at column, else unknown). The pricing and the decisions get
+    `lineups` exactly as before."""
     props, game_odds = merge_over_under(pd.DataFrame(offers['props'])), pd.DataFrame(offers['game_odds'])
+    evaluation = {} if reasons != 'off' else None
     try:
-        props, game_odds = add_model_columns(props, game_odds, lineups)
+        props, game_odds = add_model_columns(props, game_odds, lineups, evaluation)
     except Exception as e:
         # the odds are worth keeping even when the model can't run (e.g. no game logs yet)
         log.error("Pricing failed, saving the odds without picks: %s", e)
-    return {'superbet_props': _append('superbet_props', props, fetched_at),
-            'superbet_game_odds': _append('superbet_game_odds', game_odds, fetched_at)}
+        evaluation = None
+    counts = {'superbet_props': _append('superbet_props', props, fetched_at),
+              'superbet_game_odds': _append('superbet_game_odds', game_odds, fetched_at)}
+    if evaluation and 'table' in evaluation and counts['superbet_props']:
+        evaluation['fetched_at'] = fetched_at
+        if lineup_at is None and len(lineups) and 'fetched_at' in lineups:
+            lineup_at = lineups['fetched_at'].max()
+        evaluation['lineup_at'] = None if lineup_at is None else pd.Timestamp(lineup_at).strftime('%Y-%m-%dT%H:%M:%SZ')
+        if reasons == 'wait':
+            log_reasons(evaluation)
+        else:
+            import threading
+            threading.Thread(target=log_reasons, args=(evaluation,), name='reason-log', daemon=True).start()
+    return counts
+
+
+def log_reasons(evaluation: dict) -> int:
+    """Write the reason log of one saved fetch (dashboard/reason_log.py) from what add_model_columns priced and
+    decided it with: origin 'recorded'. Returns the records added (0 when they were already there). A failure is
+    logged and doesn't touch the snapshot."""
+    import reason_log
+    try:
+        e = evaluation
+        records = reason_log.offer_records(e['table'], e['decisions'], e['scope'], e['every_game'], e['lineups'],
+                                           e['fetched_at'], e['evaluated_at'], e['version'], reason_log.RECORDED,
+                                           e['profile'], e['coef'], e['lifts'], e['statuses'],
+                                           lineup_at=e.get('lineup_at'))
+        added = reason_log.write(records, e['arts'])
+        log.info("reason log %s: %d records added", e['fetched_at'], added)
+        return added
+    except Exception:                # noqa: BLE001  (the log is for measuring; the snapshot is already saved)
+        log.exception("The reason log of %s couldn't be written", evaluation.get('fetched_at'))
+        return 0
 
 
 def reprice_snapshots() -> int:
@@ -326,6 +384,64 @@ def reprice_snapshots() -> int:
     return int((out['model_version'] == MODEL_VERSION).sum())
 
 
+# what a rebuilt reason record keeps of the line as the snapshot saved it (beside the rebuilt numbers)
+RECORDED_COLUMNS = ['model_version', 'calibration_id', 'prediction_origin', 'cost_profile', 'eval_side', 'model_pct',
+                    'ev_net_100', 'edge_pp', 'decision', 'red_flag', 'stars', 'night_rank']
+
+
+def reconstruct_reasons(fetched_at: str) -> dict:
+    """Rebuild the reason log of a saved fetch, as of that fetch (nightly.recompute_props: the games before its
+    night, the RotoWire version saved by then, the game odds of the same fetch), with the current code, model and
+    calibration. origin 'reconstructed' when the lines were priced with the same model version and calibration,
+    'counterfactual' otherwise (reason_log.origin_for); each record keeps what the snapshot saved then
+    (RECORDED_COLUMNS) beside the rebuilt numbers. Never replaces a recorded record. Returns {origin: records
+    added}."""
+    import reason_log
+    from decisions import game_decisions
+    from metrics import ACTIVE_PROFILE
+    from mispricing import hypothesis_status
+    from models import DEFAULT_SEASON_TYPES, calibration_status, load_calibration, prepare_logs, top_up_logs
+    from name_resolver import NameResolver
+    from nightly import et_night, lineups_before_tip, recompute_props
+    from reasons import lift_status
+
+    props = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_props'))
+    props = props[props['fetched_at'] == fetched_at]
+    if props.empty:
+        raise ValueError(f"no saved fetch at {fetched_at}")
+    odds = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))
+    rotowire = pd.read_csv(snapshot_file(CURRENT_SEASON, 'rotowire_lineups'))
+    logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
+    games = load_games(sorted(SEASONS))
+    resolver = NameResolver(logs)
+    recorded = props[[c for c in RECORDED_COLUMNS if c in props]]
+    props = resolver.add_ids(props.drop(columns=['player_id_ESPN'], errors='ignore'), team_cols=('home', 'away'))
+    rotowire = resolver.add_ids(rotowire)
+    arts = reason_log.artefacts()
+    version = reason_log.versions(arts)
+    priced_with = recorded[['model_version', 'calibration_id']].mode().iloc[0].to_dict() \
+        if {'model_version', 'calibration_id'} <= set(recorded) and len(recorded.dropna(how='all')) else {}
+    origin = reason_log.origin_for(priced_with, version)
+    coef, lifts, statuses = load_calibration(), lift_status(), hypothesis_status()
+    added = 0
+    for night, rows in props.groupby(et_night(props['start_time'])):
+        night = pd.Timestamp(night)
+        lineups = lineups_before_tip(rotowire, night, pd.Timestamp(fetched_at) + pd.Timedelta(seconds=1))
+        table = recompute_props(rows, logs, games, lineups, odds[odds['fetched_at'] == fetched_at],
+                                et_night(pd.Series([fetched_at])).iloc[0], full=True)
+        decided = game_decisions(table, calibration_status(), lineups, fetched_at, pd.Timestamp(fetched_at))
+        before = logs[logs['Date'] < night]
+        season = before['season_id'].max()
+        scope = top_up_logs(before[(before['season_id'] == season) & before['season_type'].isin(DEFAULT_SEASON_TYPES)],
+                            before, season, rows['player_id_ESPN'].dropna().unique())
+        records = reason_log.offer_records(table, decided, scope, before, lineups, fetched_at,
+                                           pd.Timestamp.now(tz='UTC'), version, origin, ACTIVE_PROFILE, coef, lifts,
+                                           statuses, recorded=recorded.loc[rows.index])
+        added += reason_log.write(records, arts)
+        log.info("%s, games of %s: %d records", fetched_at, night.date(), len(records))
+    return {origin: added}
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -333,7 +449,14 @@ if __name__ == '__main__':
     parser.add_argument('--reprice', action='store_true',
                         help="price every saved Superbet line again with the current model, into "
                              "superbet_props_replay.csv")
+    parser.add_argument('--log-reasons', action='append', default=[], metavar='FETCHED_AT',
+                        help="rebuild a saved fetch's reason log (reconstructed or counterfactual; never over the "
+                             "recorded one)")
     args = parser.parse_args()
+    if args.log_reasons:
+        for fetched in args.log_reasons:
+            print(f"reason log {fetched}: {reconstruct_reasons(fetched)} records added")
+        sys.exit()
     if args.reprice:
         print(f"superbet_props_replay: {reprice_snapshots()} rows repriced (superbet_props.csv unchanged)")
         sys.exit()

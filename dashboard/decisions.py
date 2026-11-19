@@ -7,10 +7,15 @@ changes it.
   OBSTAW         an offer whose edge clears a threshold checked on nights not used to choose it. No such threshold
                  exists yet (ADMITTED_THRESHOLD is None), so no offer can get it.
   NIE_OBSTAWIAJ  the evaluation is current and no offer meets the condition.
-  CZEKAJ         the evaluation isn't current: no (fresh) odds, no lineup for a team of the game, the player whose
-                 offer is best is questionable, or two offers tie for the one slot.
+  CZEKAJ         the evaluation isn't current: no (fresh) odds, no lineup for a team of the game, or the only lines
+                 that would qualify belong to a player who may not play (the lineup can change the decision).
+  REMIS          two offers meet the condition and tie on expected return: no single choice, and no data to wait
+                 for (audit F-15).
   NIEDOSTEPNE    the model family isn't admitted: every game market, and props without a calibration fitted for
                  the current model.
+
+A decision can carry notes ([(i18n key, values)]): what's worth knowing beside its reason, such as a questionable
+player whose lines are blocked but don't decide the game (audit F-01).
 
 Next to the decision, stars() answers the relative question the decision can't: if one bets tonight anyway,
 which lines are the best of the night? 1–4 stars are a line's place among tonight's lines by expected return
@@ -25,8 +30,11 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 
-OBSTAW, NIE_OBSTAWIAJ, CZEKAJ, NIEDOSTEPNE = 'OBSTAW', 'NIE_OBSTAWIAJ', 'CZEKAJ', 'NIEDOSTEPNE'
-STATUSES = (OBSTAW, NIE_OBSTAWIAJ, CZEKAJ, NIEDOSTEPNE)
+OBSTAW, NIE_OBSTAWIAJ, CZEKAJ, REMIS, NIEDOSTEPNE = 'OBSTAW', 'NIE_OBSTAWIAJ', 'CZEKAJ', 'REMIS', 'NIEDOSTEPNE'
+STATUSES = (OBSTAW, NIE_OBSTAWIAJ, CZEKAJ, REMIS, NIEDOSTEPNE)
+# a line under a decision (offer_decision): the chosen offer, a line that meets the condition but isn't the one
+# chosen (one offer per game), or a line that doesn't meet it
+CHOSEN, NOT_CHOSEN, NOT_QUALIFYING = 'chosen', 'not_chosen', 'not_qualifying'
 # the edge net pp (metrics.ACTIVE_PROFILE) an offer needs for OBSTAW, recorded on a period no fit or threshold
 # choice has seen. None: there isn't one, so OBSTAW can't be reached. The 🟢 threshold of backtest/calibrate.py
 # doesn't qualify: it's chosen on the same held-out nights it's judged on
@@ -44,9 +52,28 @@ MAX_STARS = 5                # the OBSTAW offer only
 NO_STARS = 0                 # priced, but a red flag or a player who may not play
 
 
-def _decision(status: str, reason: str, offer=None, odds_at=None, lineup_at=None, **values) -> Dict:
+def _decision(status: str, reason: str, offer=None, odds_at=None, lineup_at=None, notes=None, threshold=None,
+              **values) -> Dict:
     return {'status': status, 'reason': reason, 'values': values, 'offer': offer, 'odds_at': odds_at,
-            'lineup_at': lineup_at}
+            'lineup_at': lineup_at, 'notes': notes or [], 'threshold': threshold}
+
+
+def qualifies(rows: pd.DataFrame, threshold: Optional[float]) -> pd.Series:
+    """Whether each line meets the condition for OBSTAW: no red flag, ev net 100 > 0 and edge net pp >= threshold
+    (none without a threshold)."""
+    if threshold is None or rows.empty:
+        return pd.Series(False, index=rows.index)
+    clean = rows['red flag'].fillna('') == '' if 'red flag' in rows else pd.Series(True, index=rows.index)
+    return clean & (rows['ev net 100'] > 0) & (rows['edge net pp'] >= threshold)
+
+
+def _blocked_only_by_may_not_play(row) -> bool:
+    """The line's only red flag is that its player may not play (reasons.prop_flag_items 'flag.may_not_play')."""
+    items = row.get('flag items')
+    if isinstance(items, list):
+        return bool(items) and all(key == 'flag.may_not_play' for key, _ in items)
+    flag = str(row.get('red flag') or '')
+    return flag.startswith('RotoWire:') and 'may sit' in flag and ';' not in flag
 
 
 def team_decision(game: Optional[Dict] = None, odds_at=None) -> Dict:
@@ -82,14 +109,17 @@ def player_decision(rows: pd.DataFrame, calibration_status: str, lineups: Option
     game's lines (name, side, side odds, ev net 100, edge net pp, red flag, RotoWire, home, away); lineups:
     RotoWire's rows (team; fetched_at when known); fetched_at: when the odds were fetched; now: the time freshness
     is judged at. Returns {'status', 'reason' (i18n key), 'values', 'offer' (the row, only for OBSTAW), 'odds_at',
-    'lineup_at'}. In order:
+    'lineup_at', 'notes', 'threshold'}. In order:
       1. no calibration fitted for the current model → NIEDOSTEPNE
       2. no line with a price on its evaluated side, or odds older than MAX_ODDS_AGE → CZEKAJ
-      3. RotoWire doesn't list a team of the game, or the best line's player is questionable → CZEKAJ
-      4. no line without a red flag whose ev net 100 > 0 and edge net pp ≥ threshold (none without a threshold)
-         → NIE_OBSTAWIAJ
-      5. the two best such lines tie on expected return → CZEKAJ
-      6. → OBSTAW with the best one."""
+      3. RotoWire doesn't list a team of the game → CZEKAJ
+      4. no threshold → NIE_OBSTAWIAJ (no lineup can change that)
+      5. no line meets the condition (qualifies): CZEKAJ when a line blocked only because its player may not play
+         would meet it otherwise (his lineup can change the decision), else NIE_OBSTAWIAJ
+      6. the two best lines that meet it tie on expected return → REMIS
+      7. → OBSTAW with the best one.
+    A questionable player (RotoWire 0–100%) never hides an offer that meets the condition (audit F-01): when the
+    game's best line by expected return is his, or his blocked line would beat the chosen offer, it's a note."""
     from models import FITTED
     teams = (rows['home'].iloc[0], rows['away'].iloc[0]) if len(rows) else ()
     when = {'odds_at': fetched_at, 'lineup_at': lineup_time(lineups, teams)}
@@ -109,20 +139,35 @@ def player_decision(rows: pd.DataFrame, calibration_status: str, lineups: Option
     missing = [team for team in teams if team not in listed]
     if missing:
         return _decision(CZEKAJ, 'decision.reason.no_lineup', teams=', '.join(t.upper() for t in missing), **when)
-    top = priced.sort_values('ev net 100', ascending=False).iloc[0]
-    chance = play_chance(str(top.get('RotoWire') or ''))
-    if chance is not None and 0 < chance < 100:
-        return _decision(CZEKAJ, 'decision.reason.questionable', name=top['name'], role=top['RotoWire'], **when)
+    priced = priced.sort_values('ev net 100', ascending=False, kind='stable')
+    chances = [play_chance(str(r or '')) for r in priced['RotoWire']]
+    questionable = priced[[c is not None and 0 < c < 100 for c in chances]]
+    # his lines carry a red flag, so they can't qualify; the game doesn't wait for him unless only they could
+    note = [('decision.note.questionable', {'name': questionable['name'].iloc[0],
+                                            'role': questionable['RotoWire'].iloc[0]})] \
+        if len(questionable) and questionable.index[0] == priced.index[0] else []
     if threshold is None:
-        return _decision(NIE_OBSTAWIAJ, 'decision.reason.no_threshold', **when)
-    clean = priced[priced['red flag'].fillna('') == ''] if 'red flag' in priced else priced
-    candidates = clean[(clean['ev net 100'] > 0) & (clean['edge net pp'] >= threshold)] \
-        .sort_values('ev net 100', ascending=False)
+        return _decision(NIE_OBSTAWIAJ, 'decision.reason.no_threshold', notes=note, **when)
+    candidates = priced[qualifies(priced, threshold)]
+    unblocked = qualifies(questionable.assign(**{'red flag': ''}), threshold)
+    only_flag = pd.Series([_blocked_only_by_may_not_play(r) for _, r in questionable.iterrows()],
+                          index=questionable.index, dtype=bool)
+    pending = questionable[unblocked & only_flag]
     if candidates.empty:
-        return _decision(NIE_OBSTAWIAJ, 'decision.reason.no_offer', threshold=threshold, **when)
+        if len(pending):
+            top = pending.iloc[0]
+            return _decision(CZEKAJ, 'decision.reason.questionable', name=top['name'], role=top['RotoWire'],
+                             threshold=threshold, **when)
+        return _decision(NIE_OBSTAWIAJ, 'decision.reason.no_offer', notes=note, threshold=threshold, **when)
     if len(candidates) > 1 and candidates['ev net 100'].iloc[0] - candidates['ev net 100'].iloc[1] < TIE_EV:
-        return _decision(CZEKAJ, 'decision.reason.tie', **when)
-    return _decision(OBSTAW, 'decision.reason.meets', offer=candidates.iloc[0], **when)
+        a, b = candidates.iloc[0], candidates.iloc[1]
+        return _decision(REMIS, 'decision.reason.tie', threshold=threshold, first=f"{a['name']} {a['bet_type']}",
+                         second=f"{b['name']} {b['bet_type']}", tie=TIE_EV, **when)
+    best = candidates.iloc[0]
+    better = pending[pending['ev net 100'] > best['ev net 100']]
+    notes = [('decision.note.questionable_better', {'name': better['name'].iloc[0],
+                                                    'role': better['RotoWire'].iloc[0]})] if len(better) else []
+    return _decision(OBSTAW, 'decision.reason.meets', offer=best, notes=notes, threshold=threshold, **when)
 
 
 def game_decisions(table: pd.DataFrame, calibration_status: str, lineups: Optional[pd.DataFrame], fetched_at,
@@ -215,11 +260,18 @@ def star_text(n) -> str:
 
 def offer_decision(decision: Dict, row) -> Dict:
     """The game's player decision as it applies to one of its lines: the decision itself, except that under
-    OBSTAW every line but the chosen offer is NIE_OBSTAWIAJ (one game, one offer)."""
-    if decision['status'] != OBSTAW or (decision['offer'] is not None and offer_key(decision['offer']) == offer_key(row)):
-        return decision
-    return _decision(NIE_OBSTAWIAJ, 'decision.reason.other_offer', odds_at=decision['odds_at'],
-                     lineup_at=decision['lineup_at'])
+    OBSTAW every line but the chosen offer is NIE_OBSTAWIAJ (one game, one offer), worded apart for a line that
+    meets the condition but isn't the one chosen ('decision.reason.not_chosen': not chosen isn't unprofitable) and
+    a line that doesn't meet it ('decision.reason.other_offer'). 'line' says which: CHOSEN, NOT_CHOSEN,
+    NOT_QUALIFYING (None when the game has no OBSTAW offer)."""
+    if decision['status'] != OBSTAW:
+        return decision | {'line': None}
+    if decision['offer'] is not None and offer_key(decision['offer']) == offer_key(row):
+        return decision | {'line': CHOSEN}
+    meets = bool(qualifies(pd.DataFrame([dict(row)]), decision.get('threshold')).iloc[0])
+    return _decision(NIE_OBSTAWIAJ, 'decision.reason.not_chosen' if meets else 'decision.reason.other_offer',
+                     odds_at=decision['odds_at'], lineup_at=decision['lineup_at'],
+                     threshold=decision.get('threshold')) | {'line': NOT_CHOSEN if meets else NOT_QUALIFYING}
 
 
 def offer_key(row) -> tuple:

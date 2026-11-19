@@ -34,7 +34,7 @@ def kelly_stake(chance: float, odds: float, bankroll: float, fraction: float = 0
 def staking_chance(bet: Dict) -> float:
     """The chance to size a bet on: the model's chance to win (model_pct), only for an offer whose decision is
     OBSTAW (decisions.py; bet['decision']). NaN (no stake) for every other bet: game outcomes (never admitted),
-    props whose decision is NIE_OBSTAWIAJ / CZEKAJ / NIEDOSTEPNE, and bets saved without a decision. The 'edge low'
+    props whose decision is NIE_OBSTAWIAJ / CZEKAJ / REMIS / NIEDOSTEPNE, and bets saved without a decision. The 'edge low'
     range isn't used: it's only the sampling noise of the player's hit rate, not the model's uncertainty."""
     if bet.get('kind') != 'prop' or bet.get('decision') != OBSTAW or pd.isna(bet.get('model_pct')):
         return np.nan

@@ -132,6 +132,15 @@ def save_quotes(offers: Dict, fetched_at: str, run_kind: str) -> Dict[str, int]:
 
 # --- one slot ---
 
+def _saved_lineups_at() -> Optional[str]:
+    """When the latest saved RotoWire version was fetched (None without one)."""
+    path = snapshot_file(CURRENT_SEASON, 'rotowire_lineups')
+    if not os.path.exists(path):
+        return None
+    last = pd.read_csv(path, usecols=['fetched_at'])['fetched_at'].max()
+    return last if isinstance(last, str) else None
+
+
 def _saved_lineups() -> pd.DataFrame:
     """The latest saved RotoWire version (when a live fetch failed), without fetched_at."""
     path = snapshot_file(CURRENT_SEASON, 'rotowire_lineups')
@@ -168,18 +177,19 @@ def run_slot(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now, 
     if wait:
         return done(False, f"skipped: Superbet can't be contacted for {wait.total_seconds() / 60:.0f} more min")
 
-    lineups = pd.DataFrame()
+    lineups, lineup_at = pd.DataFrame(), None
     if slot.rotowire:
         step("RotoWire")
         try:
             from lineup_fetcher import fetch_lineups
             lineups = pd.DataFrame(fetch_lineups())
+            lineup_at = fetched_at
             saved = save_lineups_if_changed(lineups, fetched_at)
             parts.append(f"RotoWire: {saved or 'unchanged'}")
         except Exception as e:
             log.warning("RotoWire failed: %s", e)
             parts.append(f"RotoWire failed: {e}")
-            lineups = _saved_lineups()
+            lineups, lineup_at = _saved_lineups(), _saved_lineups_at()
     http = superbet_fetcher.client(trace=lambda line: step(f"Superbet: {line}"))
     try:
         wanted = None if slot.all_events or slot.priced else slot.event_ids
@@ -205,7 +215,7 @@ def run_slot(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now, 
             parts.append("snapshot not saved (the watchdog gave up on the run)")
         else:
             step("saving the snapshot (pricing)")
-            saved = save_superbet(offers, lineups, fetched_at)
+            saved = save_superbet(offers, lineups, fetched_at, lineup_at=lineup_at)
             parts.append(f"snapshot: {saved['superbet_props']} lines, {saved['superbet_game_odds']} game odds")
     return done(code == 0, '; '.join(parts))
 

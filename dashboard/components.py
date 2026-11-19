@@ -7,7 +7,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from bets import describe
-from i18n import t
+from i18n import TEXTS, t
+from reasons import panel_layout, validation_label
 from schedule import no_offers_text
 
 
@@ -45,7 +46,8 @@ def slip_button(bet: Dict, key: str, where=st):
 
 
 # how each decision status is shown (decisions.py); the words are i18n's 'decision.<status>'
-STATUS_COLOURS = {'OBSTAW': 'green', 'NIE_OBSTAWIAJ': 'gray', 'CZEKAJ': 'orange', 'NIEDOSTEPNE': 'gray'}
+STATUS_COLOURS = {'OBSTAW': 'green', 'NIE_OBSTAWIAJ': 'gray', 'CZEKAJ': 'orange', 'REMIS': 'blue',
+                  'NIEDOSTEPNE': 'gray'}
 
 
 def local_time(when) -> str:
@@ -60,10 +62,12 @@ def local_time(when) -> str:
 
 
 def decision_text(decision: Dict, lang: str = 'en') -> str:
-    """'**Don't bet** · why' for a decision (decisions.py), coloured by its status."""
+    """'**Don't bet** · why' for a decision (decisions.py), coloured by its status, with its notes (worth knowing,
+    they don't change it) on lines of their own."""
     word = t(f"decision.{decision['status']}", lang)
     why = t(decision['reason'], lang, **decision.get('values', {}))
-    return f":{STATUS_COLOURS[decision['status']]}[**{word}**] · {why}"
+    notes = ''.join(f"  \n:gray[ℹ️ {t(key, lang, **values)}]" for key, values in decision.get('notes') or [])
+    return f":{STATUS_COLOURS[decision['status']]}[**{word}**] · {why}{notes}"
 
 
 def decision_times(decision: Dict, lang: str = 'en') -> str:
@@ -110,29 +114,39 @@ def reasons_panel(title: str, decision: Dict, reasons: List[Dict], games: Option
         st.markdown(decision_text(decision, lang))
         st.caption(decision_times(decision, lang))
         change_notice(changed, lang)
-        of = lambda kind: [r for r in reasons if r.get('kind') == kind]
+        layout = panel_layout(reasons)
         item = lambda r, extra='': f"- {REASON_ICONS[r['supports']]} {r['text']}  \n  :gray[{_meta(r, lang)}{extra}]"
         block = lambda heading, rows: f"{heading}\n\n" + "\n".join(rows)
         st.markdown(f"**{t('panel.why', lang)}** · _{t('panel.why_note', lang)}_")
-        if economics := of('economics'):
-            st.markdown(block(f"**{t('panel.economics', lang)}**", [item(r) for r in economics]))
+        if layout['economics']:
+            st.markdown(block(f"**{t('panel.economics', lang)}**", [item(r) for r in layout['economics']]))
             st.caption(t('panel.economics_note' if stat else 'panel.economics_note_games', lang))
-        if drivers := of('driver'):
+        if layout['drivers']:
             st.markdown(block(f"**{t('panel.drivers', lang)}** · _{t('panel.drivers_note', lang)}_",
-                              [item(r) for r in drivers]))
-        if mispricing := of('mispricing'):
+                              [item(r) for r in layout['drivers']]))
+        if layout['mispricing']:
             st.markdown(block(f"**{t('panel.mispricing', lang)}** · _{t('panel.mispricing_note', lang)}_",
-                              [item(r) for r in mispricing]))
-        if context := of('context'):
-            with st.expander(f"{t('panel.context', lang)} ({len(context)})"):
+                              [item(r) for r in layout['mispricing']]))
+        if layout['context']:
+            with st.expander(f"{t('panel.context', lang)} ({sum(len(rs) for _, rs in layout['context'])})"):
                 st.caption(t('panel.context_note', lang))
-                st.markdown("\n".join(
-                    item(r, f" · {t('panel.validation.' + r['validation'], lang)}" if r.get('validation') else '')
-                    for r in context))
-        if warnings := of('warning'):
-            st.markdown(block(f"**{t('panel.warnings', lang)}**", [f"- ℹ️ {r['text']}" for r in warnings]))
-        if flags := [r for r in reasons if r['flag']]:
-            st.markdown(block(f"**{t('panel.flags', lang)}**", [f"- ⚠️ {r['text']}" for r in flags]))
+                for group, rows in layout['context']:
+                    note = f" · _{t('panel.group_note.' + group, lang)}_" if f'panel.group_note.{group}' in TEXTS \
+                        else ''
+                    st.markdown(block(f"**{t('panel.group.' + group, lang)}**{note}", [
+                        item(r, f" · {validation_label(r, lang)}" if r.get('validation') else '') for r in rows]))
+        if layout['warnings']:
+            st.markdown(block(f"**{t('panel.warnings', lang)}**", [f"- ℹ️ {r['text']}" for r in layout['warnings']]))
+        if layout['flags']:
+            st.markdown(block(f"**{t('panel.flags', lang)}**", [f"- ⚠️ {r['text']}" for r in layout['flags']]))
+        if layout['research']:
+            # not arguments: no ✅/❌/➖, collapsed, after everything that bears on the decision
+            with st.expander(f"{t('panel.research', lang)} ({sum(len(rs) for _, rs in layout['research'])})"):
+                st.caption(t('panel.research_note', lang))
+                for _, rows in layout['research']:
+                    if len(rows) > 1:
+                        st.caption(t('panel.research_shared', lang, n=len(rows)))
+                    st.markdown("\n".join(f"- {r['text']}  \n  :gray[{_meta(r, lang)}]" for r in rows))
         if games is not None and len(games) and stat:
             last = games.tail(10)
             colours = np.where(last[stat] > line, '#2ca02c', np.where(last[stat] < line, '#d62728', '#9aa5b1'))

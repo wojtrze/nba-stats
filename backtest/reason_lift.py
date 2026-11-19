@@ -24,6 +24,11 @@ each line; 2022/23 has no game odds).
 A feature gets 'lift' only when its range is below 0 on the 2022/23 lines and the Superbet range doesn't lie
 above 0; otherwise 'no_lift'. Only then does the panel give it a direction (β's sign: over_sign). Writes
 data/backtest/reason_lift.json (read by reasons.lift_status) and data/backtest/reason_lift.md.
+
+The json's 'meta' (reasons.LIFT_SCHEMA) records what the verdicts rest on: the model version, how the baseline was
+calibrated, each source's fit and test range, each feature's definition fingerprint (reasons.lift_definitions),
+when it was made and from which code. reasons.lift_status gives a direction only when they match the current
+code; a file without them (or with others) stays readable, marked unverified.
 """
 import argparse
 import bisect
@@ -31,7 +36,7 @@ import json
 import logging
 import os
 import sys
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -40,8 +45,8 @@ import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.ablation import _loss, night_bootstrap
 from backtest.calibrate import _logit, _sigmoid, fit, fit_coefficients, lines_2022, sides, split, features
 from backtest.run import MIN_GAMES, OUT_DIR, markdown
-from reasons import (LIFT, LIFT_FILE, NO_LIFT, UNTESTED, current_stint, feature_hits, feature_minutes, feature_rest,
-                     feature_venue, feature_volume, feature_vs_opp)
+from reasons import (LIFT, LIFT_FILE, LIFT_SCHEMA, NO_LIFT, UNTESTED, current_stint, feature_hits, feature_minutes,
+                     feature_rest, feature_venue, feature_volume, feature_vs_opp, lift_definitions)
 from safe_io import atomic_write_text
 
 log = logging.getLogger(__name__)
@@ -113,11 +118,14 @@ def test_feature(lines: pd.DataFrame, feature: str) -> Dict:
     """β fitted on the earlier lines, log loss difference (p1 − p0) on the later ones with its night range."""
     fit_part, test_part = split(lines)
     fit_sides, test_sides = sides(fit_part), sides(test_part)
+    day = lambda value: str(pd.Timestamp(value).date())
+    span = lambda part: [day(part['game_date'].min()), day(part['game_date'].max())] if len(part) else None
+    ranges = {'fit': span(fit_part), 'test': span(test_part)}
     signed = lambda s, part: part.loc[s['line_id'], feature].values * np.where(s['over'], 1.0, -1.0)
     f_fit, f_test = signed(fit_sides, fit_part), signed(test_sides, test_part)
     keep_fit, keep_test = ~np.isnan(f_fit), ~np.isnan(f_test)
     if keep_fit.sum() < 100 or keep_test.sum() < 100:
-        return {'feature': feature, 'lines': int(keep_test.sum() // 2), 'nights': 0}
+        return {'feature': feature, 'lines': int(keep_test.sum() // 2), 'nights': 0, 'ranges': ranges}
     p0_fit, p0_test = _baseline(fit_sides, test_sides)
     beta = _fit_offset(_logit(p0_fit[keep_fit]), f_fit[keep_fit], fit_sides['won'].values[keep_fit])
     p1 = _sigmoid(_logit(p0_test[keep_test]) + beta * f_test[keep_test])
@@ -126,7 +134,7 @@ def test_feature(lines: pd.DataFrame, feature: str) -> Dict:
     nights = test_sides['game_date'].values[keep_test]
     low, high = night_bootstrap(nights, diff)
     return {'feature': feature, 'lines': int(keep_test.sum() // 2), 'nights': int(pd.Series(nights).nunique()),
-            'beta': beta, 'vs model': float(diff.mean()), 'range low': low, 'range high': high}
+            'beta': beta, 'vs model': float(diff.mean()), 'range low': low, 'range high': high, 'ranges': ranges}
 
 
 def verdicts(results: Dict[str, pd.DataFrame]) -> Dict[str, Dict]:
@@ -184,11 +192,30 @@ def report(results: Dict[str, pd.DataFrame], verdict: Dict[str, Dict]) -> str:
              "helped), with the 95% range from resampling whole nights; *beta* = its weight fitted on the earlier "
              "lines (positive = more of it, more Over). See backtest/reason_lift.py.", ""]
     for name, table in results.items():
-        parts += [f"## {'Unibet 2022/23' if name == '2022' else 'Superbet 2026/27'}", "", markdown(table, '{:.4f}'), ""]
+        parts += [f"## {'Unibet 2022/23' if name == '2022' else 'Superbet 2026/27'}", "",
+                  markdown(table.drop(columns='ranges', errors='ignore'), '{:.4f}'), ""]
     parts += ["## Verdicts (what the panel shows)", "",
               markdown(pd.DataFrame([{'feature': f, 'status': v['status'], 'why': v.get('why', '')}
                                      for f, v in verdict.items()])), ""]
     return "\n".join(parts)
+
+
+def metadata(results: Dict[str, pd.DataFrame], created_at: Optional[str] = None) -> Dict:
+    """What the verdicts rest on (reasons.lift_status checks it before giving a direction): schema, model version,
+    how the baseline was calibrated, each source's fit / test range, each feature's definition, time and code."""
+    from models import MODEL_VERSION
+    from reason_log import code_version
+    definitions = lift_definitions()
+    ranges = {name: (table['ranges'].dropna().iloc[0] if 'ranges' in table and table['ranges'].notna().any()
+                     else None) for name, table in results.items()}
+    return {'schema_version': LIFT_SCHEMA, 'model_version': MODEL_VERSION,
+            'calibration': "refitted on each source's fit range (backtest/calibrate.fit_coefficients); not the "
+                           "dashboards' calibration file",
+            'ranges': ranges,
+            'features': {f: {'definition': definitions.get(f), 'tested': f in FEATURES} for f in
+                         FEATURES + list(NOT_TESTABLE)},
+            'created_at': created_at or pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'code_version': code_version()}
 
 
 def main():
@@ -204,7 +231,7 @@ def main():
         sources['superbet'] = superbet_lines()
     results = run(sources)
     verdict = verdicts(results)
-    atomic_write_text(LIFT_FILE, json.dumps({'features': verdict}, indent=2))
+    atomic_write_text(LIFT_FILE, json.dumps({'meta': metadata(results), 'features': verdict}, indent=2))
     text = report(results, verdict)
     atomic_write_text(REPORT, text)
     sys.stdout.reconfigure(errors='replace')

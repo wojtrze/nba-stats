@@ -1,0 +1,70 @@
+{
+  "coefficients": {
+    "a": 1.1527380059486039,
+    "b": 0.17946345759492538,
+    "c": 0.0,
+    "d": 0.0
+  },
+  "fitted_on": "2026-11-13",
+  "green_edge_pp": null,
+  "held_out": {
+    "coefficients": {
+      "a": 1.1921805984613814,
+      "b": 0.1799952405077816,
+      "c": 0.0,
+      "d": 0.0
+    },
+    "sources": {
+      "2022": {
+        "fit on": "Nov 09 2022 \u2013 Jan 31 2023",
+        "scored on": "Feb 01 2023 \u2013 May 08 2023",
+        "scores": {
+          "Calibrated model": {
+            "Brier": 0.24799597617320052,
+            "log loss": 0.6891207927398371
+          },
+          "Market (margin-free price)": {
+            "Brier": 0.24816767659257583,
+            "log loss": 0.6894651946838615
+          },
+          "Uncalibrated model": {
+            "Brier": 0.2549622133963469,
+            "log loss": 0.7050924998839999
+          }
+        }
+      },
+      "superbet": {
+        "fit on": "Oct 20 2026 \u2013 Nov 04 2026",
+        "scored on": "Nov 05 2026 \u2013 Nov 11 2026",
+        "scores": {
+          "Calibrated model": {
+            "Brier": 0.24470338431277797,
+            "log loss": 0.6823504848033585
+          },
+          "Market (margin-free price)": {
+            "Brier": 0.2451681297697049,
+            "log loss": 0.6833211535190311
+          },
+          "Uncalibrated model": {
+            "Brier": 0.24768611348470104,
+            "log loss": 0.6886414148359984
+          }
+        }
+      }
+    }
+  },
+  "identity": {
+    "a": 1.0,
+    "b": 1.0,
+    "c": 0.0,
+    "d": 0.0
+  },
+  "lines": {
+    "Superbet 2026/27": 31193,
+    "Unibet 2022/23": 29331
+  },
+  "model_version": "2026-10-26-count",
+  "rows": 121048,
+  "source": "Unibet 2022/23 main lines (players with 5+ games, backtest variant 'none') and every settled Superbet line (last fetch before tip-off)",
+  "superbet_through": "2026-11-11"
+}
