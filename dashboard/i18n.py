@@ -960,6 +960,67 @@ TERMS: Dict[str, Term] = {
                           _w("The model likes the outcome more than the odds do.",
                              "Model lubi ten wynik bardziej niż kurs."),
                           _w("The model likes it less than the odds do.", "Model lubi go mniej niż kurs.")),
+    # --- the Overview's "Big chances vs Superbet" window (dashboard/absence_window.py, H10) ---
+    'absence:side': Term(_w("matrix side", "strona z macierzy"),
+                         _w("Over when the player gets more without the out teammate(s), Under when he gets less. "
+                            "The rule's side, not our model's evaluated side.",
+                            "Powyżej, gdy bez nieobecnego zawodnik zdobywa więcej, Poniżej, gdy mniej. Strona reguły, "
+                            "nie strona oceniana przez model.")),
+    'absence:usual': Term(_w("usual", "zwykle"), _w("His average of this stat in the chosen seasons.",
+                                                    "Jego średnia w tej statystyce w wybranych sezonach.")),
+    'absence:without': Term(_w("without him", "bez niego"),
+                            _w("usual + change: what the with/without matrix expects tonight.",
+                               "zwykle + zmiana: czego oczekuje macierz with/without na dziś.")),
+    'absence:change': Term(_w("change", "zmiana"),
+                           _w("Average without the out teammate − average with him, in their shared stint, shrunk "
+                              "toward 0 by n / (n + 5) where n = games without; summed over tonight's fresh absences.",
+                              "Średnia bez nieobecnego − średnia z nim, w okresie, gdy grali razem w drużynie, "
+                              "osłabiona o n / (n + 5), gdzie n = mecze bez niego; zsumowana po dzisiejszych świeżych "
+                              "nieobecnościach."),
+                           _w("More without him.", "Bez niego więcej."), _w("Less without him.", "Bez niego mniej.")),
+    'absence:share %': Term(_w("change %", "zmiana %"), _w("change / usual. The list starts at ±10%.",
+                                                          "zmiana / zwykle. Lista zaczyna się od ±10%.")),
+    'absence:n without': Term(_w("games without", "mecze bez"),
+                              _w("Per out teammate: the games this player played without him (the change rests on "
+                                 "them; at least one needs 3+).",
+                                 "Dla każdego nieobecnego: mecze, które ten zawodnik zagrał bez niego (na nich opiera "
+                                 "się zmiana; choć jeden musi mieć 3+).")),
+    'absence:previous line': Term(_w("line with him", "linia z nim"),
+                                  _w("Superbet's line on this player and stat the last night the out teammate(s) "
+                                     "played. Empty when we have none saved.",
+                                     "Linia Superbetu na tego zawodnika i statystykę z ostatniego wieczoru, gdy "
+                                     "nieobecny grał. Puste, gdy nie mamy jej zapisanej.")),
+    'absence:shift': Term(_w("Superbet moved", "Superbet przesunął"),
+                          _w("Tonight's line − the line with him: how far Superbet already moved for the absence (and "
+                             "anything else). Compare it with the change.",
+                             "Dzisiejsza linia − linia z nim: o ile Superbet już przesunął linię z powodu nieobecności "
+                             "(i wszystkiego innego). Porównaj ze zmianą.")),
+    'absence:new line': Term(_w("new after the news", "nowa po wiadomości"),
+                             _w("✓ = Superbet first offered this line tonight after our first RotoWire read with the "
+                                "teammate Out: the line was set knowing it.",
+                                "✓ = Superbet wystawił tę linię dziś dopiero po naszym pierwszym odczycie RotoWire z "
+                                "nieobecnością: linia powstała ze świadomością braku.")),
+    'absence:odds': Term(_w("odds", "kurs"), _w("Superbet's odds for the matrix side.",
+                                               "Kurs Superbetu na stronę z macierzy.")),
+    'absence:p side %': Term(_w("our chance %", "nasza szansa %"),
+                             _w("Our calibrated chance of the matrix side, with tonight's absences already in the "
+                                "projection.",
+                                "Nasza skalibrowana szansa strony z macierzy, z dzisiejszymi nieobecnościami już w "
+                                "projekcji.")),
+    'absence:price %': Term(_w("Superbet's price %", "cena Superbetu %"),
+                            _w("Superbet's chance of the side without its margin.",
+                               "Szansa strony według Superbetu, bez marży.")),
+    'absence:gap pp': Term(_w("gap (pp)", "luka (pp)"),
+                           _w("Our chance − Superbet's price. After the 12% tax a side needs our chance above the "
+                              "break-even column, usually 8–11 pp over the price.",
+                              "Nasza szansa − cena Superbetu. Po 12% podatku strona potrzebuje szansy powyżej kolumny "
+                              "progu, zwykle 8–11 pp ponad cenę."),
+                           _w("We like the side more than Superbet.", "Lubimy tę stronę bardziej niż Superbet."),
+                           _w("Superbet likes it more than we do.", "Superbet lubi ją bardziej niż my.")),
+    'absence:break-even net %': Term(_w("needed after tax %", "potrzebne po podatku %"),
+                                     _w("The chance this side needs to break even at these odds after the 12% tax.",
+                                        "Szansa, której ta strona potrzebuje, żeby przy tym kursie wyjść na zero po "
+                                        "12% podatku.")),
 }
 
 # the box-score stats, as columns: the code stays the header, the tooltip says what it counts
@@ -3049,10 +3110,48 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'news.col.kind': _w("reaction", "reakcja"),
     'news.col.minutes': _w("min after the news", "min po wiadomości"),
     'overview.big': _w("Big chances vs Superbet", "Duże szanse vs Superbet"),
-    'overview.big_note': _w("Lines where our chance is clearly above Superbet's margin-free price. Which lines "
-                            "belong here is still to be decided, so the list is empty for now.",
-                            "Linie, w których nasza szansa jest wyraźnie wyższa niż cena Superbetu bez marży. Reguła "
-                            "wyboru linii jest jeszcze do ustalenia, więc na razie lista jest pusta."),
+    'overview.big_note': _w("🧪 The expert's recipe (H10): a regular is ruled Out on RotoWire, the with/without "
+                            "matrix shows which teammates change most without him, and the first game without him "
+                            "is the one Superbet might get wrong. Every such line is listed, first games first; it "
+                            "isn't a bet and doesn't affect the decision or the stars. Our chance against Superbet's "
+                            "price and the after-tax break-even tell you how much is left.",
+                            "🧪 Przepis eksperta (H10): RotoWire podaje, że regularnie grający zawodnik nie zagra, "
+                            "macierz with/without pokazuje, którzy koledzy zmieniają się bez niego najbardziej, a "
+                            "pierwszy mecz bez niego to ten, w którym Superbet może się mylić. Lista zawiera każdą "
+                            "taką linię, najpierw pierwsze mecze; to nie jest zakład i nie wpływa na decyzję ani "
+                            "gwiazdki. Nasza szansa wobec ceny Superbetu i próg po podatku mówią, ile z tego "
+                            "zostaje."),
+    'overview.big_record': _w("So far, on {nights} Superbet nights up to {d}: {signals} lines taken at our first read "
+                              "once Out was known won {won:.0f}% ({diff:+.1f} pp over Superbet's price), ROI after tax "
+                              "{roi:+.1f}%, {clv:+.1f}% against the close. First game without him: {f_signals} lines, "
+                              "{f_diff:+.1f} pp over the price, ROI {f_roi:+.1f}%. Unibet 2022/23, first game: "
+                              "{h_diff:+.1f} pp over the price on {h_lines} lines. A side needs about 8–11 pp. The "
+                              "evaluation on the nights after {d} has {n} of the 10 nights it needs.",
+                              "Dotąd, na {nights} nocach Superbetu do {d}: {signals} linii wziętych przy pierwszym "
+                              "odczycie po wiadomości o nieobecności wygrało {won:.0f}% ({diff:+.1f} pp ponad cenę "
+                              "Superbetu), ROI po podatku {roi:+.1f}%, {clv:+.1f}% wobec zamknięcia. Pierwszy mecz bez "
+                              "niego: {f_signals} linii, {f_diff:+.1f} pp ponad cenę, ROI {f_roi:+.1f}%. Unibet 2022/23, "
+                              "pierwszy mecz: {h_diff:+.1f} pp ponad cenę na {h_lines} liniach. Strona potrzebuje ok. "
+                              "8–11 pp. Ocena na nocach po {d}: {n} z 10 potrzebnych nocy."),
+    'overview.big_record_none': _w("No record yet: run python -m backtest.absence_shift.",
+                                   "Brak zapisu: uruchom python -m backtest.absence_shift."),
+    'overview.big_none': _w("Nobody who plays 20+ minutes is freshly Out on RotoWire tonight (first to third game "
+                            "without him).",
+                            "Dziś nikt z grających 20+ min nie jest świeżo Out na RotoWire (pierwszy do trzeciego "
+                            "meczu bez niego)."),
+    'overview.big_out': _w("**{name}** ({team}) won't play: Out on our RotoWire read at {since}; {game}.{ques}",
+                           "**{name}** ({team}) nie zagra: Out w naszym odczycie RotoWire o {since}; {game}.{ques}"),
+    'overview.big_first': _w("the first game without him", "pierwszy mecz bez niego"),
+    'overview.big_nth': _w("game {n} in a row without him", "{n}. mecz z rzędu bez niego"),
+    'overview.big_ques': _w(" ⚠️ RotoWire's latest version says Ques; he was Out earlier.",
+                            " ⚠️ Najnowsza wersja RotoWire mówi Ques; wcześniej był Out."),
+    'overview.big_lines': _w("Teammates' lines that change most without them ({n})",
+                             "Linie kolegów, którzy zmieniają się bez nich najbardziej ({n})"),
+    'overview.big_no_lines': _w("No teammate line changes by 10%+ on 3+ games without him, or Superbet has none.",
+                                "Żadna linia kolegi nie zmienia się o 10%+ na 3+ meczach bez niego albo Superbet "
+                                "jeszcze ich nie wystawił."),
+    'overview.big_above': _w("{n} of them clear the after-tax break-even by our chance.",
+                             "{n} z nich przekracza próg po podatku według naszej szansy."),
     'overview.games_note': _w("Games: winner called in {n} of {total}; total points missed by {miss:.1f} on average.",
                               "Mecze: zwycięzca trafiony w {n} z {total}; suma punktów chybiona średnio o "
                               "{miss:.1f}."),

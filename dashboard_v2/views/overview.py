@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from core.data import (game_odds, news_record, news_tonight, player_decisions, priced_props, settled_lines,
-                       settled_props, shortlist_record, superbet)
+from core.data import (absence_record, absence_window_tonight, game_odds, news_record, news_tonight,
+                       player_decisions, priced_props, settled_lines, settled_props, shortlist_record, superbet)
 from core.analysis import last_game_lines, lookback_summary
 from decisions import CZEKAJ, actionable, offers_table, star_text, stars
 from tracking import star_scorecard
@@ -12,6 +12,7 @@ from core.ui import PAGES, kpis, no_offers, page_header, pl_time, table
 from insights import line_streaks, night_curiosities, tonight_streaks
 from loaders import filtered_logs, player_logs
 from models import calibration_warning, load_calibration, top_up_logs
+import absence_window
 import news
 import night_view
 import whatif
@@ -222,8 +223,66 @@ def news_block():
 
 news_block()
 
-st.subheader(t('overview.big', lang))
-st.caption(t('overview.big_note', lang))
+
+# --- big chances vs Superbet: the expert's recipe (H10, a research hypothesis) ---
+BIG_COLUMNS = ['name', 'bet_type', 'line', 'side', 'odds', 'usual', 'without', 'change', 'share %', 'n without',
+               'previous line', 'shift', 'new line', 'p side %', 'price %', 'gap pp', 'break-even net %']
+BIG_FORMATS = {'line': '%g', 'odds': '%.2f', 'usual': '%.1f', 'without': '%.1f', 'change': '%+.1f',
+               'share %': '%+.0f', 'previous line': '%g', 'shift': '%+g', 'p side %': '%.0f', 'price %': '%.0f',
+               'gap pp': '%+.1f', 'break-even net %': '%.0f'}
+
+
+def big_record_caption():
+    rec = absence_record()
+    every, first, old = rec.get('recognition · all'), rec.get('recognition · first game'), rec.get('2022')
+    if not every or not every.get('signals'):
+        st.caption(t('overview.big_record_none', lang))
+        return
+    num = lambda v: v if v is not None else float('nan')
+    st.caption(t('overview.big_record', lang, nights=every['nights'], d=rec['d'], signals=every['signals'],
+                 won=num(every['won %']), diff=num(every['won − price pp']), roi=num(every['ROI after tax %']),
+                 clv=num(every['CLV after tax %']), f_signals=(first or {}).get('signals') or 0,
+                 f_diff=num((first or {}).get('won − price pp')), f_roi=num((first or {}).get('ROI after tax %')),
+                 h_diff=num((old or {}).get('won − price pp')), h_lines=(old or {}).get('lines') or 0,
+                 n=rec.get('evaluation · all', {}).get('nights') or 0))
+
+
+def big_block(props: pd.DataFrame):
+    st.subheader(t('overview.big', lang))
+    st.caption(t('overview.big_note', lang))
+    big_record_caption()
+    found = absence_window_tonight(seasons, season_types, props)
+    out = absence_window.fresh(found['out']) if len(found['out']) else found['out']
+    if out.empty:
+        st.caption(t('overview.big_none', lang))
+        return
+    lines = found['lines']
+    for _, o in out.sort_values(['game_no', 'since']).iterrows():
+        game = t('overview.big_first', lang) if o['game_no'] == 1 else t('overview.big_nth', lang, n=int(o['game_no']))
+        st.markdown(t('overview.big_out', lang, name=o['name'], team=o['team'].upper(), since=_pl_clock(o['since']),
+                      game=game, ques=t('overview.big_ques', lang) if o['now_ques'] else ''))
+    if lines.empty:
+        st.caption(t('overview.big_no_lines', lang))
+        return
+    above = int((lines['p side %'] > lines['break-even net %']).sum())
+    if above:
+        st.caption(t('overview.big_above', lang, n=above))
+    for team, part in lines.groupby('team', sort=False):
+        part = part.reset_index(drop=True)
+        with st.expander(f"{team.upper()} · {part['out'].iloc[0]} · " + t('overview.big_lines', lang, n=len(part))):
+            shown = part.assign(bet_type=part['bet_type'].map(STAT), side=part['side'].map(lambda v: value(v, lang)),
+                                **{'new line': part['new line'].map({True: '✓', False: ''})})
+            picked = table(shown, BIG_COLUMNS, BIG_FORMATS, key=f'big_{team}', select=True, context='absence')
+            if picked is not None:
+                r = part.iloc[picked]
+                focus(r['event_id'], r['name_ESPN'], r['bet_type'])
+
+
+if len(props):
+    big_block(props)
+else:
+    st.subheader(t('overview.big', lang))
+    st.caption(t('overview.big_note', lang))
 
 # --- last night: how the lines, the rated bets and the games resolved ---
 latest = night_view.latest_night()

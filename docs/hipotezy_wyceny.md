@@ -259,6 +259,57 @@ i to w kierunku, który w rozpoznaniu przegrywał. Działa tylko w ocenie (`back
 
 ---
 
+## H10: Ważny zawodnik Out, a linie kolegów (mechanizm C)
+
+**Data D: 2026-11-19** (reguła zapisana 19.11, zanim zobaczyliśmy noce oceny). Ocena na nocach od 20.11, co
+najmniej 10. Kod: `dashboard/absence_window.py` (ten sam w aplikacji i w ocenie), ocena:
+`python -m backtest.absence_shift` → `data/backtest/absence_shift.md` i `.json`.
+
+**Skąd:** przepis eksperta od zakładów, który przekazał użytkownik (15.11, zakład Walker REB Over 6,5 @ 1,97 bez
+Embiida). (1) „Out” w RotoWire, nawet kilka godzin przed meczem, traktujemy jako pewne; (2) macierz with/without
+pokazuje kolegów z największą |zmianą| bez tego zawodnika; (3) w pierwszym meczu bez niego Superbet może być
+niedostrojony.
+
+**Mechanizm:** Superbet ustawia linie kolegów pod skład, w którym ten zawodnik gra, i nie przelicza ich (albo
+przelicza za mało), gdy wypada, zwłaszcza w pierwszym meczu bez niego.
+
+**Definicja** (wersje RotoWire tej nocy, mecze sprzed tej nocy):
+1. **Nieobecny:** gracz z ≥ 20 min (średnio w swoich 10 ostatnich meczach) z `play_pct` 0 w najnowszej wersji
+   RotoWire. Gdy wcześniej był Out, a najnowsza wersja mówi „Ques”, zostaje, z dopiskiem (Embiid 15.11: od 21:00 UTC
+   „Ques, 100%”, a nie zagrał). *Od kiedy:* nasz pierwszy odczyt z Out. *Mecz bez niego nr:* 1 + mecze drużyny,
+   które opuścił tuż przed dziś. Liczą się tylko świeże nieobecności, nr 1–3: dłuższą Superbet wycenia od tygodni
+   (zmiana wobec planu, 19.11, przed oceną: bez tego 15.11 dawał 116 linii, w tym nieobecnych od 184 meczów).
+2. **Koledzy:** ich linie PTS / REB / AST / PRA / 3PM; zmiana = suma po świeżych nieobecnych (średnia bez − z nim,
+   w okresie wspólnej gry, × n / (n + 5), `metrics.absence_breakdown`). Linia trafia na listę, gdy |zmiana| ≥ 10%
+   zwykłej średniej i choć jeden nieobecny ma ≥ 3 mecze bez niego.
+3. **Strona:** zgodna ze znakiem zmiany (Over, gdy rośnie, Under, gdy maleje). Bez progu opłacalności: tak działa
+   przepis.
+4. **Sygnał (test a):** każda taka linia przy jej pierwszym odczycie harmonogramu po tym, jak Out był znany (także
+   linia wystawiona później, jak Walkera o 17:20 UTC), liczona i oceniana jak H1/H2/H4/H5/H6
+   (`mispricing_eval.signals` i `economic`). Raport podaje też „pierwszy mecz bez niego” osobno oraz wygrane − cena.
+
+**Rozpoznanie** (19.11, opis, nic nie ustawia):
+- **Unibet 2022/23** (`2022_lines.csv`, wariant *absences*: nieobecności znane z góry, czyli górna granica): pierwszy
+  mecz bez gracza z ≥ 20 min, linie ze zmianą ≥ 10%: 3670 linii, 129 nocy, wygrane − cena **+0,1 pp** (95%: −2,1…+2,1),
+  ROI po podatku −17%. Mecze 2–3: −0,6 pp, 4+: −4,6 pp. Ze zmianą ≥ 20% to samo (+0,1 pp w pierwszym meczu).
+- **Superbet** (15 nocy z harmonogramu ≤ D): 527 sygnałów do wzięcia, wygrało 51,8% (+1,7 pp ponad cenę), ROI po
+  podatku −14,8% (99%: −25,8…−7,1), CLV po podatku −18,5% (235 z zamknięciem). Pierwszy mecz bez niego: 344 sygnały,
+  +4,5 pp ponad cenę, ROI −10,4% (−24,0…+3,5), CLV −18,2%. 289 linii nie dało się wziąć (przy następnym odczycie
+  linia albo kurs już się zmieniły): Superbet dociąga linie w ciągu godziny.
+- **Przypadek Walkera (15.11):** Embiid Out od 08:46 UTC; Superbet wystawił linie Walkera dopiero o 17:20, po tym, jak
+  RotoWire wpisał go do pierwszej piątki (17:00). REB 6,5 przy zwykłej średniej 3,2 i +0,8 z macierzy (39 meczów bez
+  Embiida): linia była wyżej, niż mówi macierz, czyli Superbet uwzględnił brak. Wynik 7 zbiórek, zakład wszedł o włos.
+
+**Przewidywanie zapisane przed oceną:** ❌ odrzucona (2022/23 daje +0,1 pp, a do zysku po podatku trzeba ok. 8–11 pp;
+w rozpoznaniu Superbetu CLV −18%, tak samo jak H4).
+
+**W aplikacji:** Overview → „Duże szanse vs Superbet” pokazuje każdą sytuację z reguły (decyzja użytkownika 19.11), z
+oznaczeniem 🧪, z bilansem z `absence_shift.json` i z liczbami do oceny: linia Superbetu z ostatniego meczu z nim
+i przesunięcie, „nowa po wiadomości”, nasza szansa (z korektą na nieobecność) wobec ceny bez marży i próg po
+podatku. Nie wpływa na decyzje ani gwiazdki.
+
+---
+
 ## H3–H9: definicje do uzupełnienia przed ich testem
 
 Każda dostanie tu własną datę D, progi i wynik rozpoznania, zanim jej detektor trafi do aplikacji.

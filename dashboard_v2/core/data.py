@@ -241,3 +241,57 @@ def news_record() -> Dict:
             return json.load(f)
     except (OSError, ValueError):
         return {}
+
+
+@st.cache_data(ttl=600, show_spinner="Reading tonight's absences...")
+def _absence_window(night, seasons: tuple, season_types: tuple, priced: pd.DataFrame) -> Dict:
+    import absence_window
+    import news
+    rw = snapshot_history('rotowire_lineups')
+    if rw.empty:
+        return {'out': pd.DataFrame(), 'lines': pd.DataFrame()}
+    rw = rw[pd.to_datetime(rw['game_date']) == night]
+    versions = news.lineup_versions(name_resolver().add_ids(rw)) if len(rw) else {}
+    if night not in versions:
+        return {'out': pd.DataFrame(), 'lines': pd.DataFrame()}
+    every = player_logs()
+    every = every[every['season_type'] != 'pre'].assign(player_id_ESPN=lambda x: x['player_id_ESPN'].astype('Int64'))
+    before = every[every['Date'] < night]
+    out = absence_window.out_tonight(versions[night], before, night,
+                                     news.regulars_by_night(every, [night]).get(night, set()))
+    if out.empty or priced.empty:
+        return {'out': out, 'lines': pd.DataFrame()}
+    tonight = priced[news._night(pd.to_datetime(priced['start_time'], utc=True)) == night]
+    # when each line was first offered tonight (the saved fetches and the schedule's quotes)
+    props_ = snapshot_history('superbet_props')
+    ids = set(tonight['event_id'])
+    fetches = snapshot_history('superbet_event_fetches')
+    quotes = snapshot_history('superbet_prop_quotes')
+    offered = news.offers(props_[props_['event_id'].isin(ids)],
+                          quotes[quotes['event_id'].isin(ids)] if len(quotes) else quotes,
+                          fetches[fetches['event_id'].isin(ids)] if len(fetches) else fetches)
+    first_seen = offered.groupby(['event_id', 'name_ESPN', 'bet_type'])['at'].min().to_dict() if len(offered) else {}
+    logs = filtered_logs(list(seasons), list(season_types))
+    logs = logs[logs['Date'] < night].assign(player_id_ESPN=lambda x: x['player_id_ESPN'].astype('Int64'))
+    lines = absence_window.situations(tonight, logs, out, props_, first_seen)
+    return {'out': out, 'lines': lines}
+
+
+def absence_window_tonight(seasons: List[int], season_types: List[str], priced: pd.DataFrame,
+                           night: Optional[str] = None) -> Dict:
+    """absence_window (H10) of tonight (today's US/Eastern date, or `night`): {'out': out_tonight's table, 'lines':
+    situations' table}. The Overview's "Big chances vs Superbet" window reads it; nothing is fetched here."""
+    night = pd.Timestamp(night) if night else pd.Timestamp.now(tz='US/Eastern').tz_localize(None).normalize()
+    return _absence_window(night, tuple(seasons), tuple(season_types), priced)
+
+
+def absence_record() -> Dict:
+    """data/backtest/absence_shift.json (backtest/absence_shift.py's summary of H10), {} when it hasn't been written."""
+    import json
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data',
+                        'backtest', 'absence_shift.json')
+    try:
+        with open(path, encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
