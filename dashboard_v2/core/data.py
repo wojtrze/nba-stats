@@ -271,16 +271,20 @@ def _absence_window(night, seasons: tuple, season_types: tuple, priced: pd.DataF
                           quotes[quotes['event_id'].isin(ids)] if len(quotes) else quotes,
                           fetches[fetches['event_id'].isin(ids)] if len(fetches) else fetches)
     first_seen = offered.groupby(['event_id', 'name_ESPN', 'bet_type'])['at'].min().to_dict() if len(offered) else {}
-    logs = filtered_logs(list(seasons), list(season_types))
-    logs = logs[logs['Date'] < night].assign(player_id_ESPN=lambda x: x['player_id_ESPN'].astype('Int64'))
+    # every stored season, as backtest/absence_shift judges the rule (the with/without needs games without him,
+    # which the current season alone rarely has); seasons and season types only key the cache with the priced lines
+    logs = before
     lines = absence_window.situations(tonight, logs, out, props_, first_seen)
-    return {'out': out, 'lines': lines}
+    latest = versions[night][-1][1]
+    gains = {int(o['player_id_ESPN']): absence_window.who_gains(o, latest, logs, tonight, out['player_id_ESPN'])
+             for _, o in absence_window.fresh(out).iterrows()}
+    return {'out': out, 'lines': lines, 'gains': gains}
 
 
 def absence_window_tonight(seasons: List[int], season_types: List[str], priced: pd.DataFrame,
                            night: Optional[str] = None) -> Dict:
     """absence_window (H10) of tonight (today's US/Eastern date, or `night`): {'out': out_tonight's table, 'lines':
-    situations' table}. The Overview's "Big chances vs Superbet" window reads it; nothing is fetched here."""
+    situations' table, 'gains': {out player id: who_gains}}. The Overview's "Big chances vs Superbet" window reads it; nothing is fetched here."""
     night = pd.Timestamp(night) if night else pd.Timestamp.now(tz='US/Eastern').tz_localize(None).normalize()
     return _absence_window(night, tuple(seasons), tuple(season_types), priced)
 

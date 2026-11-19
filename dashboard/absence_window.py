@@ -25,7 +25,8 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from metrics import ACTIVE_PROFILE, absence_breakdown, break_even
+from metrics import ACTIVE_PROFILE, POSITION_GROUPS, absence_breakdown, absence_terms, break_even, team_rotation
+from mispricing import ROLE_GAMES
 from news import _night, _status, over_chance
 
 STATS = ('PTS', 'REB', 'AST', 'ARP', '3PM')
@@ -34,6 +35,10 @@ MIN_WITHOUT = 3           # games without the out teammate behind at least one c
 MAX_GAME_NO = 3           # a fresh absence: the first, second or third game without him
 SHRINK = 5                # metrics.absence_breakdown's shrink, as price_props uses it
 QUES = 'Ques'
+TOP_REPLACEMENTS = 2       # who_gains: teammates at his position
+TOP_AFFECTED = 3           # who_gains: the biggest with/without changes besides them
+GAIN_STATS = ('PTS', 'REB', 'AST')
+AFFECTED_MPG = 15          # who_gains: 'affected' are players with a real role
 OUT_COLUMNS = ['night', 'team', 'player_id_ESPN', 'name', 'since', 'game_no', 'now_ques']
 
 
@@ -180,6 +185,67 @@ def situations(priced: pd.DataFrame, logs: pd.DataFrame, out: pd.DataFrame, hist
     table = pd.DataFrame(rows)
     order = table.assign(_first=table['game_no'] > 1, _size=-table['share %'].abs())
     return table.loc[order.sort_values(['_first', '_size'], kind='stable').index].reset_index(drop=True)
+
+
+# --- who gains: the names in the window's sentence about each absence (a description, not the rule) ---
+
+def _group(position) -> Optional[str]:
+    return POSITION_GROUPS.get(str(position)) if pd.notna(position) else None
+
+
+def who_gains(o, latest: pd.DataFrame, logs: pd.DataFrame, lines: Optional[pd.DataFrame] = None,
+              out_ids=()) -> Dict:
+    """The teammates an absence matters most for, by his own with/without (not summed with other absences).
+    o: an out_tonight row; latest: RotoWire's latest version that night; logs: games before the night; lines:
+    tonight's priced lines (player_id, bet_type, line); out_ids: everyone out tonight (never named).
+
+    Candidates: the team's rotation (metrics.team_rotation) with MIN_WITHOUT+ games without him
+    (metrics.absence_terms over MIN and GAIN_STATS). Returns {'position': his G / F / C, 'replacements': up to
+    TOP_REPLACEMENTS at his position, promoted to RotoWire's starting five first (a starter tonight with at most one
+    start in his last ROLE_GAMES games, H5's promotion), then by minutes gained, only with a promotion or more
+    minutes; 'affected': up to TOP_AFFECTED others playing AFFECTED_MPG+ minutes, by the biggest change among
+    GAIN_STATS in his own spreads (|change| / sd), when that change is MIN_SHARE+ of his usual;
+    'too_few': no teammate has MIN_WITHOUT games without him}. Each entry: name, player_id, promoted, min_change,
+    stat, change, share %, n_without, line (Superbet's tonight in that stat, None without one), mpg, spreads."""
+    pid, team = int(o['player_id_ESPN']), o['team']
+    own = logs[logs['player_id_ESPN'] == pid]
+    position = _group(own['position'].iloc[-1]) if len(own) and 'position' in own else None
+    status = _status(latest) if latest is not None and len(latest) else pd.DataFrame()
+    rotation = team_rotation(logs, team)
+    skip = set(int(x) for x in out_ids) | {pid}
+    rows = []
+    for mate, r in rotation.iterrows():
+        if int(mate) in skip:
+            continue
+        term = absence_terms(logs, mate, pid, ['MIN', *GAIN_STATS])
+        if not term['estimated'] or term['n_without'] < MIN_WITHOUT:
+            continue
+        games = logs[logs['player_id_ESPN'] == mate]
+        starts = int(games.sort_values('Date')['starter'].tail(ROLE_GAMES).astype(bool).sum())
+        starter = mate in status.index and status.at[mate, 'role'] == 'starter' if len(status) else False
+        group = _group(status.at[mate, 'pos']) if starter and 'pos' in status else _group(r['position'])
+        usual = games[list(GAIN_STATS)].mean()
+        # the stat that changes most in his own spreads (a bench player's +0.8 assists isn't +163% of anything real)
+        spread = games[list(GAIN_STATS)].std()
+        size = (term['change'][list(GAIN_STATS)] / spread.where(spread > 0)).abs()
+        stat = size.idxmax() if size.notna().any() else None
+        line = None
+        if stat and lines is not None and len(lines):
+            hit = lines[(lines['player_id'] == mate) & (lines['bet_type'] == stat)]
+            line = float(hit['line'].iloc[0]) if len(hit) else None
+        rows.append({'name': r['name'], 'player_id': int(mate), 'group': group,
+                     'promoted': bool(starter and starts <= 1), 'min_change': float(term['change']['MIN']),
+                     'stat': stat, 'change': float(term['change'][stat]) if stat else np.nan,
+                     'share %': float(100 * term['change'][stat] / usual[stat]) if stat else np.nan,
+                     'n_without': term['n_without'], 'line': line, 'mpg': float(r['mpg']),
+                     'spreads': float(size[stat]) if stat else np.nan})
+    places = [r for r in rows if position and r['group'] == position and (r['promoted'] or r['min_change'] > 0)]
+    places = sorted(places, key=lambda r: (not r['promoted'], -r['min_change']))[:TOP_REPLACEMENTS]
+    named = {r['player_id'] for r in places}
+    others = [r for r in rows if r['player_id'] not in named and r['mpg'] >= AFFECTED_MPG
+              and pd.notna(r['share %']) and abs(r['share %']) >= 100 * MIN_SHARE]
+    others = sorted(others, key=lambda r: -r['spreads'])[:TOP_AFFECTED]
+    return {'position': position, 'replacements': places, 'affected': others, 'too_few': not rows}
 
 
 # --- the backtest's signals ---

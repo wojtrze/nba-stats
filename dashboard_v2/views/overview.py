@@ -248,6 +248,31 @@ def big_record_caption():
                  n=rec.get('evaluation · all', {}).get('nights') or 0))
 
 
+def _entry(r) -> str:
+    """'**Name** PTS +3.1 (+24%, 14 g., line 9.5)'."""
+    line = t('overview.big_line', lang, line=r['line']) if r['line'] is not None else t('overview.big_no_line', lang)
+    return t('overview.big_entry', lang, name=r['name'], stat=r['stat'], change=r['change'], share=r['share %'],
+             n=r['n_without'], line=line)
+
+
+def gains_text(gains) -> list:
+    """The lines under an absence: his likely replacements at his position, then whom the with/without moves most."""
+    if not gains:
+        return []
+    if gains['too_few']:
+        return [t('overview.big_too_few', lang)]
+    out = []
+    if gains['replacements']:
+        names = [f"**{r['name']}**" + (', ' + t('overview.big_promoted', lang) if r['promoted'] else '')
+                 + ', ' + t('overview.big_minutes', lang, minutes=r['min_change'], n=r['n_without'])
+                 for r in gains['replacements']]
+        out.append(t('overview.big_replacements', lang, position=t(f"position.{gains['position']}", lang),
+                     names='; '.join(names)))
+    if gains['affected']:
+        out.append(t('overview.big_affected', lang, names=', '.join(_entry(r) for r in gains['affected'])))
+    return out
+
+
 def big_block(props: pd.DataFrame):
     st.subheader(t('overview.big', lang))
     st.caption(t('overview.big_note', lang))
@@ -260,8 +285,10 @@ def big_block(props: pd.DataFrame):
     lines = found['lines']
     for _, o in out.sort_values(['game_no', 'since']).iterrows():
         game = t('overview.big_first', lang) if o['game_no'] == 1 else t('overview.big_nth', lang, n=int(o['game_no']))
-        st.markdown(t('overview.big_out', lang, name=o['name'], team=o['team'].upper(), since=_pl_clock(o['since']),
-                      game=game, ques=t('overview.big_ques', lang) if o['now_ques'] else ''))
+        text = t('overview.big_out', lang, name=o['name'], team=o['team'].upper(), since=_pl_clock(o['since']),
+                 game=game, ques=t('overview.big_ques', lang) if o['now_ques'] else '')
+        gains = found.get('gains', {}).get(int(o['player_id_ESPN']))
+        st.markdown("  \n".join([text] + gains_text(gains)))
     if lines.empty:
         st.caption(t('overview.big_no_lines', lang))
         return

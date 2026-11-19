@@ -112,3 +112,62 @@ def test_signals_take_each_line_at_its_first_read_once_out_was_known():
     s = signal_rows(NIGHT, out_row(), offered(), logs(), {MATE: 'phi', STAR: 'phi'})
     assert s[['bet_type', 'at', 'line', 'side', 'hypothesis']].values.tolist() == [['REB', T(10), 11.5, 'Over', 'H10']]
     assert bool(s['clears'].all())
+
+
+# --- who gains ---
+
+from absence_window import who_gains  # noqa: E402
+
+WING = 4
+
+
+def team_logs(missed=(5, 6, 7, 8)):
+    """The star (C) sits `missed`; the backup center (C, bench) plays 14 min with him, 26 without; the wing (F)
+    scores 12 with him, 20 without; the bench guard never changes."""
+    rows = []
+    for day in range(1, 13):
+        out = day in missed
+        for pid, name, pos, minutes, pts, start in (
+                (STAR, 'Star', 'C', 34, 20, True), (MATE, 'Backup', 'C', 26 if out else 14, 8, False),
+                (WING, 'Wing', 'F', 32, 20 if out else 12, True), (BENCH, 'Bench', 'G', 15, 6, False)):
+            if pid == STAR and out:
+                continue
+            rows.append({'player_id_ESPN': pid, 'player_display_name': name, 'position': pos, 'team': 'phi',
+                         'Date': pd.Timestamp(f'2026-11-{day:02d}'), 'game_id': f'g{day}', 'season_id': 2026,
+                         'MIN': minutes, 'PTS': pts + day % 3, 'REB': 5 + day % 2, 'AST': 2 + day % 2,
+                         'starter': start})
+    return pd.DataFrame(rows).astype({'player_id_ESPN': 'Int64'})
+
+
+def latest(backup_starts=True):
+    rows = [(STAR, 0, 'Out', 'Star', 'may_not_play', 'C')]
+    if backup_starts:
+        rows.append((MATE, 100, None, 'Backup', 'starter', 'C'))
+    return pd.DataFrame([{'player_id_ESPN': pid, 'team': 'phi', 'play_pct': pct, 'injury': inj, 'name': name,
+                          'role': role, 'pos': pos} for pid, pct, inj, name, role, pos in rows])
+
+
+def star_out():
+    return out_row().iloc[0]
+
+
+def test_the_promoted_backup_at_his_position_replaces_him_and_the_wing_changes_most():
+    lines = pd.DataFrame([{'player_id': WING, 'bet_type': 'PTS', 'line': 15.5}])
+    g = who_gains(star_out(), latest(), team_logs(), lines, [STAR])
+    assert g['position'] == 'C' and not g['too_few']
+    assert [(r['name'], r['promoted']) for r in g['replacements']] == [('Backup', True)]
+    assert g['replacements'][0]['min_change'] > 0
+    wing = g['affected'][0]
+    assert (wing['name'], wing['stat'], wing['line']) == ('Wing', 'PTS', 15.5) and wing['change'] > 0
+    assert 'Bench' not in [r['name'] for r in g['affected'] + g['replacements']]      # no change at all
+
+
+def test_a_bench_backup_still_replaces_him_by_minutes_and_a_missing_line_is_none():
+    g = who_gains(star_out(), latest(backup_starts=False), team_logs(), None, [STAR])
+    assert [(r['name'], r['promoted']) for r in g['replacements']] == [('Backup', False)]
+    assert g['affected'][0]['line'] is None
+
+
+def test_too_few_games_without_him_names_nobody():
+    g = who_gains(star_out(), latest(), team_logs(missed=(5, 6)), None, [STAR])
+    assert g['too_few'] and not g['replacements'] and not g['affected']
