@@ -283,6 +283,27 @@ które stały i ruszyły się później przy tej samej linii (21), przesunęły 
 ok. 11 pp potrzebnych po podatku. Na razie Superbet reaguje w tej samej godzinie, co nasz odczyt RotoWire; czy
 reaguje szybciej niż wiadomość z RotoWire, rozstrzygnie dopiero etap 1 przy gęstszym odczycie RotoWire.
 
+**H4, etap 1 (19.11, D = 2026-11-19).** `python -m backtest.news_lag` → `data/backtest/news_lag.md` (i
+`news_lag.json` dla okna newsów w Overview). Zdarzenia i reakcje liczy ten sam kod co aplikacja
+(`dashboard/news.py`). Ustalone przed jakąkolwiek nocą oceny:
+- **Zdarzenia:** gracz z ≥ 20 min przechodzi z „gra” na „nie zagra” (*out*) albo z „nie zagra” na „gra” (*return*)
+  między dwiema wersjami RotoWire najwyżej 2 h od siebie; tylko mecze czytane przez harmonogram przed wiadomością
+  i w jej terminie (najwyżej 10 min po niej).
+- **Strona:** po *out* Over linii PTS/REB/AST/PRA kolegów z drużyny, po *return* Under. Kierunek z mechanizmu, nie
+  z modelu (stopień „+ absences” w ablacji nic nie dodaje) ani z ruchu do zamknięcia (to wiedza z przyszłości).
+- **Sygnał:** linia kolegi, która przy naszym pierwszym odczycie po wiadomości stała jak przed nią (ta sama linia,
+  szansa bez marży zmieniona < 0,5 pp), po kursie z tego odczytu; liczona i oceniana jak sygnały H1/H2/H5/H6
+  (`mispricing_eval.signals` i `economic`: musi dać się postawić, CLV i ROI po podatku, zakres 99%, progi rejestru).
+- **Noce:** ≤ D to rozpoznanie (opis), > D ocena (co najmniej 10 nocy, ok. początek grudnia).
+
+Rozpoznanie (15 nocy z harmonogramu, 59 zdarzeń: 54 *out*, 5 *return*; 746 linii kolegów): do naszego odczytu
+Superbet ruszył albo zdjął 85% linii kolegów (tło: 69% linii drugiej drużyny w tych samych odczytach). Ruszyło się
+później 103 (mediana 60 min po naszym odczycie, mediana ruchu 1,0 pp wobec ok. 11 pp potrzebnych po podatku), a 9 nie
+ruszyło się wcale. Sygnałów do wzięcia: 52, z czego 48 rozliczonych: wygrało 39,6%, ROI po podatku −34,0% (99%: od
+−80,9 do −7,2), CLV po podatku −18,8% (od −19,4 do −18,0, 24 z ważnym zamknięciem). Na nocach rozpoznania sygnał
+traci, a Superbet reaguje zwykle w tym samym terminie, w którym my widzimy wiadomość. To tylko opis; werdykt
+dadzą noce po D. Status zostaje `untested` do decyzji użytkownika.
+
 **Kolejność:** H4 etap 1 i H7 (H5 opisana wyżej), potem H3, H8 i H9 (koniec listopada, razem z weryfikacją modelu zliczeń).
 
 **Ocena:** `python -m backtest.mispricing_eval` zapisuje raport w `data/backtest/mispricing.md`. Używa tych samych
