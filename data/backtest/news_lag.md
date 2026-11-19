@@ -42,9 +42,9 @@ A side needs about 11 pp after tax; *late: median pp* is how far the chance move
 
 | news | events | nights | lines | moved by our read | withdrawn by our read | moved later | never | reacted by our read % | other team moved % | late: median min | late: median pp |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| out | 54 | 10 | 700 | 410 | 203 | 78 | 9 | 87.6 | 70.0 | 40.0 | 1.0 |
-| return | 5 | 2 | 46 | 21 | 0 | 25 | 0 | 45.7 | 55.7 | 60.0 | 1.7 |
-| all | 59 | 10 | 746 | 431 | 203 | 103 | 9 | 85.0 | 68.9 | 60.0 | 1.0 |
+| out | 55 | 11 | 896 | 521 | 271 | 92 | 12 | 88.4 | 70.6 | 40.0 | 1.0 |
+| return | 5 | 2 | 57 | 26 | 0 | 31 | 0 | 45.6 | 57.7 | 60.0 | 1.6 |
+| all | 60 | 11 | 953 | 547 | 271 | 123 | 12 | 85.8 | 69.7 | 60.0 | 1.0 |
 
 A side needs about 11 pp after tax; *late: median pp* is how far the chance moved after our read on the lines that stood (same line).
 
@@ -52,4 +52,4 @@ A side needs about 11 pp after tax; *late: median pp* is how far the chance move
 
 | nights | signals | not takeable | unchecked | settled | won % | ROI after tax % | ROI low | ROI high | with a close | CLV after tax % | CLV low | CLV high | verdict | why |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 15 | 52 | 49 | 6 | 48 | 39.6 | -34.0 | -80.9 | -7.2 | 24 | -18.8 | -19.4 | -18.0 | rejected | the high end of the 99% range of the CLV is below 0 |
+| 15 | 65 | 56 | 8 | 61 | 44.3 | -26.8 | -73.6 | -1.3 | 29 | -18.8 | -19.6 | -18.0 | rejected | the high end of the 99% range of the CLV is below 0 |

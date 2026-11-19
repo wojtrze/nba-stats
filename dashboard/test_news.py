@@ -40,7 +40,7 @@ def game():
         rows.append(quote(at, 'M2', 12, 'REB', 6.5 if at < T(22) else 7.5, 1.9, 1.9))
         rows.append(quote(at, 'M3', 13, 'AST', 4.5, 1.9, 1.9))
         if at == T(19):
-            rows.append(quote(at, 'M4', 14, 'PRA', 20.5, 1.9, 1.9))
+            rows.append(quote(at, 'M4', 14, 'ARP', 20.5, 1.9, 1.9))
         rows.append(quote(at, 'O1', 21, 'PTS', 10.5, 1.9, 1.9))                    # the other team
     return pd.DataFrame(rows)
 

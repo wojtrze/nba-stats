@@ -216,6 +216,7 @@ def news_block():
         if len(lines):
             with st.expander(t('overview.news_lines', lang)):
                 shown = lines.assign(kind=lines['kind'].map(lambda k: t(f'news.kind.{k}', lang)),
+                                     stat=lines['stat'].map(STAT),
                                      minutes=lines['minutes to move'].round())[NEWS_COLUMNS]
                 st.dataframe(shown.rename(columns={c: t(f'news.col.{c}', lang) for c in NEWS_COLUMNS}),
                              hide_index=True, use_container_width=True)

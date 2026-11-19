@@ -31,7 +31,7 @@ from tracking import PROP_KEY
 MIN_MINUTES = 20
 MAX_VERSION_GAP = pd.Timedelta(hours=2)
 FIRST_READ_WITHIN = pd.Timedelta(minutes=10)
-STATS = ('PTS', 'REB', 'AST', 'PRA')
+STATS = ('PTS', 'REB', 'AST', 'ARP')   # Superbet's name for points + rebounds + assists (PRA)
 NEEDED_PP = 11            # the registry's after-tax gap (docs/hipotezy_wyceny.md)
 SAME = 0.5                # pp: a smaller change of the margin-free chance at the same line isn't a move
 SIDE = {'out': 'Over', 'return': 'Under'}

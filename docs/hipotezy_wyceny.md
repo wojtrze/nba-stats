@@ -347,13 +347,17 @@ reaguje szybciej niż wiadomość z RotoWire, rozstrzygnie dopiero etap 1 przy g
   (`mispricing_eval.signals` i `economic`: musi dać się postawić, CLV i ROI po podatku, zakres 99%, progi rejestru).
 - **Noce:** ≤ D to rozpoznanie (opis), > D ocena (co najmniej 10 nocy, ok. początek grudnia).
 
-Rozpoznanie (15 nocy z harmonogramu, 59 zdarzeń: 54 *out*, 5 *return*; 746 linii kolegów): do naszego odczytu
-Superbet ruszył albo zdjął 85% linii kolegów (tło: 69% linii drugiej drużyny w tych samych odczytach). Ruszyło się
-później 103 (mediana 60 min po naszym odczycie, mediana ruchu 1,0 pp wobec ok. 11 pp potrzebnych po podatku), a 9 nie
-ruszyło się wcale. Sygnałów do wzięcia: 52, z czego 48 rozliczonych: wygrało 39,6%, ROI po podatku −34,0% (99%: od
-−80,9 do −7,2), CLV po podatku −18,8% (od −19,4 do −18,0, 24 z ważnym zamknięciem). Na nocach rozpoznania sygnał
+Rozpoznanie (15 nocy z harmonogramu, 60 zdarzeń: 55 *out*, 5 *return*; 953 linie kolegów): do naszego odczytu
+Superbet ruszył albo zdjął 86% linii kolegów (tło: 70% linii drugiej drużyny w tych samych odczytach). Ruszyło się
+później 123 (mediana 60 min po naszym odczycie, mediana ruchu 1,0 pp wobec ok. 11 pp potrzebnych po podatku), a 12 nie
+ruszyło się wcale. Sygnałów do wzięcia: 65, z czego 61 rozliczonych: wygrało 44,3%, ROI po podatku −26,8% (99%: od
+−73,6 do −1,3), CLV po podatku −18,8% (od −19,6 do −18,0, 29 z ważnym zamknięciem). Na nocach rozpoznania sygnał
 traci, a Superbet reaguje zwykle w tym samym terminie, w którym my widzimy wiadomość. To tylko opis; werdykt
 dadzą noce po D. Status zostaje `untested` do decyzji użytkownika.
+
+*Poprawka 19.11 (przed nocami oceny):* rynek PRA Superbet nazywa `ARP`, a `news.STATS` szukał `PRA`, więc linie PRA
+kolegów w ogóle nie wchodziły do H4, choć definicja je obejmuje. Po poprawce liczby wyżej (wcześniej: 746 linii,
+52 sygnały, ROI −34,0%, CLV −18,8%). Definicja się nie zmienia, wnioski też nie.
 
 **Kolejność:** H4 etap 1 i H7 (H5 opisana wyżej), potem H3, H8 i H9 (koniec listopada, razem z weryfikacją modelu zliczeń).
 
