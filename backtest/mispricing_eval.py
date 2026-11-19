@@ -38,6 +38,7 @@ from backtest.run import OUT_DIR, markdown
 from metrics import COST_PROFILES, SUPERBET_STANDARD, no_vig
 from mispricing import (COMBOS, combo_signals, league_rates, league_spreads, pooled_correlations, role_signals,
                         role_uplift, shooting_signals, spread_signals)
+from news import LINE, _night, _utc, lineup_versions, offers, player_ids  # noqa: F401  (shared with the app)
 from safe_io import atomic_write_text
 from tracking import PROP_KEY
 
@@ -54,65 +55,17 @@ NIGHTS_PER_SIGNAL = 5
 MECHANISM_GAP_PP = 4.0
 H1B_GAP_PP = 3.0
 TAX = COST_PROFILES[SUPERBET_STANDARD]
-LINE = ['bet_type', 'line', 'over_odds', 'under_odds']
 SIGNAL = ['event_id', 'player_id_ESPN', 'hypothesis', 'bet_type', 'side']
 
 
-def _utc(s: pd.Series) -> pd.Series:
-    return pd.to_datetime(s, utc=True)
 
 
-def _night(tip: pd.Series) -> pd.Series:
-    return tip.dt.tz_convert('US/Eastern').dt.tz_localize(None).dt.normalize()
 
 
-def offers(props: pd.DataFrame, quotes: pd.DataFrame, fetches: pd.DataFrame) -> pd.DataFrame:
-    """Every line as offered at every read before tip-off: at (the read), event_id, tip, name_ESPN, bet_type,
-    line, over_odds, under_odds, source ('schedule' or 'snapshot'). A line withdrawn (empty odds) or not yet
-    listed at a read isn't in it."""
-    frames = []
-    scheduled = set()
-    if len(fetches) and len(quotes):
-        reads = fetches.assign(at=_utc(fetches['fetched_at']), tip=_utc(fetches['start_time']))
-        reads = reads[reads['at'] < reads['tip']].drop_duplicates(['event_id', 'at'])[['event_id', 'at', 'tip']]
-        q = quotes.assign(at=_utc(quotes['fetched_at'])).drop(columns='fetched_at').sort_values('at')
-        keys = q[PROP_KEY].drop_duplicates()
-        grid = reads.merge(keys, on='event_id').sort_values('at')
-        rebuilt = pd.merge_asof(grid, q, on='at', by=PROP_KEY, direction='backward')
-        frames.append(rebuilt.assign(source='schedule'))
-        scheduled = set(reads['event_id'])
-    if len(props):
-        s = props.assign(at=_utc(props['fetched_at']), tip=_utc(props['start_time']))
-        s = s[(s['at'] < s['tip']) & ~s['event_id'].isin(scheduled)]
-        frames.append(s[['at', 'event_id', 'tip'] + PROP_KEY[1:] + LINE[1:]].assign(source='snapshot'))
-    if not frames:
-        return pd.DataFrame(columns=['at', 'event_id', 'tip', *PROP_KEY[1:], *LINE[1:], 'source'])
-    out = pd.concat(frames, ignore_index=True)
-    out = out.dropna(subset=['line', 'over_odds', 'under_odds'])
-    return out.drop_duplicates(['at'] + PROP_KEY, keep='last').sort_values(['at'] + PROP_KEY, ignore_index=True)
 
 
-def player_ids(offered: pd.DataFrame, props: pd.DataFrame, logs: pd.DataFrame) -> pd.Series:
-    """Each offered line's player_id_ESPN: the snapshot's for the same game and name, else the gamelogs' when the
-    name belongs to one player only."""
-    known = props.dropna(subset=['player_id_ESPN']).drop_duplicates(['event_id', 'name_ESPN'], keep='last')
-    pid = offered[['event_id', 'name_ESPN']].merge(
-        known[['event_id', 'name_ESPN', 'player_id_ESPN']], on=['event_id', 'name_ESPN'], how='left')['player_id_ESPN']
-    named = logs.drop_duplicates(['player_name_ESPN', 'player_id_ESPN'])
-    unique = named.groupby('player_name_ESPN')['player_id_ESPN'].transform('size') == 1
-    by_name = named[unique].set_index('player_name_ESPN')['player_id_ESPN']
-    pid.index = offered.index
-    return pid.fillna(offered['name_ESPN'].map(by_name)).astype('Int64')
 
 
-def lineup_versions(lineups: pd.DataFrame) -> Dict:
-    """RotoWire's saved versions (rotowire_lineups with player_id_ESPN) per night (game_date): a list of (saved at,
-    that version's rows), oldest first."""
-    if lineups is None or lineups.empty:
-        return {}
-    rw = lineups.assign(at=_utc(lineups['fetched_at']), night=pd.to_datetime(lineups['game_date']),
-                        player_id_ESPN=pd.to_numeric(lineups['player_id_ESPN'], errors='coerce'))
-    return {night: [(at, v) for at, v in day.groupby('at')] for night, day in rw.groupby('night')}
 
 
 def rotowire_role(versions: Dict, night, team, pid, at) -> Optional[str]:

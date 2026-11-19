@@ -54,35 +54,35 @@ Betting its positive-edge picks on those lines (1 unit each at the line's odds; 
 
 ## Superbet 2026/27
 
-Fitted on Oct 20 2026 – Oct 26 2026 (9171 lines, 7 nights), scored on Oct 27 2026 – Oct 29 2026 (2928 lines, 3 nights). Each line at its last fetch before tip-off, priced again with the current model.
+Fitted on Oct 20 2026 – Nov 09 2026 (27205 lines, 20 nights), scored on Nov 10 2026 – Nov 18 2026 (12962 lines, 9 nights). Each line at its last fetch before tip-off, priced again with the current model.
 
-Only 3 scored nights: the ranges are wide and the ranking can change as nights settle.
+Only 9 scored nights: the ranges are wide and the ranking can change as nights settle.
 
 How well each model predicts the unseen lines (lower is better; *vs market* = its log loss minus the market's per line side, with the 95% range from resampling whole nights; a range below 0 means it beat the price):
 
 | model | log loss | Brier | vs market | range low | range high |
 |---|---|---|---|---|---|
-| 1. Market (margin-free price) | 0.6851 | 0.2460 | 0.0000 | 0.0000 | 0.0000 |
-| 2. + Over/Under bias | 0.6846 | 0.2458 | -0.0005 | -0.0015 | 0.0014 |
-| 3. Hit rate | 0.6841 | 0.2455 | -0.0010 | -0.0027 | 0.0021 |
-| 4. Distribution around the average | 0.6835 | 0.2452 | -0.0016 | -0.0035 | 0.0017 |
-| 5. Hit rate + distribution | 0.6838 | 0.2454 | -0.0013 | -0.0031 | 0.0019 |
-| 6. + absences | 0.6838 | 0.2454 | -0.0013 | -0.0031 | 0.0019 |
-| 7. + implied team total | 0.6837 | 0.2453 | -0.0014 | -0.0033 | 0.0022 |
-| 8. + matchup = the full model | 0.6842 | 0.2456 | -0.0009 | -0.0026 | 0.0022 |
+| 1. Market (margin-free price) | 0.6843 | 0.2456 | 0.0000 | 0.0000 | 0.0000 |
+| 2. + Over/Under bias | 0.6838 | 0.2454 | -0.0005 | -0.0027 | 0.0012 |
+| 3. Hit rate | 0.6842 | 0.2456 | -0.0001 | -0.0027 | 0.0021 |
+| 4. Distribution around the average | 0.6841 | 0.2455 | -0.0002 | -0.0029 | 0.0023 |
+| 5. Hit rate + distribution | 0.6842 | 0.2456 | -0.0001 | -0.0027 | 0.0022 |
+| 6. + absences | 0.6841 | 0.2455 | -0.0002 | -0.0028 | 0.0020 |
+| 7. + implied team total | 0.6840 | 0.2455 | -0.0003 | -0.0029 | 0.0021 |
+| 8. + matchup = the full model | 0.6839 | 0.2455 | -0.0004 | -0.0029 | 0.0019 |
 
 Betting its positive-edge picks on those lines (1 unit each at the line's odds; a separate question from the predictions above):
 
 | model | bets | hit % | ci low % | ci high % | ROI % | avg odds | break-even % |
 |---|---|---|---|---|---|---|---|
 | 1. Market (margin-free price) | 0 | – | – | – | – | – | – |
-| 2. + Over/Under bias | 23 | 69.6 | 49.1 | 84.4 | -4.0 | 1.4 | 71.7 |
-| 3. Hit rate | 90 | 52.2 | 42.0 | 62.2 | -21.0 | 1.5 | 65.4 |
-| 4. Distribution around the average | 110 | 61.8 | 52.5 | 70.4 | -3.3 | 1.6 | 64.5 |
-| 5. Hit rate + distribution | 109 | 56.0 | 46.6 | 64.9 | -13.7 | 1.6 | 64.7 |
-| 6. + absences | 109 | 56.0 | 46.6 | 64.9 | -13.7 | 1.6 | 64.7 |
-| 7. + implied team total | 130 | 54.6 | 46.0 | 62.9 | -14.4 | 1.6 | 63.6 |
-| 8. + matchup = the full model | 87 | 62.1 | 51.6 | 71.5 | -6.0 | 1.5 | 66.3 |
+| 2. + Over/Under bias | 0 | – | – | – | – | – | – |
+| 3. Hit rate | 1344 | 54.1 | 51.4 | 56.7 | -6.8 | 1.7 | 57.8 |
+| 4. Distribution around the average | 1855 | 52.9 | 50.6 | 55.1 | -7.2 | 1.8 | 56.9 |
+| 5. Hit rate + distribution | 1664 | 53.8 | 51.4 | 56.2 | -6.1 | 1.8 | 57.1 |
+| 6. + absences | 1689 | 52.9 | 50.5 | 55.2 | -7.9 | 1.8 | 57.1 |
+| 7. + implied team total | 1788 | 53.2 | 50.9 | 55.5 | -7.1 | 1.8 | 57.0 |
+| 8. + matchup = the full model | 1482 | 53.6 | 51.1 | 56.2 | -6.8 | 1.8 | 57.4 |
 
 ## Calibration form: how to fit the Over/Under bias
 
@@ -90,11 +90,11 @@ The full model's chance calibrated four ways, each fitted on the earlier lines o
 
 | scored on | form | log loss | Brier | vs market | range low | range high | coefficients |
 |---|---|---|---|---|---|---|---|
-| 2022 | Current: shared side bias and offset | 0.6888 | 0.2479 | -0.0006 | -0.0013 | 0.0002 | m +1.220, model +0.092, over -0.039, one +0.020 |
-| superbet | Current: shared side bias and offset | 0.6842 | 0.2456 | -0.0009 | -0.0020 | 0.0011 | m +1.220, model +0.092, over -0.039, one +0.020 |
-| 2022 | No side bias (offset kept) | 0.6892 | 0.2481 | -0.0002 | -0.0009 | 0.0005 | m +1.228, model +0.107, one +0.000 |
-| superbet | No side bias (offset kept) | 0.6844 | 0.2457 | -0.0007 | -0.0014 | 0.0005 | m +1.228, model +0.107, one +0.000 |
-| 2022 | No side bias, no offset | 0.6892 | 0.2481 | -0.0002 | -0.0009 | 0.0005 | m +1.228, model +0.107 |
-| superbet | No side bias, no offset | 0.6844 | 0.2457 | -0.0007 | -0.0014 | 0.0005 | m +1.228, model +0.107 |
-| 2022 | Side bias and offset per bookmaker | 0.6891 | 0.2480 | -0.0004 | -0.0011 | 0.0003 | m +1.220, model +0.097, over -0.014, one +0.007, over_sb -0.066, one_sb +0.033 |
-| superbet | Side bias and offset per bookmaker | 0.6841 | 0.2455 | -0.0010 | -0.0026 | 0.0020 | m +1.220, model +0.097, over -0.014, one +0.007, over_sb -0.066, one_sb +0.033 |
+| 2022 | Current: shared side bias and offset | 0.6882 | 0.2476 | -0.0012 | -0.0024 | -0.0000 | m +1.171, model +0.140, over -0.109, one +0.055 |
+| superbet | Current: shared side bias and offset | 0.6837 | 0.2454 | -0.0006 | -0.0025 | 0.0010 | m +1.171, model +0.140, over -0.109, one +0.055 |
+| 2022 | No side bias (offset kept) | 0.6891 | 0.2480 | -0.0003 | -0.0014 | 0.0007 | m +1.190, model +0.182, one -0.000 |
+| superbet | No side bias (offset kept) | 0.6841 | 0.2455 | -0.0002 | -0.0012 | 0.0009 | m +1.190, model +0.182, one -0.000 |
+| 2022 | No side bias, no offset | 0.6891 | 0.2480 | -0.0003 | -0.0014 | 0.0007 | m +1.190, model +0.182 |
+| superbet | No side bias, no offset | 0.6841 | 0.2455 | -0.0002 | -0.0012 | 0.0009 | m +1.190, model +0.182 |
+| 2022 | Side bias and offset per bookmaker | 0.6890 | 0.2480 | -0.0004 | -0.0013 | 0.0005 | m +1.172, model +0.149, over -0.003, one +0.002, over_sb -0.164, one_sb +0.082 |
+| superbet | Side bias and offset per bookmaker | 0.6838 | 0.2454 | -0.0005 | -0.0029 | 0.0017 | m +1.172, model +0.149, over -0.003, one +0.002, over_sb -0.164, one_sb +0.082 |

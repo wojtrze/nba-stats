@@ -752,16 +752,15 @@ def prop_reasons(bet: Dict, games: pd.DataFrame, history: pd.DataFrame, lang: st
     preseason_only = bool(n and 'season_type' in games and (games['season_type'] == 'pre').all())
     minutes = games['MIN'] if n else pd.Series(dtype=float)
     reasons += [_reason(False, i18n.t(key, lang, **values), flag=True, key=key) for key, values in
-                prop_flag_items(n, preseason_only, bet.get('play_pct'), bet.get('status'), minutes,
-                                bet.get('line_move'), bet['side'])]
+                prop_flag_items(n, preseason_only, bet.get('play_pct'), bet.get('status'), minutes)]
     return [r for r in reasons if complete(r)]
 
 
-def prop_flag_items(n: int, preseason_only: bool, play_pct, status, minutes: pd.Series, line_move,
-                    side) -> List[Tuple[str, Dict]]:
+def prop_flag_items(n: int, preseason_only: bool, play_pct, status, minutes: pd.Series) -> List[Tuple[str, Dict]]:
     """The reasons to pass a prop whatever its numbers say, as (i18n text key, values): too few games, preseason
-    only, out, may not play, unstable minutes, the line moving against the pick. minutes: the player's minutes in
-    the games behind the numbers."""
+    only, out, may not play, unstable minutes. minutes: the player's minutes in the games behind the numbers.
+    A line moving against the pick is no longer one (2026-11-19: on 29 Superbet nights such lines beat their
+    price more often than the rest, docs/system_oceny_zakladow.md §5.3); it stays as context (reason.line_moved)."""
     items = []
     if n < MIN_GAMES:
         items.append(('flag.few_games', {'n': n}))
@@ -773,8 +772,6 @@ def prop_flag_items(n: int, preseason_only: bool, play_pct, status, minutes: pd.
         items.append(('flag.may_not_play', {'status': status}))
     if n >= 5 and len(minutes) and minutes.mean() > 0 and minutes.std() / minutes.mean() > 0.35:
         items.append(('flag.minutes', {'low': minutes.min(), 'high': minutes.max()}))
-    if _known(line_move) and abs(line_move) >= 1.5 and (line_move > 0) != (side == 'Over'):
-        items.append(('flag.line_against', {'move': abs(line_move)}))
     return items
 
 
@@ -782,17 +779,16 @@ def flag_texts(items: List[Tuple[str, Dict]], lang: str = 'en') -> List[str]:
     return [i18n.t(key, lang, **values) for key, values in items]
 
 
-def prop_flags(n: int, preseason_only: bool, play_pct, status, minutes: pd.Series, line_move, side,
-               lang: str = 'en') -> List[str]:
+def prop_flags(n: int, preseason_only: bool, play_pct, status, minutes: pd.Series, lang: str = 'en') -> List[str]:
     """prop_flag_items in words."""
-    return flag_texts(prop_flag_items(n, preseason_only, play_pct, status, minutes, line_move, side), lang)
+    return flag_texts(prop_flag_items(n, preseason_only, play_pct, status, minutes), lang)
 
 
 def flag_props(table: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame) -> pd.DataFrame:
-    """models.price_props output (with prop_movement's 'line move' when there is one) with 'red flag' (the
+    """models.price_props output with 'red flag' (the
     prop_flags of each line in English, joined; '' when none; saved with the snapshots), 'flag items' (the same as
     prop_flag_items, for showing them in another language), 🔴 as the signal of every flagged line and no bet on it
-    (pass). The line moving against a side is judged for the evaluated side (price_props' side). logs: the games the lines were priced from; lineups: RotoWire's (with ESPN ids)."""
+    (pass). logs: the games the lines were priced from; lineups: RotoWire's (with ESPN ids)."""
     by_player = {pid: g for pid, g in logs.groupby('player_id_ESPN')}
     listed = lineups.dropna(subset=['player_id_ESPN']).drop_duplicates('player_id_ESPN') if len(lineups) else lineups
     play_pct = listed.set_index('player_id_ESPN')['play_pct'] if len(listed) else pd.Series(dtype=float)
@@ -803,8 +799,7 @@ def flag_props(table: pd.DataFrame, logs: pd.DataFrame, lineups: pd.DataFrame) -
         n = 0 if games is None else len(games)
         items.append(prop_flag_items(n, bool(n and (games['season_type'] == 'pre').all()),
                                      play_pct.get(row['player_id']), row.get('RotoWire'),
-                                     games['MIN'] if n else empty, row.get('line move'),
-                                     row.get('side') or row['best side']))
+                                     games['MIN'] if n else empty))
     flags = pd.Series(['; '.join(flag_texts(i)) for i in items], index=table.index)
     out = table.assign(**{'red flag': flags, 'flag items': pd.Series(items, index=table.index, dtype=object),
                           'signal': table['signal'].where(flags == '', '🔴')})

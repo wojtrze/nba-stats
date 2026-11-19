@@ -1,0 +1,36 @@
+{
+  "d": "2026-11-19",
+  "updated": "2026-11-19T18:39+00:00",
+  "recognition": {
+    "nights": 15,
+    "signals": 52,
+    "settled": 48,
+    "won %": 39.58333333333333,
+    "ROI after tax %": -34.00000000000001,
+    "with a close": 24,
+    "CLV after tax %": -18.778572831781982,
+    "CLV low": -19.40429484531996,
+    "CLV high": -17.97720433590178,
+    "verdict": "rejected",
+    "why": "the high end of the 99% range of the CLV is below 0",
+    "events": 59,
+    "reacted by our read %": 84.98659517426273,
+    "other team moved %": 68.94117647058823
+  },
+  "evaluation": {
+    "nights": 0,
+    "signals": 0,
+    "settled": 0,
+    "won %": null,
+    "ROI after tax %": null,
+    "with a close": 0,
+    "CLV after tax %": null,
+    "CLV low": null,
+    "CLV high": null,
+    "verdict": "wait",
+    "why": "0 of the 10 nights a verdict needs",
+    "events": 0,
+    "reacted by our read %": null,
+    "other team moved %": null
+  }
+}

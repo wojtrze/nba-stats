@@ -270,10 +270,9 @@ TERMS: Dict[str, Term] = {
                     "informacja: samo w sobie nie pokonało kursów Superbetu.")),
     'red flag': Term(_w("⚠️ warning", "⚠️ ostrzeżenie"),
                      _w("A reason to pass whatever the numbers say: too few games, preseason only, may not play, "
-                        "minutes swinging, the line moving against the pick. A line with a warning gets 0★.",
+                        "minutes swinging. A line with a warning gets 0★.",
                         "Powód, żeby odpuścić, cokolwiek mówią liczby: za mało meczów, tylko przedsezon, może nie "
-                        "zagrać, wahające się minuty, linia ruszyła przeciw typowi. Linia z ostrzeżeniem dostaje "
-                        "0★.")),
+                        "zagrać, wahające się minuty. Linia z ostrzeżeniem dostaje 0★.")),
     'RotoWire': Term(_w("tonight's role", "rola dziś"),
                      _w("From RotoWire: starter (✔ = lineup confirmed), bench, or the injury tag with the chance to "
                         "play (Out 0%, Doubt 25%, Ques 50%, Prob 75%). Empty = RotoWire doesn't list the game yet.",
@@ -1678,9 +1677,6 @@ TEXTS: Dict[str, Dict[str, str]] = {
                             "RotoWire: {status}: może nie zagrać albo zagrać mało minut"),
     'flag.minutes': _w("Minutes swing a lot ({low:.0f}–{high:.0f}): the role isn't settled",
                        "Minuty bardzo się wahają ({low:.0f}–{high:.0f}): rola nie jest ustalona"),
-    'flag.line_against': _w("The line moved {move:g} against the pick: the market may know something (injury, "
-                            "minutes)", "Linia ruszyła o {move:g} przeciw typowi: rynek może coś wiedzieć "
-                                        "(kontuzja, minuty)"),
 
     # game outcomes (core/labels.py) and their reasons (reasons.game_reasons)
     'market.ML': _w("Winner", "Zwycięzca"), 'market.SPREAD': _w("Handicap", "Handicap"),
@@ -2996,6 +2992,67 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'overview.all_games_link': _w("All of tonight's games, with odds, decisions and lineups",
                                   "Wszystkie dzisiejsze mecze: kursy, decyzje i składy"),
     'overview.last_night': _w("Last night: {night}", "Ostatni wieczór: {night}"),
+    'overview.news': _w("RotoWire news tonight", "Wiadomości RotoWire dziś"),
+    'overview.news_help': _w("A regular (20+ minutes over his last 10 games) ruled out or back between two RotoWire "
+                             "versions, and how Superbet's PTS / REB / AST / PRA lines of his teammates reacted "
+                             "(dashboard/news.py, H4 in docs/hipotezy_wyceny.md).",
+                             "Zawodnik grający 20+ min (średnio w 10 ostatnich meczach) wypada albo wraca między "
+                             "dwiema wersjami RotoWire, i jak zareagowały linie PTS / REB / AST / PRA kolegów z "
+                             "drużyny w Superbecie (dashboard/news.py, H4 w docs/hipotezy_wyceny.md)."),
+    'overview.news_note': _w("🧪 Research hypothesis H4: doesn't affect the decision or the stars. Times are our "
+                             "RotoWire reads (hourly, more often in the last hour), not when the news was posted.",
+                             "🧪 Hipoteza badawcza H4: nie wpływa na decyzję ani na gwiazdki. Godziny to nasze "
+                             "odczyty RotoWire (co godzinę, w ostatniej godzinie częściej), nie pora publikacji "
+                             "wiadomości."),
+    'overview.news_record': _w("So far, on {nights} recognition nights (up to {d}): Superbet had moved or withdrawn "
+                               "{reacted:.0f}% of the teammates' lines by our read (other team, no news: "
+                               "{other:.0f}%). The {signals} lines that still stood, taken on the side the news "
+                               "favours, won {won:.0f}% and returned {clv:+.1f}% against the close after tax "
+                               "({closes} with a close). The evaluation on the nights after {d} has {n} of the 10 nights it needs.",
+                               "Dotąd, na {nights} nocach rozpoznania (do {d}): do naszego odczytu Superbet ruszył "
+                               "albo zdjął {reacted:.0f}% linii kolegów (druga drużyna, bez wiadomości: "
+                               "{other:.0f}%). {signals} linii, które jeszcze stały, wziętych na stronę, której "
+                               "sprzyja wiadomość, wygrało {won:.0f}% i dało {clv:+.1f}% wobec zamknięcia po podatku "
+                               "({closes} z zamknięciem). Ocena na nocach po {d}: {n} z 10 potrzebnych nocy."),
+    'overview.news_record_none': _w("No record yet: run python -m backtest.news_lag.",
+                                    "Brak zapisu: uruchom python -m backtest.news_lag."),
+    'overview.news_none': _w("No regular ruled out or back between tonight's RotoWire versions on a game the "
+                             "schedule read before and at the news.",
+                             "Brak zmian statusu zawodników grających 20+ min między dzisiejszymi wersjami RotoWire "
+                             "w meczach czytanych przez harmonogram przed wiadomością i w jej terminie."),
+    'overview.news_event': _w("**{name}** ({team}) {kind}, seen {seen}; his lines: {own}. Teammates' lines: {early} "
+                              "moved and {gone} withdrawn by our read, {later} moved later, {never} unchanged so far.",
+                              "**{name}** ({team}) {kind}, zobaczone {seen}; jego linie: {own}. Linie kolegów: "
+                              "{early} ruszone i {gone} zdjęte do naszego odczytu, {later} ruszone później, {never} "
+                              "bez zmian do teraz."),
+    'overview.news_event_alone': _w("**{name}** ({team}) {kind}, seen {seen}; his lines: {own}. No teammate PTS / REB / "
+                                    "AST / PRA lines before the news.",
+                                    "**{name}** ({team}) {kind}, zobaczone {seen}; jego linie: {own}. Brak linii PTS / "
+                                    "REB / AST / PRA kolegów przed wiadomością."),
+    'overview.news_lines': _w("Teammates' lines: before the news, at our read, now",
+                              "Linie kolegów: przed wiadomością, przy naszym odczycie, teraz"),
+    'news.out': _w("out", "nie zagra"),
+    'news.return': _w("back", "wraca"),
+    'news.own.withdrawn before our RotoWire read': _w("withdrawn before our RotoWire read",
+                                                      "zdjęte przed naszym odczytem RotoWire"),
+    'news.own.withdrawn by our first read': _w("withdrawn by our read", "zdjęte do naszego odczytu"),
+    'news.own.still offered at our first read': _w("still offered at our read", "jeszcze w ofercie przy naszym odczycie"),
+    'news.kind.moved by our read': _w("moved by our read", "ruszona do naszego odczytu"),
+    'news.kind.withdrawn by our read': _w("withdrawn by our read", "zdjęta do naszego odczytu"),
+    'news.kind.moved later': _w("moved later", "ruszona później"),
+    'news.kind.never': _w("unchanged", "bez zmian"),
+    'news.col.player': _w("player", "zawodnik"),
+    'news.col.stat': _w("stat", "statystyka"),
+    'news.col.before': _w("before (line · Over %)", "przed (linia · Powyżej %)"),
+    'news.col.first read': _w("our read", "nasz odczyt"),
+    'news.col.close': _w("now", "teraz"),
+    'news.col.kind': _w("reaction", "reakcja"),
+    'news.col.minutes': _w("min after the news", "min po wiadomości"),
+    'overview.big': _w("Big chances vs Superbet", "Duże szanse vs Superbet"),
+    'overview.big_note': _w("Lines where our chance is clearly above Superbet's margin-free price. Which lines "
+                            "belong here is still to be decided, so the list is empty for now.",
+                            "Linie, w których nasza szansa jest wyraźnie wyższa niż cena Superbetu bez marży. Reguła "
+                            "wyboru linii jest jeszcze do ustalenia, więc na razie lista jest pusta."),
     'overview.games_note': _w("Games: winner called in {n} of {total}; total points missed by {miss:.1f} on average.",
                               "Mecze: zwycięzca trafiony w {n} z {total}; suma punktów chybiona średnio o "
                               "{miss:.1f}."),
