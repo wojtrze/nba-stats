@@ -15,6 +15,17 @@ Ranges are 95% from resampling whole nights. D defaults to the last night that l
 The report never sets ADMITTED_THRESHOLD: that's done by hand after reading it. Writes
 data/backtest/threshold_admission.md.
 
-Superbet lines: 41142 over 29 nights.
+Superbet lines: 41977 over 30 nights. Chosen on nights up to Oct 29 2026, judged on the later ones.
 
-**Result: none** (too few nights: 29 of the 30 it needs (10 to choose on, 20 after them to judge on)).
+**Result: none** (no candidate made money after tax on the nights it was chosen on).
+
+## Choosing (nights up to D)
+
+| edge net pp ≥ | bets | nights | won % | ROI after tax % | ROI low | ROI high |
+|---|---|---|---|---|---|---|
+| 0 | 0 | 0 | – | – | – | – |
+| 1 | 0 | 0 | – | – | – | – |
+| 2 | 0 | 0 | – | – | – | – |
+| 3 | 0 | 0 | – | – | – | – |
+| 5 | 0 | 0 | – | – | – | – |
+| 8 | 0 | 0 | – | – | – | – |
