@@ -19,8 +19,9 @@ Candidates (core = minutes × per-minute rate):
   (all the season's games if none; every earlier game before the player's MIN_SEASON_GAMES-th of the season),
   rate = the season's stat ÷ minutes with last season's rate as a prior worth PRIOR_GAMES games (game_features);
   PRA (ARP) is the sum of the PTS, REB and AST cores;
-- on B also the current proj avg and the current model's adjustments on top of the core: lineup adj (adj avg − avg),
-  the pace factor and the matchup factor.
+- on B also the current proj avg (the live core + ABSENCE_WEIGHT × the with/without change of tonight's absences:
+  adj avg − base) and variants of it: the core alone, the full absence change, and the pace and matchup factors
+  (context only in the model since 2026-11-20-minutes) multiplied back in.
 
 Reported per stat: MAE, bias (mean result − projection), on B the share of lines where the projection was closer
 to the result than the line, within 10% of the result (insights._near, ours taken as the half-point line it falls
@@ -39,6 +40,7 @@ import pandas as pd
 import backtest  # noqa: F401  (puts dashboard/ on the path)
 from backtest.ablation import last_pretip_lines, night_bootstrap
 from backtest.run import OUT_DIR, markdown
+from metrics import ABSENCE_WEIGHT
 from safe_io import atomic_write_text
 
 log = logging.getLogger(__name__)
@@ -155,11 +157,11 @@ def superbet_source(last: pd.DataFrame, components: pd.DataFrame, features: pd.D
                     starter: pd.Series) -> pd.DataFrame:
     """Source B in long form. last: last_pretip_lines with player_id and night; components: superbet_components,
     row for row; features: game_features; starter: per line (rotowire_roles)."""
-    if len(last) != len(components) or not (last['bet_type'].values == components['bet_type'].values).all():
-        raise ValueError("the saved components don't line up with the saved lines: "
+    if 'base' not in components or len(last) != len(components)             or not (last['bet_type'].values == components['bet_type'].values).all():
+        raise ValueError("the saved components don't line up with the saved lines (or predate the model's base): "
                          "run python -m backtest.projection_eval --refresh")
     t = pd.concat([last[['player_id', 'night', 'line']].reset_index(drop=True),
-                   components[['bet_type', 'avg', 'adj avg', 'pace factor', 'matchup factor', 'proj avg']]
+                   components[['bet_type', 'base', 'adj avg', 'pace factor', 'matchup factor', 'proj avg']]
                    .reset_index(drop=True)], axis=1).assign(starter=starter.values)
     t = t[t['bet_type'].isin(STATS) & t['player_id'].notna() & t['proj avg'].notna()]
     t = t.assign(player_id=pd.to_numeric(t['player_id']), night=pd.to_datetime(t['night']))
@@ -172,17 +174,15 @@ def superbet_source(last: pd.DataFrame, components: pd.DataFrame, features: pd.D
         if r.empty:
             continue
         c = core(r, r['starter'])[s]
-        oracle = core(r, r['starter log'])[s]
-        lineup = r['adj avg'] - r['avg']
+        absence = r['adj avg'] - r['base']          # ABSENCE_WEIGHT × the with/without change
         frames.append(pd.DataFrame({
             'night': r['night'], 'stat': s, 'actual': r[s], 'line': r['line'],
             'current proj avg': r['proj avg'],
-            'current without matchup': r['adj avg'] * r['pace factor'],
-            'core': c,
-            'core + lineup adj': c + lineup,
-            'core × pace': c * r['pace factor'],
-            'core + lineup adj, × pace': (c + lineup) * r['pace factor'],
-            'core (actual starter flag: oracle)': oracle}))
+            'core, no absence change': c,
+            'core + the full absence change': c + absence / ABSENCE_WEIGHT,
+            'current × pace': r['proj avg'] * r['pace factor'],
+            'current × pace × matchup': r['proj avg'] * r['pace factor'] * r['matchup factor'],
+            'current, actual starter flag (oracle)': core(r, r['starter log'])[s] + absence}))
     return pd.concat(frames, ignore_index=True)
 
 
@@ -246,8 +246,8 @@ def load(refresh: bool = False):
 
 def report(a: pd.DataFrame, b: pd.DataFrame) -> str:
     a_cands = ['season mean', 'minutes (all games) × rate', 'core: minutes in role × rate']
-    b_cands = ['current proj avg', 'current without matchup', 'core', 'core + lineup adj', 'core × pace',
-               'core + lineup adj, × pace', 'core (actual starter flag: oracle)']
+    b_cands = ['current proj avg', 'core, no absence change', 'core + the full absence change', 'current × pace',
+               'current × pace × matchup', 'current, actual starter flag (oracle)']
     sa, sb = score(a, a_cands, 'season mean', False), score(b, b_cands, 'current proj avg', True)
     return "\n".join([
         "# Projection accuracy: candidate proj avg against the results (exploratory)", "",

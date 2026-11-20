@@ -48,7 +48,7 @@ PRIOR_GAMES = 10          # metrics.prop_probability's market prior
 BOOTSTRAP = 1000
 # what a line needs for every rung: the player's numbers, both odds and the settled result
 COLUMNS = ['game_date', 'bet_type', 'line', 'actual', 'over_odds', 'under_odds', 'market over %', 'raw over %',
-           'games', 'over %', 'under %', 'sd', 'avg', 'adj avg', 'pace factor', 'matchup factor', 'proj avg']
+           'games', 'over %', 'under %', 'sd', 'avg', 'base', 'adj avg', 'pace factor', 'matchup factor', 'proj avg']
 
 
 # --- the rungs: a side's chance from the line's components, as metrics.prop_probability computes it ---
