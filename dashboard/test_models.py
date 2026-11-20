@@ -84,6 +84,62 @@ def test_price_props_keeps_topped_up_games_out_of_matchups_and_absences(monkeypa
     assert not seen['allowed']['top_up'].any() and not seen['adjust']['top_up'].any()
 
 
+def _role_logs():
+    """Player 1: 2025 bench games (20 min, 10 pts), then 2026 starts (36 min, 20 pts) with one bench game last."""
+    rows = [_log(1, f'2026-03-{d:02d}', 2025, pts=10.0) | {'MIN': 20.0, 'starter': False} for d in range(1, 11)]
+    rows += [_log(1, f'2026-10-{d}', 2026, pts=20.0) | {'MIN': 36.0, 'starter': True} for d in (21, 23, 25, 27)]
+    rows += [_log(1, '2026-10-29', 2026, pts=12.0) | {'MIN': 24.0, 'starter': False}]
+    rows += [_log(4, f'2026-10-{d}', 2026, pts=8.0) | {'MIN': 20.0, 'starter': False} for d in (21, 23, 25)]
+    return pd.DataFrame(rows).sort_values('Date', kind='stable')
+
+
+def _priced_role(lineups, adjust=lambda *a: pd.DataFrame(), history=True):
+    logs = _role_logs()
+    props = pd.DataFrame([{'name': 'A', 'name_ESPN': 'A', 'home': 'bos', 'away': 'ny', 'bet_type': 'PTS',
+                           'line': 15.5, 'event_id': 9, 'start_time': '2026-10-31T23:30:00Z', 'over_odds': 1.9,
+                           'under_odds': 1.9, 'player_id_ESPN': 1}])
+    return price_props(props, _scoped(logs), lineups, pd.DataFrame(), pd.DataFrame(columns=['home', 'away']),
+                       adjust=adjust, calibration=models.IDENTITY_CALIBRATION,
+                       history=logs if history else None).iloc[0]
+
+
+def test_the_projection_is_minutes_in_tonights_role_times_the_rate():
+    from metrics import PRIOR_GAMES, PRIOR_MINUTES, minutes_rate
+    weight = PRIOR_GAMES * PRIOR_MINUTES
+    rate = (4 * 20 + 12 + weight * 0.5) / (4 * 36 + 24 + weight)      # the season, last season's 0.5 as the prior
+    starter = pd.DataFrame([{'team': 'bos', 'player_id_ESPN': 1, 'role': 'starter', 'play_pct': 100,
+                             'lineup_status': 'expected', 'injury': None}])
+    row = _priced_role(starter)
+    starts = pd.Series([36.0] * 4)
+    assert row['starter'] is True or row['starter'] == True                                       # noqa: E712
+    assert row['proj min'] == pytest.approx(starts.ewm(halflife=5).mean().iloc[-1])
+    assert row['rate'] == pytest.approx(rate) and row['base'] == pytest.approx(36 * rate)
+    assert row['proj avg'] == pytest.approx(row['base']) and row['adj avg'] == row['proj avg']
+    assert row['avg'] == pytest.approx((4 * 20 + 12) / 5)                    # the season mean is still shown
+    # RotoWire lists bos without him as a starter: tonight's role is the bench
+    other = starter.assign(player_id_ESPN=4)
+    assert _priced_role(other)['proj min'] == pytest.approx(24.0)
+    # RotoWire has nothing for bos yet: his last game's role (bench)
+    none = pd.DataFrame(columns=['team', 'player_id_ESPN', 'role', 'play_pct', 'lineup_status', 'injury'])
+    assert not _priced_role(none)['starter'] and _priced_role(none)['proj min'] == pytest.approx(24.0)
+    # without history the logs given are all there is: no last season, the season's own rate
+    assert _priced_role(starter, history=False)['rate'] == pytest.approx((4 * 20 + 12) / (4 * 36 + 24))
+    own = _role_logs()[lambda d: d['player_id_ESPN'] == 1]
+    assert minutes_rate(own, 2026, True, 'PTS')['base'] == pytest.approx(row['base'])
+
+
+def test_the_projection_adds_half_the_absence_change_and_no_game_factors():
+    from metrics import ABSENCE_WEIGHT
+    lineups = pd.DataFrame([{'team': 'bos', 'player_id_ESPN': 1, 'role': 'starter', 'play_pct': 100,
+                             'lineup_status': 'expected', 'injury': None},
+                            {'team': 'bos', 'player_id_ESPN': 4, 'role': 'may_not_play', 'play_pct': 0,
+                             'lineup_status': 'expected', 'injury': 'Out'}])
+    row = _priced_role(lineups, adjust=lambda part, players, out, stats:
+                       pd.DataFrame(4.0, index=list(players), columns=list(stats)))
+    assert row['lineup adj'] == pytest.approx(ABSENCE_WEIGHT * 4.0)
+    assert row['proj avg'] == pytest.approx(row['base'] + ABSENCE_WEIGHT * 4.0)
+
+
 # --- signals, pick and lean ---
 
 def test_prop_signal():

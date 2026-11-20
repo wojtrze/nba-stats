@@ -164,18 +164,18 @@ def nearest(table: pd.DataFrame, values_of, coef: Optional[Dict], n: int = 5,
 
 def lineup_projection(row: pd.Series, logs: pd.DataFrame, out_ids, stat: Optional[str] = None) -> Dict:
     """Our expectation for the row's player with `out_ids` absent, built as price_props builds it: lineup adj =
-    metrics.absence_adjustments over the player's and those teammates' own games (logs without topped-up rows),
-    proj avg = (avg + lineup adj) × pace factor × matchup factor (the row's)."""
-    from metrics import absence_adjustments
+    ABSENCE_WEIGHT × metrics.absence_adjustments over the player's and those teammates' own games (logs without
+    topped-up rows), proj avg = base (the row's minutes × rate) + lineup adj. The role stays the row's."""
+    from metrics import ABSENCE_WEIGHT, absence_adjustments
     stat = stat or row['bet_type']
     pid = row['player_id']
     out_ids = [o for o in out_ids if o != pid]
     adj = 0.0
     if out_ids and stat in logs:
         part = logs[logs['player_id_ESPN'].isin(set(out_ids) | {pid})]
-        adj = float(absence_adjustments(part, [pid], tuple(sorted(out_ids)), [stat]).loc[pid, stat])
-    factors = row['pace factor'] * row['matchup factor']
-    return {'lineup adj': adj, 'proj avg': (row['avg'] + adj) * factors}
+        adj = ABSENCE_WEIGHT * float(absence_adjustments(part, [pid], tuple(sorted(out_ids)), [stat]).loc[pid, stat])
+    base = row['base'] if 'base' in row and pd.notna(row['base']) else row['avg']
+    return {'lineup adj': adj, 'proj avg': base + adj}
 
 
 def price_lineup(row: pd.Series, values: pd.Series, logs: pd.DataFrame, out_ids, coef: Optional[Dict],

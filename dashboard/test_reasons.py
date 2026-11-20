@@ -79,19 +79,27 @@ def test_only_the_price_and_the_drivers_have_a_direction():
     games = _games([22.0, 25, 27, 24, 21, 26, 23, 28, 25, 24, 22, 26])
     m = {'value': 60.0, 'average': 54.0, 'diff': 6.0, 'ratio': 60 / 54, 'rank': 2, 'teams': 30, 'word': 'soft',
          'colour': 'green', 'games': 6}
+    out = [{'id': 3, 'name': 'C Mate', 'n_without': 4, 'n_with': 8, 'estimated': True, 'change': 1.0}]
     for side, impact, edge in (('Over', 0.4, 7.4), ('Under', -0.4, -3.0)):
         reasons = prop_reasons(_bet(side=side, matchup=m, position='G', home=True, **{'edge pp': edge},
-                                    impacts={'opponent': impact}), games, _games([]))
+                                    **{'lineup adj': 1.0}, absences=out, lineup_at='2026-10-30T20:00:00Z',
+                                    impacts={'availability': impact}),
+                               games, _games([]))
         price = [r for r in reasons if r['kind'] == 'economics']
         assert price[0]['supports'] is (edge > 0)
+        mates = [r for r in reasons if r['group'] == 'availability']
+        assert mates[0]['kind'] == 'driver' and mates[0]['supports'] is (impact > 0)
+        assert f"{impact:+.1f} pp" in mates[0]['text']
+        # the matchup is shown, but the projection doesn't use it (models.price_props): context, no direction
         matchup_ = [r for r in reasons if r['group'] == 'opponent']
-        assert matchup_[0]['kind'] == 'driver' and matchup_[0]['supports'] is (impact > 0)
-        assert f"{impact:+.1f} pp" in matchup_[0]['text']
+        assert matchup_[0]['kind'] == 'context' and not matchup_[0]['used_by_model']
         assert all(r['supports'] is None for r in reasons if r['kind'] == 'context')
     # a driver that barely moves the chance has no direction
-    tiny = prop_reasons(_bet(matchup=m, position='G', impacts={'opponent': 0.05}), games, _games([]))
-    assert [r for r in tiny if r['group'] == 'opponent'][0]['supports'] is None
-    assert 'less than 0.1 pp' in [r for r in tiny if r['group'] == 'opponent'][0]['text']
+    tiny = prop_reasons(_bet(**{'lineup adj': 1.0}, absences=out, lineup_at='2026-10-30T20:00:00Z',
+                             impacts={'availability': 0.05}), games,
+                        _games([]))
+    assert [r for r in tiny if r['group'] == 'availability'][0]['supports'] is None
+    assert 'less than 0.1 pp' in [r for r in tiny if r['group'] == 'availability'][0]['text']
 
 
 def test_the_price_alone_is_the_evaluated_sides():
@@ -211,7 +219,8 @@ def test_offer_context_builds_what_the_reasons_need():
                         coef={'a': 1.224, 'b': 0.092, 'c': 0.0, 'd': 0.0})
     assert bet['out_names'] == ['C Mate'] and bet['lineup_status'] == 'expected' and bet['tax'] == pytest.approx(12)
     assert bet['rest_days'] == 2 and bet['opp_rest'] == 3 and bet['position'] == 'G' and bet['starter']
-    assert bet['impacts']['environment'] > 0 and bet['impacts']['opponent'] == 0
+    # the game factors aren't part of the projection: no impact of their own
+    assert 'environment' not in bet['impacts'] and 'opponent' not in bet['impacts']
     reasons = prop_reasons(bet, games, _games([]))
     assert reasons[0]['kind'] == 'economics' and 'after the 12% stake tax' in reasons[0]['text']
 
@@ -382,7 +391,7 @@ def test_an_applied_absence_adjustment_is_always_explained(lang):
     assert not re.search(r'\d{5,}', text), text                     # never a raw ESPN id
     if lang == 'en':
         assert text.startswith("Out per RotoWire: B Mate, C Mate, D Rotowire, 1 player without a matched name.")
-        assert f"adds {adj:+.1f} PTS" in text and "one with/without difference per teammate" in text
+        assert f"adds {adj:+.1f} PTS" in text and "half the with/without difference per teammate" in text
         assert "(3 games without him)" in text and "a player without a matched name" in text
         assert "No games without C Mate: their effect is unknown" in text
         assert "games without them" not in text                     # no joint split is computed (F-14)

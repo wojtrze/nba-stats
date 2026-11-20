@@ -574,6 +574,74 @@ def matchup(allowed: pd.DataFrame, defense: str, group: str) -> Dict:
 
 # a game's expected points and its opponent's defense move a player's numbers, but much less than one to one
 # (minutes and role don't change), so each factor is damped and capped; the tracker shows whether it helps
+# --- the projection's core: minutes × per-minute rate (backtest/projection_eval.py chose every constant) ---
+
+REAL_GAME_TYPES = ['regular', 'playin', 'post']
+COMBINED = {'PA': ['PTS', 'AST'], 'PR': ['PTS', 'REB'], 'RA': ['REB', 'AST'], 'ARP': ['PTS', 'REB', 'AST']}
+MINUTES_HALF_LIFE = 5           # games: the minutes EWMA
+RATE_HALF_LIFE = 20             # games: the rate of a player without a season before
+PRIOR_GAMES, PRIOR_MINUTES = 5, 25   # last season's rate counts as 5 games of 25 minutes
+MIN_SEASON_GAMES = 3            # the season's minutes are used from the player's 3rd game of it on
+# tonight's absences: half the with/without change. The other half already shows in the role and minutes (on
+# 29 Superbet nights, none left lines with an absence 0.17 short, all of it 0.17 over, half 0.00)
+ABSENCE_WEIGHT = 0.5
+
+
+def _ewm_last(values: pd.Series, half_life: float) -> float:
+    """The EWMA of values (oldest first) after the last one; NaN when empty."""
+    return float(values.ewm(halflife=half_life).mean().iloc[-1]) if len(values) else np.nan
+
+
+def _is_starter(values: pd.Series) -> pd.Series:
+    return values.astype(str).str.lower().isin(['true', '1', '1.0', 'yes'])
+
+
+def minutes_rate(games: pd.DataFrame, season: int, starter: Optional[bool], stat: str) -> Dict[str, float]:
+    """Tonight's expectation of `stat` as minutes × per-minute rate, from the player's earlier games (oldest first:
+    prepare_logs rows of any seasons; only real games he played count). Returns {'proj min', 'rate', 'base'}.
+
+    - minutes: the EWMA (MINUTES_HALF_LIFE games) of his minutes in games of tonight's role (starter: True / False;
+      None or no such game = all games), in `season` once he has MIN_SEASON_GAMES games of it, else over every game;
+    - rate: the season's stat ÷ minutes, with last season's rate as a prior worth PRIOR_GAMES games of PRIOR_MINUTES
+      (scoring moves between seasons: 2026 started ~3 points per team below 2025); without a season before, his
+      earlier games' EWMA rate (RATE_HALF_LIFE) is the prior;
+    - a combined stat (PA, PR, RA, ARP) is the sum of its parts' bases ('rate' = base ÷ minutes)."""
+    if stat in COMBINED:
+        parts = [minutes_rate(games, season, starter, p) for p in COMBINED[stat]]
+        base = sum(p['base'] for p in parts)
+        minutes = parts[0]['proj min']
+        return {'proj min': minutes, 'rate': base / minutes if minutes else np.nan, 'base': base}
+    empty = {'proj min': np.nan, 'rate': np.nan, 'base': np.nan}
+    if stat not in games or 'MIN' not in games:
+        return empty
+    real = games[games['MIN'] > 0]
+    if 'season_type' in real:
+        real = real[real['season_type'].isin(REAL_GAME_TYPES)]
+    if real.empty:
+        return empty
+    this = real[real['season_id'] == season]
+    pool = this if len(this) >= MIN_SEASON_GAMES else real
+    role = pool
+    if starter is not None and 'starter' in pool:
+        same = pool[_is_starter(pool['starter']) == bool(starter)]
+        role = same if len(same) else pool
+    minutes = _ewm_last(role['MIN'], MINUTES_HALF_LIFE)
+
+    last = real[real['season_id'] == season - 1]
+    if last['MIN'].sum() > 0:
+        prior = last[stat].sum() / last['MIN'].sum()
+    else:
+        earlier = real[real['season_id'] < season]
+        prior = _ewm_last(earlier[stat], RATE_HALF_LIFE) / _ewm_last(earlier['MIN'], RATE_HALF_LIFE) \
+            if len(earlier) else np.nan
+    if pd.notna(prior):
+        weight = PRIOR_GAMES * PRIOR_MINUTES
+        rate = (this[stat].sum() + weight * prior) / (this['MIN'].sum() + weight)
+    else:
+        rate = this[stat].sum() / this['MIN'].sum() if this['MIN'].sum() > 0 else np.nan
+    return {'proj min': minutes, 'rate': rate, 'base': minutes * rate}
+
+
 CONTEXT_DAMPING, CONTEXT_CAP = 0.5, 0.08
 
 

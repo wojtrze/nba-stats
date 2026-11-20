@@ -73,7 +73,7 @@ def price_season(logs: pd.DataFrame, lines: pd.DataFrame, variant: str) -> pd.Da
         lineups = known_absences(logs, day, teams) if variant == 'absences' else \
             pd.DataFrame(columns=LINEUP_COLUMNS)
         table = price_props(today.drop(columns=['game_date', 'main', 'file_actual', 'player_ESPN', 'closed_date']),
-                            before, lineups, no_odds, no_games, adjust=absence_adjustments)
+                            before, lineups, no_odds, no_games, adjust=absence_adjustments, history=before)
         priced.append(table.assign(game_date=day, main=today['main'].values))
     table = pd.concat(priced, ignore_index=True).rename(columns={'player_id': 'player_id_ESPN'})
     table = table[[c for c in KEEP if c in table]]

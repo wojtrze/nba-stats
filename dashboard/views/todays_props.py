@@ -40,7 +40,8 @@ def priced(seasons, season_types, props, lineups, odds) -> pd.DataFrame:
     logs_ = top_up_logs(filtered_logs(list(seasons), list(season_types)), player_logs(),
                         max(seasons, default=CURRENT_SEASON),
                         props['player_id_ESPN'].dropna().unique())
-    table = price_props(props, logs_, lineups, odds, g, adjust=cached_adjustments)
+    table = price_props(props, logs_, lineups, odds, g, adjust=cached_adjustments,
+                        history=player_logs())
     # 🔴 + 'red flag' for lines with a reason to pass whatever the numbers say
     return flag_props(prop_movement(snapshot_history('superbet_props'), table), logs_, lineups)
 

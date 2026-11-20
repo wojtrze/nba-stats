@@ -305,12 +305,12 @@ TERMS: Dict[str, Term] = {
                    _w("Expected 30.1, line 33.5, spread 8.3 → −0.4.",
                       "Oczekiwane 30.1, linia 33.5, rozrzut 8.3 → −0.4.")),
     'proj avg': Term(_w("expected tonight", "oczekiwane dziś"),
-                     _w("What we expect the player to get tonight: his average, adjusted for teammates who are out, "
-                        "how many points his team is expected to score, and how much the opponent allows to his "
-                        "position.",
-                        "Ile spodziewamy się, że zawodnik zdobędzie dziś: jego średnia, poprawiona o nieobecnych "
-                        "kolegów z drużyny, o to, ile punktów ma zdobyć jego drużyna, i o to, ile rywal pozwala "
-                        "zdobywać na jego pozycji."),
+                     _w("What we expect the player to get tonight: the minutes he usually plays in tonight's role "
+                        "(starter or bench) times what he produces per minute this season, plus half the usual change "
+                        "when teammates who are out tonight miss games.",
+                        "Ile spodziewamy się, że zawodnik zdobędzie dziś: minuty, które zwykle gra w dzisiejszej roli "
+                        "(pierwsza piątka lub ławka), razy to, co daje na minutę w tym sezonie, plus połowa zwykłej "
+                        "zmiany, gdy dzisiejsi nieobecni koledzy nie grają."),
                      _w("Above the line: points to Over.", "Wyżej niż linia: wskazuje na Powyżej."),
                      _w("Below the line: points to Under.", "Niżej niż linia: wskazuje na Poniżej."),
                      _w("Expected 23.4, line 20.5 → leans Over.", "Oczekiwane 23.4, linia 20.5 → skłania do "
@@ -331,11 +331,11 @@ TERMS: Dict[str, Term] = {
                    "Średnia zawodnika w tej statystyce w pokazanych meczach (sezony i rodzaje meczów z Zakresu)."),
                 _w("Above the line: Over has usually won.", "Wyżej niż linia: zwykle wygrywało Powyżej."),
                 _w("Below the line: Under has usually won.", "Niżej niż linia: zwykle wygrywało Poniżej.")),
-    'adj avg': Term(_w("avg with absences", "średnia z nieobecnymi"),
-                    _w("The average plus the player's usual change when tonight's out teammates miss games "
-                       "(RotoWire). Equal to the average when nobody is out.",
-                       "Średnia plus zwykła zmiana u zawodnika, gdy dzisiejsi nieobecni koledzy nie grają "
-                       "(RotoWire). Równa średniej, gdy nikogo nie brakuje."),
+    'adj avg': Term(_w("expected with absences", "oczekiwane z nieobecnymi"),
+                    _w("Minutes in tonight's role × his per-minute rate, plus half the player's usual change when "
+                       "tonight's out teammates miss games (RotoWire). The same number as 'expected tonight'.",
+                       "Minuty w dzisiejszej roli × wydajność na minutę, plus połowa zwykłej zmiany u zawodnika, gdy "
+                       "dzisiejsi nieobecni koledzy nie grają (RotoWire). Ta sama liczba co 'oczekiwane dziś'."),
                     _w("He usually gets more without them.", "Bez nich zwykle zdobywa więcej."),
                     _w("He usually gets less without them.", "Bez nich zwykle zdobywa mniej.")),
     'avg L5': Term(_w("avg last 5", "średnia z 5"),
@@ -1241,14 +1241,21 @@ TEXTS: Dict[str, Dict[str, str]] = {
     'detail.built': _w("**How 'expected tonight' was built**", "**Jak powstało 'oczekiwane dziś'**"),
     'detail.kpi.avg': _w("Average", "Średnia"), 'detail.kpi.avg_help': _w("{games} {games|game|games|games} in the scope",
                                                                           "{games} {games|mecz|mecze|meczów} w zakresie"),
+    'detail.kpi.base': _w("Minutes × rate", "Minuty × wydajność"),
+    'detail.kpi.base_help': _w("{minutes:.1f} min expected as a {role} × {rate:.3f} {stat} per minute this season "
+                               "(last season's rate counts as 5 games)",
+                               "{minutes:.1f} min oczekiwanych jako {role} × {rate:.3f} {stat} na minutę w tym "
+                               "sezonie (zeszłoroczna wydajność liczy się jak 5 meczów)"),
+    'detail.kpi.role.starter': _w("starter", "pierwsza piątka"), 'detail.kpi.role.bench': _w("bench player", "rezerwowy"),
+    'detail.kpi.role.any': _w("player in any role", "zawodnik w dowolnej roli"),
     'detail.kpi.out': _w("+ teammates out", "+ nieobecni koledzy"),
-    'detail.kpi.out_help': _w("The player's usual change when RotoWire's out players miss games",
-                              "Zwykła zmiana u zawodnika, gdy nieobecni wg RotoWire nie grają"),
-    'detail.kpi.game': _w("+ game & matchup", "+ mecz i rywal"),
-    'detail.kpi.game_help': _w("Superbet's implied points for his team vs its usual (team points factor ×{pace:.2f}) and "
-                               "what the opponent allows to his position (×{matchup:.2f}, {word})",
-                               "Punkty drużyny z kursu Superbetu wobec jej zwykłej liczby (czynnik punktów drużyny "
-                               "×{pace:.2f}) i ile rywal pozwala na jego pozycji (×{matchup:.2f}, {word})"),
+    'detail.kpi.out_help': _w("Half the player's usual change when RotoWire's out players miss games (the other half "
+                              "already shows in his role and minutes). Superbet's team points and the matchup "
+                              "({word}) are context only: they didn't make the projection closer to "
+                              "the results",
+                              "Połowa zwykłej zmiany u zawodnika, gdy nieobecni wg RotoWire nie grają (druga połowa "
+                              "jest już w jego roli i minutach). Punkty drużyny z kursu Superbetu i rywal "
+                              "({word}) to tylko kontekst: nie przybliżały projekcji do wyników"),
     'detail.kpi.line': _w("Line", "Linia"), 'detail.kpi.line_delta': _w("{gap:+.1f} vs expected",
                                                                          "{gap:+.1f} wobec oczekiwanego"),
     'detail.open_player': _w("Open in Player history", "Otwórz w Historii zawodnika"),
@@ -1634,12 +1641,14 @@ TEXTS: Dict[str, Dict[str, str]] = {
                           "{avg:.1f}, mediana {median:.1f}"),
     # tonight's absences: the model adds one shrunk with/without difference per teammate (metrics.absence_terms);
     # it never looks at games without all of them at once
-    'reason.teammates': _w("Out per RotoWire: {names}. The model adds {adj:+.1f} {stat} to his average: one "
-                           "with/without difference per teammate, each shrunk toward 0 the more, the fewer games it "
-                           "rests on, added up ({parts}). A description of his past games, not their effect",
-                           "Nie grają (RotoWire): {names}. Model dodaje {adj:+.1f} {stat} do jego średniej: osobna "
-                           "różnica z/bez dla każdego kolegi, każda ściągnięta do 0 tym mocniej, im mniej meczów za "
-                           "nią stoi, zsumowane ({parts}). Opis jego dawnych meczów, nie ich wpływ"),
+    'reason.teammates': _w("Out per RotoWire: {names}. The model adds {adj:+.1f} {stat} to its projection: half "
+                           "the with/without difference per teammate (the other half already shows in his role and "
+                           "minutes), each shrunk toward 0 the more, the fewer games it rests on, added up ({parts}). "
+                           "A description of his past games, not their effect",
+                           "Nie grają (RotoWire): {names}. Model dodaje {adj:+.1f} {stat} do swojej projekcji: "
+                           "połowę różnicy z/bez dla każdego kolegi (druga połowa jest już w jego roli i minutach), "
+                           "każda ściągnięta do 0 tym mocniej, im mniej meczów za nią stoi, zsumowane ({parts}). "
+                           "Opis jego dawnych meczów, nie ich wpływ"),
     'reason.teammates_part': _w("{mate} {change:+.1f} ({n} {n|game|games|games} without him)",
                                 "{mate} {change:+.1f} ({n} {n|mecz|mecze|meczów} bez niego)"),
     'reason.teammates_fewest': _w("fewest games without one of them: {n}", "najmniej meczów bez jednego z nich: {n}"),

@@ -116,10 +116,13 @@ def test_lineup_projection_uses_the_shrunk_absence_change():
     from metrics import absence_adjustments
     logs = _team_logs()
     none = whatif.lineup_projection(_row(), logs, [])
-    assert none['lineup adj'] == 0 and np.isclose(none['proj avg'], 22.0 * 1.02 * 0.98)
+    # no base in the row: the average stands in for it; the game factors aren't used
+    assert none['lineup adj'] == 0 and np.isclose(none['proj avg'], 22.0)
+    with_base = pd.concat([_row(), pd.Series({'base': 20.0})])
+    assert np.isclose(whatif.lineup_projection(with_base, logs, [])['proj avg'], 20.0)
     two = whatif.lineup_projection(_row(), logs, [2])
-    expected = absence_adjustments(logs, [1], (2,), ['PTS']).loc[1, 'PTS']
-    assert np.isclose(two['lineup adj'], expected) and np.isclose(expected, 6 * 3 / (3 + 5))
+    expected = 0.5 * absence_adjustments(logs, [1], (2,), ['PTS']).loc[1, 'PTS']      # ABSENCE_WEIGHT
+    assert np.isclose(two['lineup adj'], expected) and np.isclose(expected, 0.5 * 6 * 3 / (3 + 5))
     assert two['proj avg'] > none['proj avg']
     assert whatif.lineup_projection(_row(), logs, [1])['lineup adj'] == 0          # the player himself is skipped
 

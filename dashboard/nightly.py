@@ -179,7 +179,7 @@ def recompute_props(rows: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFrame,
                    & games['season_type'].isin(DEFAULT_SEASON_TYPES)]
     lines = rows[['name', 'name_ESPN', 'home', 'away', 'bet_type', 'line', 'event_id', 'start_time', 'over_odds',
                   'under_odds', 'player_id_ESPN']]
-    table = flag_props(price_props(lines, scope, lineups, game_odds, played), scope, lineups)
+    table = flag_props(price_props(lines, scope, lineups, game_odds, played, history=before), scope, lineups)
     return (table if full else model_columns(table)).set_axis(rows.index)
 
 

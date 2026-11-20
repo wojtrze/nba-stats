@@ -136,21 +136,28 @@ np. „Gracz X, PTS, linia 22,5, Over 1,85 / Under 1,95”.
 
 ### 3.3 Oczekiwana liczba na dziś (`proj avg`)
 
+Od modelu `2026-11-20-minutes` (`metrics.minutes_rate`, wybór i stałe: `backtest/projection_eval.py`):
+
 ```
-adj avg  = avg + lineup adj
-proj avg = adj avg × pace factor × matchup factor
+base     = proj min × rate
+proj avg = adj avg = base + lineup adj
 ```
 
-- **`lineup adj` (nieobecni koledzy):** dla każdego kolegi, którego RotoWire podaje z szansą gry **≤ 25%**,
-  liczymy różnicę średniej gracza w meczach bez tego kolegi i z nim (tylko w okresach, gdy obaj byli w drużynie).
-  Różnicę ściągamy do zera wagą `n / (n + 5)`, gdzie n to liczba meczów bez kolegi, i sumujemy po wszystkich
-  nieobecnych. Gracze „questionable” (szansa 26–99%) nie wchodzą do tej korekty.
-- **`pace factor` (tempo i oczekiwane punkty drużyny):** stosunek sumy drużyny implikowanej przez Superbet
-  (`total/2 ∓ handicap/2`) do zwykłej średniej punktów drużyny.
-- **`matchup factor` (rywal):** ile dana obrona oddaje grupie pozycji gracza (G/F/C) w tej statystyce, w stosunku do
-  średniej ligi.
-- Oba czynniki są **tłumione o połowę i ograniczone do ±8%**: `1 + clip(0,5 × (stosunek − 1), −8%, +8%)`. Mecz
-  i rywal zmieniają liczby gracza znacznie słabiej niż 1:1, bo jego minuty i rola zostają te same.
+- **`proj min` (minuty):** EWMA (połowiczny zanik 5 meczów) minut gracza w meczach w **dzisiejszej roli**
+  (pierwsza piątka wg RotoWire albo ławka; gdy RotoWire nie podaje jeszcze piątki drużyny, rola z jego ostatniego
+  meczu). Od 3. meczu sezonu tylko mecze tego sezonu, wcześniej wszystkie wcześniejsze mecze.
+- **`rate` (wydajność na minutę):** statystyka ÷ minuty w tym sezonie, z zeszłoroczną wydajnością jako priorem
+  wartym 5 meczów po 25 minut (punktacja zmienia się między sezonami: 2026 zaczął się ~3 pkt na drużynę niżej
+  niż 2025). Statystyki łączone (PA, PR, RA, PRA) to suma części.
+- **`lineup adj` (nieobecni koledzy):** **połowa** (`ABSENCE_WEIGHT`) sumy różnic z/bez dla każdego kolegi, którego
+  RotoWire podaje z szansą gry **≤ 25%** (tylko w okresach, gdy obaj byli w drużynie; każda różnica ściągnięta do
+  zera wagą `n / (n + 5)`). Druga połowa jest już w roli i minutach: na 29 nocach Superbetu linie z nieobecnymi
+  bez korekty wypadały 0,17 za nisko, z całą korektą 0,17 za wysoko, z połową 0,00.
+- **`pace factor` i `matchup factor`** są nadal liczone i pokazywane, ale **nie wchodzą do projekcji**: czynnik rywala
+  pogarszał projekcję w każdej statystyce poza REB, a czynnik tempa niczego nie zmieniał.
+- Wynik na 29 nocach Superbetu (11 848 linii): średni błąd 3,508 → 3,430 (zakres −0,118…−0,040), bliżej wyniku niż
+  linia 47,3% → 48,5%, w granicach 10% wyniku 30,2% → 31,3% (linia Superbetu: błąd 3,289, 32,5%). Na logach
+  2024–2026 błąd −4% (PTS −0,18, PRA −0,34).
 
 ### 3.4 Surowa szansa modelu (`raw model %`)
 
