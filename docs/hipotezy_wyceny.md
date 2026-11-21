@@ -310,13 +310,58 @@ podatku. Nie wpływa na decyzje ani gwiazdki.
 
 ---
 
+## H3: Suma punktów drużyny a linie PTS jej graczy (mechanizm B)
+
+**Data D: 2026-11-20** (reguła zapisana 21.11, przed pierwszym meczem nocy 21.11). Ocena na nocach od 21.11, co
+najmniej 10. Kod: `dashboard/team_total.py`, ocena: `python -m backtest.team_total` → `data/backtest/team_total.md`.
+
+**Skąd:** rozmowa 20.11 o podejściach lepszych niż przepis eksperta (H10). Rynki meczowe (spread, total, sumy
+drużyn) są najpłynniejsze, a linie graczy Superbet może ustawiać osobno.
+
+**Mechanizm:** linie PTS graczy jednej drużyny nie składają się w sumę drużyny, którą wycenia sam Superbet; jeśli suma
+drużyny jest dokładniejsza, linie graczy są za nisko (albo za wysoko) i Over (Under) wygrywa częściej, niż mówi cena.
+
+**Definicja** (przy każdym odczycie meczu, tylko dane sprzed tego odczytu):
+1. **T:** punkty drużyny z drabinki HOME_TOTAL / AWAY_TOTAL (linia, przy której szansa Over bez marży = 50%,
+   interpolowana; bez niej z TOTAL i SPREAD).
+2. **S:** suma median linii PTS graczy drużyny (linia + kwantyl normalny szansy bez marży × (3,5 + 0,2 × linia)).
+3. **Pozostali:** punkty pozostałych graczy drużyny (ostatnia drużyna w logach) z jej 10 ostatnich meczów / 10
+   (opuszczony mecz = 0), bez graczy z linią PTS i bez Out w najnowszej wersji RotoWire (szansa gry ≤ 25%).
+4. **Różnica** = T − S − pozostali − OFFSET (OFFSET = 0: średnia różnica w rozpoznaniu −0,8 pkt).
+5. **Sygnał (test a):** każda linia PTS drużyny z |różnicą| ≥ 6 pkt, strona zgodna ze znakiem (Over, gdy > 0), bez
+   progu opłacalności; liczona i oceniana jak H1/H2/H4/H5/H6/H10 (`mispricing_eval.signals` i `economic`).
+
+**Rozpoznanie** (30 nocy do 20.11, opis):
+- **Pierwsza próba (20.11, skrypt roboczy)** dała obiecujący obraz: korelacja różnicy z wynikiem graczy wobec ich linii
+  0,26, strona różnicy +3,5 pp ponad cenę (95%: 1,9…5,2). Ale „pozostałych” liczyła z graczy, **którzy tej nocy
+  zagrali** – to wiedza z przyszłości. Sprawdzenie 21.11: z faktycznymi punktami pozostałych korelacja 0,47, z
+  udziałem (kto zagrał) 0,22, z danymi sprzed meczu **0,04** (inna wersja przed meczem – rotacja z 3 ostatnich
+  meczów – −0,03). Cały ślad brał się z tego, kto zagra i ile rzucą rezerwowi, czego przed meczem nie wiadomo.
+- **Reguła z D:** 1379 sygnałów, wygrało 51,6% (+1,3 pp ponad cenę), ROI po podatku **−16,2%** (99%: −20,1…−11,2),
+  CLV po podatku **−18,6%** (365 z zamknięciem). Według progów rejestru byłoby to „odrzucona”.
+- **Wg |różnicy| przy ostatnim odczycie:** od −2,4 do +1,3 pp, żaden przedział nie jest w całości nad zerem; większa
+  różnica nie daje więcej.
+- **Na poziomie drużyny:** korelacja różnicy z (punkty graczy − ich linie) 0,04, z (punkty drużyny − T) 0,03.
+- **Jako składnik modelu** (część c, dopasowanie na 70% nocy, ocena na 30%): przesunięcie linii o jej udział w
+  różnicy pogarsza log loss (+0,0023 wobec rynku, 95%: +0,0002…+0,0050; współczynnik −0,13, czyli przeciwny znak).
+  Nie wchodzi do modelu ani do ablacji.
+- **Mecze do jednej bramki (pomysł obok, 20.11, skrypt roboczy):** Under u graczy z ≥ 30 min przy |spreadzie| > 12
+  +3 pp ponad przechył rynku, zakres obejmuje 0; reszta pasm ≈ 0. Superbet wycenia ryzyko wyraźnej przewagi.
+
+**Przewidywanie zapisane przed oceną:** ❌ odrzucona (bez informacji z przyszłości mechanizmu nie widać; trzeba
+8–11 pp).
+
+**W aplikacji:** nic (tylko ocena).
+
+---
+
 ## H3–H9: definicje do uzupełnienia przed ich testem
 
 Każda dostanie tu własną datę D, progi i wynik rozpoznania, zanim jej detektor trafi do aplikacji.
 
 | Id | Mechanizm | Krótko | Główna miara | Zależność od danych |
 |---|---|---|---|---|
-| **H3** | B | Zawodnicy a drużyna: suma median PTS graczy wobec sumy drużyny; drabinki meczowe (suma, handicap, sumy drużyn) między sobą | zamknięcie po podatku | ok. 7 graczy z linią PTS na drużynę, więc potrzebna poprawka na brakujących |
+| **H3** | B | Opisana wyżej (D = 2026-11-20); pomysł z drabinkami meczowymi między sobą (suma, handicap, sumy drużyn) nie był sprawdzany | – | – |
 | **H4** | A | Opóźnienie po wiadomości z RotoWire (gracz z ≥ 20 min: nie zagra, zmiana piątki, powrót). Etap 1 opisuje wielkość ruchu i opóźnienie; etap 2 to detektor, tylko gdy typowy ruch ≥ próg po podatku | zamknięcie po podatku i czy kurs był do wzięcia | archiwum: mediana 3 zapisy na mecz, najbliższy ok. 2,9 h przed startem, więc opóźnienia nie zmierzymy; potrzebne kursy z harmonogramu (od 1.11). Pełne noce z harmonogramu na 10.11: tylko 2.11, 4.11 i 9.11 (przerwy: zawieszona konsola 5–7.11, uśpiony komputer 8–10.11), więc etap 1 czeka na ok. 10 pełnych nocy. Wcześniej **przegląd przypadków** (niżej) |
 | **H7** | D | Dryf wczesnych linii (statystyki poboczne, rezerwowi, kurs > 6 h przed meczem): czy linia idzie do zamknięcia w stronę naszej oceny w > 50% przypadków | odsetek ruchu w stronę oceny i zamknięcie po podatku | archiwum i harmonogram |
 | **H8** | D | Ruchy bez wiadomości (zmiana linii bez zmiany w RotoWire w ciągu 60 min przed nią: gramy stronę, która zyskała) oraz Overy PTS u graczy z największym udziałem w akcjach | tylko ROI po podatku (zamknięcie może być skrzywione) | ok. 33 nocy lub więcej |
