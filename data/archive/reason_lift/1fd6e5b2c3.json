@@ -1,0 +1,114 @@
+{
+  "features": {
+    "blowout": {
+      "status": "untested",
+      "why": "needs the spread as of each line (2022/23 has no game odds)"
+    },
+    "hits_l10": {
+      "beta_2022": -0.09190187092676667,
+      "over_sign": -1,
+      "status": "no_lift",
+      "vs_model_2022": 4.072140387064728e-05
+    },
+    "minutes": {
+      "beta_2022": -0.05351432828075082,
+      "over_sign": -1,
+      "status": "no_lift",
+      "vs_model_2022": -0.00019239707353905686
+    },
+    "rest": {
+      "beta_2022": -0.02285460868758886,
+      "over_sign": -1,
+      "status": "no_lift",
+      "vs_model_2022": 0.0002445277102785974
+    },
+    "role": {
+      "status": "untested",
+      "why": "needs RotoWire's role as of each line"
+    },
+    "venue": {
+      "beta_2022": 0.03310073878981005,
+      "over_sign": 1,
+      "status": "no_lift",
+      "vs_model_2022": -2.193567219596345e-06
+    },
+    "volume": {
+      "beta_2022": -0.15733740490369233,
+      "over_sign": -1,
+      "status": "no_lift",
+      "vs_model_2022": 0.00010201428760802087
+    },
+    "vs_opp": {
+      "beta_2022": -0.011063341572510932,
+      "over_sign": -1,
+      "status": "no_lift",
+      "vs_model_2022": 2.3766085201962167e-05
+    }
+  },
+  "meta": {
+    "calibration": "refitted on each source's fit range (backtest/calibrate.fit_coefficients); not the dashboards' calibration file",
+    "code_version": {
+      "commit": "8d0d73efffd51c049e5c66852c98444587f14b48",
+      "dirty": false
+    },
+    "created_at": "2026-11-19T18:13:40Z",
+    "features": {
+      "blowout": {
+        "definition": null,
+        "tested": false
+      },
+      "hits_l10": {
+        "definition": "33b496773b2e",
+        "tested": true
+      },
+      "minutes": {
+        "definition": "1c936ccec54c",
+        "tested": true
+      },
+      "rest": {
+        "definition": "a4b326f5aa95",
+        "tested": true
+      },
+      "role": {
+        "definition": null,
+        "tested": false
+      },
+      "venue": {
+        "definition": "2f14ac23a0fc",
+        "tested": true
+      },
+      "volume": {
+        "definition": "1377b81f4977",
+        "tested": true
+      },
+      "vs_opp": {
+        "definition": "13d5bed8dd4b",
+        "tested": true
+      }
+    },
+    "model_version": "2026-10-26-count",
+    "ranges": {
+      "2022": {
+        "fit": [
+          "2022-11-09",
+          "2023-01-31"
+        ],
+        "test": [
+          "2023-02-01",
+          "2023-05-08"
+        ]
+      },
+      "superbet": {
+        "fit": [
+          "2026-10-20",
+          "2026-11-09"
+        ],
+        "test": [
+          "2026-11-10",
+          "2026-11-18"
+        ]
+      }
+    },
+    "schema_version": 1
+  }
+}
