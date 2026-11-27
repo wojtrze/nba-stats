@@ -15,7 +15,7 @@ import streamlit as st
 
 from decisions import game_decisions
 from espn_scraper import CURRENT_SEASON
-from loaders import (clear_rotowire, fetch_rotowire, filtered_logs, games, name_resolver, player_logs,
+from loaders import (cached_on, clear_rotowire, fetch_rotowire, filtered_logs, games, name_resolver, player_logs,
                      reload_superbet_snapshot, snapshot_history, superbet_offers)
 from metrics import ACTIVE_PROFILE, absence_adjustments, absence_impact, reprice_net
 from models import GAME_DEFAULTS, GAME_TYPES, calibration_status, game_ratings, price_games, price_props, top_up_logs
@@ -113,7 +113,8 @@ def priced_props(seasons: List[int], season_types: List[str]) -> pd.DataFrame:
     return table if profile == ACTIVE_PROFILE else reprice_net(table, profile)
 
 
-@st.cache_data(ttl=600, show_spinner="Settling the rated lines of past nights...")
+@cached_on('superbet_props', 'superbet_prop_quotes', 'superbet_event_fetches',
+           spinner="Settling the rated lines of past nights...")
 def shortlist_record() -> pd.DataFrame:
     """tracking.settle_stars of every saved fetch: each line's last fetch before tip-off with its stars and result,
     and its CLV where the scheduled fetches saw the close (fetch_loop's quotes); the Overview's record line and
@@ -123,7 +124,7 @@ def shortlist_record() -> pd.DataFrame:
 
 
 
-@st.cache_data(ttl=600, show_spinner="Settling the saved lines...")
+@cached_on('superbet_props', spinner="Settling the saved lines...")
 def settled_lines(seasons: tuple, season_types: tuple) -> pd.DataFrame:
     """core.analysis.settle_lines of every saved line (first fetch before tip-off), with the pre-game averages and
     spreads over the chosen seasons and game types: Results and the Props what-if's look-back read it."""
@@ -132,14 +133,14 @@ def settled_lines(seasons: tuple, season_types: tuple) -> pd.DataFrame:
                         average_logs=filtered_logs(list(seasons), list(season_types)))
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@cached_on('superbet_props', 'superbet_prop_quotes', stats=False, calibration=False)
 def odds_paths():
     """whatif.odds_paths of every saved line: the what-if's history line reads it."""
     import whatif
     return whatif.odds_paths(snapshot_history('superbet_props'), snapshot_history('superbet_prop_quotes'))
 
 
-@st.cache_data(ttl=600, show_spinner="Settling the saved lines...")
+@cached_on('superbet_props', spinner="Settling the saved lines...")
 def settled_props() -> pd.DataFrame:
     """tracking.settle_props of every saved line (its first fetch before tip-off, with the last line before it);
     the Overview's streaks read it."""
@@ -192,13 +193,19 @@ def priced_games(prior_games=GAME_DEFAULTS['prior_games'], regress=GAME_DEFAULTS
     return _priced_games(game_odds(), lineups(), prior_games, regress, home_court, shrink, out_max, all_lines)
 
 
-@st.cache_data(ttl=600, show_spinner="Reading tonight's RotoWire news...")
 def news_tonight(night: Optional[str] = None) -> List[Dict]:
     """news.find_events and news.reactions of tonight (today's US/Eastern date, or `night`) from the saved RotoWire versions and
     the scheduled Superbet reads: one dict per event (its fields, then reactions' before / after / close / own /
     others / lines), newest news first. The Overview's news window reads it; nothing is fetched here."""
-    import news
+    # the date is fixed before the cache, so "tonight" moves on at midnight even when no new data came in
     night = pd.Timestamp(night) if night else pd.Timestamp.now(tz='US/Eastern').tz_localize(None).normalize()
+    return _news_tonight(night)
+
+
+@cached_on('rotowire_lineups', 'superbet_event_fetches', 'superbet_props', 'superbet_prop_quotes', calibration=False,
+           spinner="Reading tonight's RotoWire news...")
+def _news_tonight(night: pd.Timestamp) -> List[Dict]:
+    import news
     rw = snapshot_history('rotowire_lineups')
     fetches = snapshot_history('superbet_event_fetches')
     if rw.empty or fetches.empty:
@@ -243,7 +250,8 @@ def news_record() -> Dict:
         return {}
 
 
-@st.cache_data(ttl=600, show_spinner="Reading tonight's absences...")
+@cached_on('rotowire_lineups', 'superbet_props', 'superbet_event_fetches', 'superbet_prop_quotes',
+           calibration=False, spinner="Reading tonight's absences...")
 def _absence_window(night, seasons: tuple, season_types: tuple, priced: pd.DataFrame) -> Dict:
     import absence_window
     import news

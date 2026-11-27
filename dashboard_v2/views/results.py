@@ -11,7 +11,7 @@ from core.state import language
 from core.ui import PAGES, go_to_data, kpis, page_header, stop, table
 from glossary import column_config, tinted
 from i18n import label, t, value
-from loaders import filtered_logs, games, player_logs, snapshot_history
+from loaders import cached_on, filtered_logs, games, player_logs, snapshot_history
 import night_view
 from tracking import (EVERY_LINE, RECOMPUTED, RECORDED, calibration, edge_bucket, paper_accumulators,
                       results_table, settle_games, star_nights, star_scorecard, threshold_table)
@@ -38,7 +38,7 @@ def settled(seasons, season_types) -> pd.DataFrame:
     return settled_lines(tuple(seasons), tuple(season_types))
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@cached_on('superbet_game_odds', calibration=False)
 def settled_games() -> pd.DataFrame:
     return settle_games(snapshot_history('superbet_game_odds'), games())
 

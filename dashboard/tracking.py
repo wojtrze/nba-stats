@@ -110,6 +110,15 @@ def _hours_before_tip(fetched_at: pd.Series, start_time: pd.Series) -> pd.Series
     return (gap.dt.total_seconds() / 3600).round(1)
 
 
+def _of_events(snapshots: pd.DataFrame, bets: pd.DataFrame) -> pd.DataFrame:
+    """The snapshot rows of the bets' games only. Everything settling reads from the snapshots (last quote, main
+    line, same-fetch odds) is matched on keys that start with event_id, so other games' rows can't change the
+    result; a night's settling then skips the season's other fetches (15 s of a 150 s night on 27.11)."""
+    if snapshots.empty or bets.empty or 'event_id' not in snapshots or 'event_id' not in bets:
+        return snapshots
+    return snapshots[snapshots['event_id'].isin(bets['event_id'].unique())]
+
+
 def _last_quote(snapshots: pd.DataFrame, key, cols) -> pd.DataFrame:
     """Each key's last snapshot before tip-off: `cols` and 'last h before tip'."""
     if snapshots.empty:
@@ -313,6 +322,8 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     last quote. closing: closing_props output, which adds CLV_COLUMNS (add_clv)."""
     if bets is None:
         bets = _open_and_close(snapshots, PROP_KEY)[0] if len(snapshots) else snapshots
+    else:
+        snapshots = _of_events(snapshots, bets)
     if bets.empty:
         return pd.DataFrame(columns=PROP_RESULT_COLUMNS)
     keep = [c for c in BET_COLUMNS if c in bets]
@@ -335,7 +346,14 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
     stats = sorted(set(bets['bet_type']) & set(lines.columns))
     bets = bets.merge(lines[['player_id', 'game_date'] + stats].drop_duplicates(['player_id', 'game_date']),
                       on=['player_id', 'game_date'], how='left')
-    bets['actual'] = [row[t] if t in stats else np.nan for t, (_, row) in zip(bets['bet_type'], bets.iterrows())]
+    # each line's own stat (column by column: iterrows over a season's lines took 6 s); a list, so pandas infers
+    # the column's type as it did from the per-row values
+    actual = np.full(len(bets), np.nan, dtype=object)
+    bet_types = bets['bet_type'].to_numpy()
+    for t in stats:
+        mine = bet_types == t
+        actual[mine] = bets[t].to_numpy()[mine]
+    bets['actual'] = list(actual)
 
     stored = set(zip(games['date'].dt.normalize(), games['home'], games['away']))
     in_games = pd.Series([k in stored for k in zip(bets['game_date'], bets['home'], bets['away'])], index=bets.index)
@@ -371,12 +389,36 @@ def settle_props(snapshots: pd.DataFrame, logs: pd.DataFrame, games: pd.DataFram
 
 
 def _main_keys(snapshots: pd.DataFrame) -> set:
-    """(event, market, side, line) of every outcome that was Superbet's main line in some snapshot."""
-    keys = set()
-    for _, snap in snapshots.groupby('fetched_at'):
-        for r in main_lines(snap.drop(columns='fetched_at').to_dict('records')):
-            keys.add((r['event_id'], r['market'], r['side'], None if pd.isna(r['line']) else r['line']))
-    return keys
+    """(event, market, side, line) of every outcome that was Superbet's main line in some snapshot: in each fetch,
+    superbet_fetcher.main_lines' choice, made for all fetches at once (the per-fetch loop took 15 s for a season).
+    The same rule: the two sides of a line (a spread's by the home handicap; a side seen twice counts its last
+    row) priced closest to each other, the first such line on a tie, and a first line whose gap can't be computed
+    (a missing price) is never replaced (main_lines compares with <). test_tracking checks it against main_lines."""
+    if snapshots.empty:
+        return set()
+    df = snapshots[['fetched_at', 'event_id', 'market', 'side', 'line', 'odds']].reset_index(drop=True)
+    df['key_line'] = df['line'].where((df['market'] != 'SPREAD') | (df['side'] == 'home'), -df['line'])
+    df['order'] = np.arange(len(df))
+    pair = ['fetched_at', 'event_id', 'market', 'key_line']
+    group = ['fetched_at', 'event_id', 'market']
+    df['first'] = df.groupby(pair, dropna=False, sort=False)['order'].transform('min')
+    sides = df.drop_duplicates(pair + ['side'], keep='last').sort_values(['first', 'order'], kind='stable')
+    sides = sides[sides.groupby(pair, dropna=False, sort=False)['side'].transform('size') == 2]
+    if sides.empty:
+        return set()
+    odds = sides['odds'].to_numpy(dtype=float)
+    pairs = sides.iloc[::2][pair + ['first']].assign(gap=np.abs(odds[::2] - odds[1::2]))
+    pairs = pairs.sort_values('first', kind='stable')
+    opener = pairs.groupby(group, dropna=False, sort=False).head(1)
+    stuck = opener[opener['gap'].isna()]
+    closest = pairs[pairs['gap'].notna()].sort_values(['gap', 'first'], kind='stable') \
+        .groupby(group, dropna=False, sort=False).head(1)
+    closest = closest.merge(stuck[group], on=group, how='left', indicator=True)
+    chosen = pd.concat([stuck['first'], closest.loc[closest['_merge'] == 'left_only', 'first']])
+    main = sides[sides['first'].isin(set(chosen))]
+    return {(e, m, s, None if pd.isna(l) else l)
+            for e, m, s, l in zip(main['event_id'].tolist(), main['market'].tolist(), main['side'].tolist(),
+                                  main['line'].tolist())}
 
 
 def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd.DataFrame] = None,
@@ -389,6 +431,8 @@ def settle_games(snapshots: pd.DataFrame, games: pd.DataFrame, bets: Optional[pd
     GAME_CLV_COLUMNS (add_game_clv)."""
     if bets is None:
         bets = _open_and_close(snapshots, GAME_KEY)[0] if len(snapshots) else snapshots
+    else:
+        snapshots = _of_events(snapshots, bets)
     if bets.empty:
         return pd.DataFrame(columns=GAME_RESULT_COLUMNS)
     keep = [c for c in BET_COLUMNS if c in bets]

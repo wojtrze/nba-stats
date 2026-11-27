@@ -120,3 +120,54 @@ def test_failed_lineups_fetch_saves_nothing(data_dir):
     out = loaders.fetch_rotowire()                           # the fixture's RotoWire is offline
     assert not out['live'] and out['error'] == "offline" and out['lineups'].empty
     assert _saved('rotowire_lineups').empty and not os.path.exists(loaders.RUN_LOG)
+
+
+# --- results recomputed when what they read changes (loaders.cached_on), not every 10 minutes ---
+
+def test_inputs_signature_changes_with_every_input(data_dir):
+    from espn_scraper.storage import append_snapshot
+    from models import CALIBRATION_FILE
+    first = loaders.inputs_signature('superbet_props')
+    append_snapshot('superbet_props', pd.DataFrame({'fetched_at': ['2026-11-27T10:00:00Z'], 'name': ['A']}))
+    fetched = loaders.inputs_signature('superbet_props')
+    assert fetched != first
+    os.makedirs(os.path.join('data', '2026'), exist_ok=True)
+    with open(os.path.join('data', '2026', 'games.csv'), 'w') as f:
+        f.write('game_id\n1\n')
+    stats = loaders.inputs_signature('superbet_props')
+    assert stats != fetched and loaders.inputs_signature('superbet_props', stats=False) != stats
+    os.makedirs(os.path.dirname(CALIBRATION_FILE), exist_ok=True)
+    with open(CALIBRATION_FILE, 'w') as f:
+        f.write('{}')
+    assert loaders.inputs_signature('superbet_props') != stats
+    assert loaders.inputs_signature('superbet_props', calibration=False) == \
+        loaders.inputs_signature('superbet_props', calibration=False)
+
+
+def test_cached_on_recomputes_only_when_an_input_changes(data_dir):
+    from espn_scraper.storage import append_snapshot
+    calls = []
+
+    @loaders.cached_on('superbet_props', stats=False, calibration=False)
+    def counted(x):
+        calls.append(x)
+        return x * 2
+
+    assert counted(2) == 4 and counted(2) == 4 and calls == [2]          # a second page load: no work
+    append_snapshot('superbet_props', pd.DataFrame({'fetched_at': ['2026-11-27T10:00:00Z'], 'name': ['A']}))
+    assert counted(2) == 4 and calls == [2, 2]                            # a new fetch: computed again at once
+    counted.clear()
+    assert counted(2) == 4 and calls == [2, 2, 2]
+
+
+def test_two_cached_functions_never_share_results(data_dir):
+    # every wrapped function has the same inner source; st.cache_data must still tell them apart
+    @loaders.cached_on('superbet_props', stats=False, calibration=False)
+    def one():
+        return 'one'
+
+    @loaders.cached_on('superbet_props', stats=False, calibration=False)
+    def two():
+        return 'two'
+
+    assert (one(), two(), one()) == ('one', 'two', 'one')

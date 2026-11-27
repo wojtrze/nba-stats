@@ -13,7 +13,7 @@ import streamlit as st
 from decisions import MAX_STARS, star_text
 from glossary import column_config, tinted
 from i18n import t, value
-from loaders import games, name_resolver, player_logs, snapshot_history
+from loaders import cached_on, games, name_resolver, player_logs, snapshot_history
 from metrics import grouped_rates
 from nightly import (GROUP_AXES, pre_tip, group_outcomes, last_lines_since, lineups_before_tip, night_games,
                      night_props, night_summary, nights, recompute_projection, recompute_props)
@@ -65,10 +65,14 @@ RATE_FORMATS = {'bets': '%d', 'hit %': '%.0f', 'ci low %': '%.0f', 'ci high %': 
                 'ROI % std': '%+.1f', 'break-even %': '%.1f', 'break-even % std': '%.1f', 'avg odds': '%.2f'}
 
 
-@st.cache_data(ttl=600, show_spinner="Settling the night...")
+@cached_on('rotowire_lineups', 'superbet_game_odds', 'superbet_props', spinner="Settling the night...",
+           max_entries=64)
 def _night(night: str):
     """One night's lines and games; projections the fetches didn't save are recomputed."""
+    # only the night's versions: lineups_before_tip reads nothing else, and matching the season's names took 120 s
     rotowire = snapshot_history('rotowire_lineups')
+    if len(rotowire):
+        rotowire = rotowire[pd.to_datetime(rotowire['game_date']) == pd.Timestamp(night)]
     rotowire = name_resolver().add_ids(rotowire) if len(rotowire) else rotowire
     odds_snapshots = snapshot_history('superbet_game_odds')
 
@@ -90,7 +94,7 @@ def _night(night: str):
     return stamp(props), {'games': stamp(game_part['games']), 'outcomes': game_part['outcomes']}
 
 
-@st.cache_data(ttl=600, show_spinner="Rating the nights...")
+@cached_on('superbet_props', spinner="Rating the nights...")
 def _rated() -> pd.DataFrame:
     """Every line's stars and the starred side's result (tracking.settle_stars), the same record as Results →
     Ratings."""
@@ -146,7 +150,7 @@ def latest_night(now=None) -> Dict:
 SAVED_SINCE = '2026-10-21'
 
 
-@st.cache_data(ttl=600, show_spinner="Counting the season...")
+@cached_on('superbet_props', spinner="Counting the season...")
 def season_spot_on() -> Dict:
     """insights.spot_on_stats of every line since SAVED_SINCE, settled in one go ({} when none)."""
     from insights import spot_on_stats

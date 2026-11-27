@@ -299,3 +299,38 @@ def test_star_nights_counts_each_nights_4_star_lines():
     assert out.loc['d1', 'price %'] == 55
     assert out.loc['d2', 'bets'] == 2 and out.loc['d2', 'won %'] == 100 and out.loc['d2', 'won − price pp'] == 45
     assert star_nights(settled.iloc[0:0]).empty
+
+
+# --- the main line of each fetch, for all fetches at once (tracking._main_keys) ---
+
+def _main_keys_by_fetch(snapshots):
+    """What _main_keys did before (one superbet_fetcher.main_lines call per fetch), as the reference."""
+    from superbet_fetcher import main_lines
+    keys = set()
+    for _, snap in snapshots.groupby('fetched_at'):
+        for r in main_lines(snap.drop(columns='fetched_at').to_dict('records')):
+            keys.add((r['event_id'], r['market'], r['side'], None if pd.isna(r['line']) else r['line']))
+    return keys
+
+
+@pytest.mark.parametrize('seed', range(30))
+def test_main_keys_choose_what_main_lines_chooses(seed):
+    from tracking import _main_keys
+    rng = np.random.default_rng(seed)
+    rows = []
+    for f in range(40):
+        for event in (1, 2):
+            for market, sides in (('ML', ('home', 'away')), ('SPREAD', ('home', 'away')), ('TOTAL', ('over', 'under'))):
+                for line in ([None] if market == 'ML' else rng.choice([-3.5, -2.5, 1.5, 220.5, 221.5], 3)):
+                    for side in sides:
+                        if rng.random() < 0.1:
+                            continue                                  # one side missing: not a pair
+                        own = None if line is None else (-line if market == 'SPREAD' and side == 'away' else line)
+                        odds = rng.choice([1.8, 1.9, 1.95, 2.0, np.nan], p=[.3, .3, .2, .15, .05])   # ties, gaps
+                        rows.append({'fetched_at': f'2026-11-{1 + f // 20:02d}T{f % 20:02d}:00:00Z', 'event_id': event,
+                                     'market': market, 'side': side, 'line': own, 'odds': odds})
+                        if rng.random() < 0.05:                       # a side listed twice: its last row counts
+                            rows.append({**rows[-1], 'odds': 1.85})
+    snapshots = pd.DataFrame(rows)
+    assert _main_keys(snapshots) == _main_keys_by_fetch(snapshots)
+    assert _main_keys(snapshots.iloc[:0]) == set()
