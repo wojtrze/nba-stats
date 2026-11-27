@@ -14,7 +14,8 @@ from i18n import label, t, value
 from loaders import filtered_logs, games, player_logs, snapshot_history
 import night_view
 from tracking import (EVERY_LINE, RECOMPUTED, RECORDED, calibration, edge_bucket, paper_accumulators,
-                      results_table, settle_games, star_nights, star_scorecard, threshold_table)
+                      results_table, settle_games, star_nights, star_scorecard, star_splits,
+                      threshold_table)
 from decisions import star_text
 
 lang = language()
@@ -237,6 +238,13 @@ with saved_tab:
             rates(scorecard.assign(stars=[star_text(n) if isinstance(n, int) else
                                           t('results.every_line', lang) if n == EVERY_LINE else n
                                           for n in scorecard['stars']]))
+            splits = star_splits(record)
+            if len(splits) and splits['bets'].sum():
+                st.markdown(f"**{t('results.star_splits', lang)}**", help=t('results.star_splits_help', lang))
+                words = {'Over': value('Over', lang), 'Under': value('Under', lang),
+                         'main': t('results.star_splits.main', lang),
+                         'counting': t('results.star_splits.counting', lang)}
+                rates(splits.assign(group=splits['group'].map(words)).drop(columns='split'), words=())
             per_night = star_nights(record)
             if len(per_night):
                 charts.show(charts.star_nights(per_night, {'won': t('results.star_nights.won', lang),

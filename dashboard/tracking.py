@@ -605,6 +605,24 @@ def star_nights(settled: pd.DataFrame, level: int = 4) -> pd.DataFrame:
     return out[columns]
 
 
+# the main stats (points and its sums) against the counting stats, for star_splits: on the first 36 Superbet nights
+# 4★ lines of the counting stats beat their price and the main ones didn't (descriptive, chosen after looking)
+MAIN_STATS = ('PTS', 'PA', 'PR', 'ARP', 'RA')
+
+
+def star_splits(settled: pd.DataFrame, level: int = 4) -> pd.DataFrame:
+    """The `level`★ lines of settle_stars split by side (Over / Under) and by stat group (main: MAIN_STATS, or
+    counting), each with star_scorecard's columns. Descriptive only: it never changes the stars."""
+    if settled.empty:
+        return pd.DataFrame()
+    rated = settled[settled['stars'] == level]
+    group = np.where(rated['bet_type'].isin(MAIN_STATS), 'main', 'counting')
+    rows = [{'split': 'side', 'group': side, **_level_row(rated[rated['pick'] == side])}
+            for side in ('Over', 'Under')]
+    rows += [{'split': 'stat', 'group': g, **_level_row(rated[group == g])} for g in ('main', 'counting')]
+    return pd.DataFrame(rows)
+
+
 def paper_accumulators(settled: pd.DataFrame, legs: int = ACCUMULATOR_LEGS) -> pd.DataFrame:
     """A virtual accumulator (AKO) a night: the `legs` best 4★ lines (one per game already), 1 unit at the
     product of their odds. Superbet takes its 12% tax once, from the coupon's stake, so a win pays alpha × Π odds −
