@@ -56,7 +56,7 @@ def test_superbet_player_props(event):
     props = event_props(event)
     counts = Counter(p['bet_type'] for p in props)
     assert {'PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP', 'BLK', 'STL', 'TO'} <= set(counts)
-    cade = [p for p in props if p['name'] == 'Cunningham, Cade' and p['bet_type'] == 'PTS']
+    cade = [p for p in props if p['name'] == 'Cade Cunningham' and p['bet_type'] == 'PTS']
     assert {(p['over_under'], p['line'], p['odds']) for p in cade} == {('Under', 23.5, 1.9), ('Over', 23.5, 1.82)}
     assert cade[0]['home'] == 'det' and cade[0]['away'] == 'bos' and cade[0]['name_ESPN'] == 'CadeCunningham'
     assert counts['PTS'] % 2 == 0   # over and under of every line
@@ -129,3 +129,23 @@ def test_a_snapshot_with_columns_added_later_reads_without_a_dtype_warning(tmp_p
         warnings.simplefilter('error')
         df = read_snapshot(path)
     assert df['decision'].dropna().tolist() == ['NIE_OBSTAWIAJ'] * 10
+
+
+def test_display_name_turns_last_first_into_first_last():
+    from name_resolver import display_name
+    assert display_name("Acuff, Darius") == "Darius Acuff"
+    assert display_name("Jaquez Jr., Jaime") == "Jaime Jaquez Jr."
+    assert display_name("Jackson, Jr., Jaren") == "Jaren Jackson Jr."
+    assert display_name("Stephon Castle") == "Stephon Castle"
+    assert display_name(None) is None
+
+
+def test_read_snapshot_shows_superbet_names_as_first_last(tmp_path):
+    import pandas as pd
+    from espn_scraper.storage import read_snapshot
+    path = tmp_path / "superbet_props.csv"
+    pd.DataFrame({'name': ["White, Coby", "Reed Sheppard"], 'name_ESPN': ["CobyWhite", "ReedSheppard"]}) \
+        .to_csv(path, index=False)
+    df = read_snapshot(str(path))
+    assert df['name'].tolist() == ["Coby White", "Reed Sheppard"]
+    assert df['name_ESPN'].tolist() == ["CobyWhite", "ReedSheppard"]

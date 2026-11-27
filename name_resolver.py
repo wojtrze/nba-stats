@@ -22,6 +22,19 @@ def normalize(name: str) -> str:
     return OVERRIDES.get(key, key)
 
 
+def display_name(name):
+    """A name as people write it: Superbet's "Last, First" -> "First Last", suffix kept ("Jaquez Jr., Jaime" ->
+    "Jaime Jaquez Jr."); other names (and non-strings) unchanged."""
+    if not isinstance(name, str) or ',' not in name:
+        return name
+    parts = [p.strip() for p in name.split(',') if p.strip()]
+    if len(parts) == 2:
+        return f"{parts[1]} {parts[0]}"
+    if len(parts) == 3:     # "Last, Jr., First"
+        return f"{parts[2]} {parts[0]} {parts[1]}"
+    return name.strip()
+
+
 class NameResolver:
     """Built once from game logs (sorted by date); resolve() returns an ESPN player id or None."""
 
