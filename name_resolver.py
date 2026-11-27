@@ -45,6 +45,9 @@ class NameResolver:
                                      'key': latest['player_display_name'].map(normalize).values})
         self.players['first'] = self.players['key'].str.split().str[0].fillna('')
         self.players['last'] = self.players['key'].str.split().str[-1].fillna('')
+        # add_ids' answers by (name, teams): a season of RotoWire versions repeats ~400 names 47,000 times, and
+        # each resolve() filters every player (it took 120 s on 27.11; once per name it takes under a second)
+        self._known: Dict[tuple, object] = {}
 
     def resolve(self, name: str, team=None):
         """team: an ESPN abbreviation, or several (e.g. both teams of a game) when the player's team isn't known."""
@@ -65,7 +68,13 @@ class NameResolver:
 
     def add_ids(self, df: pd.DataFrame, name_col: str = 'name', team_cols=('team',)) -> pd.DataFrame:
         """df with a player_id_ESPN column (None where the name couldn't be matched). team_cols: the column(s)
-        holding the player's team, or both teams of the game."""
+        holding the player's team, or both teams of the game. Each distinct (name, teams) is resolved once per
+        resolver (resolve only asks which players are on those teams, so their order doesn't matter)."""
         teams = zip(*(df[c] for c in team_cols)) if len(df) else []
-        ids = [self.resolve(n, list(t)) for n, t in zip(df[name_col], teams)]
+        ids = []
+        for name, team in zip(df[name_col], teams):
+            key = (name, frozenset(team))
+            if key not in self._known:
+                self._known[key] = self.resolve(name, list(team))
+            ids.append(self._known[key])
         return df.assign(player_id_ESPN=pd.array(ids, dtype=object))

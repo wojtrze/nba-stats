@@ -22,12 +22,14 @@ def pregame_average(logs: pd.DataFrame, rows: pd.DataFrame) -> pd.DataFrame:
     if rows.empty or logs.empty:
         return out
     logs = logs.assign(player_id=logs['player_id_ESPN'].astype('Int64')).sort_values('Date')
+    # pandas' own windows per player (a Python lambda per player and stat took 12 s for a season's lines)
+    per_player = lambda windows: windows.reset_index(level=0, drop=True)
     for stat in set(rows['bet_type']) & set(logs.columns):
         through = logs[['player_id', 'Date']].copy()
         by_player = logs.groupby('player_id')[stat]
-        through['pre avg'] = by_player.transform(lambda s: s.expanding().mean())
-        through['pre avg L10'] = by_player.transform(lambda s: s.rolling(10, min_periods=1).mean())
-        through['pre sd'] = by_player.transform(lambda s: s.expanding().std())
+        through['pre avg'] = per_player(by_player.expanding().mean())
+        through['pre avg L10'] = per_player(by_player.rolling(10, min_periods=1).mean())
+        through['pre sd'] = per_player(by_player.expanding().std())
         through['pre games'] = logs.groupby('player_id').cumcount() + 1
         mask = (rows['bet_type'] == stat) & rows['player_id'].notna() & rows['game_date'].notna()
         part = rows.loc[mask, ['player_id', 'game_date']].astype({'player_id': 'Int64'})

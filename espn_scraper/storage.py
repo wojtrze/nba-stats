@@ -21,6 +21,11 @@ def players_file(season: int) -> str:
     return os.path.join(data_dir(season), "player_gamelogs.csv")
 
 
+def stats_files(seasons: Iterable[int]) -> List[str]:
+    """The files the stats scraper writes for these seasons (games, player game logs, checked-through date)."""
+    return [p for season in seasons for p in (games_file(season), players_file(season), _checked_file(season))]
+
+
 def snapshot_file(season: int, name: str) -> str:
     """A CSV data file of the season (my_bets, superbet_props_components, ...). The growing snapshots (SNAPSHOTS,
     REPLAY) are folders of Parquet files instead: load_snapshot / append_snapshot. Their CSV path is kept for the

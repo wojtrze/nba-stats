@@ -5,7 +5,7 @@ import streamlit as st
 from bets import (as_snapshot_rows, bets_file, describe, kelly_stake, load_bets, save_bets, slip_warnings,
                   staking_chance)
 from glossary import column_config, tinted
-from loaders import games, player_logs, snapshot_history
+from loaders import cached_on, games, player_logs, snapshot_history
 import night_view
 from models import FITTED, calibration_status, calibration_warning, load_green_edge
 from tracking import calibration, edge_bucket, results_table, settle_games, settle_props, threshold_table
@@ -28,12 +28,12 @@ RESULT_TIPS = {'bets': "Won and lost bets (pushes and voids left out)",
                'h before tip': "How many hours before tip-off the bet's quote was taken"}
 
 
-@st.cache_data(ttl=600, show_spinner="Settling the snapshots...")
+@cached_on('superbet_props', spinner="Settling the snapshots...")
 def settled_props() -> pd.DataFrame:
     return settle_props(snapshot_history('superbet_props'), player_logs(), games())
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@cached_on('superbet_game_odds', calibration=False)
 def settled_games() -> pd.DataFrame:
     return settle_games(snapshot_history('superbet_game_odds'), games())
 

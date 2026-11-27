@@ -1,5 +1,7 @@
 """Cached data loading for the dashboard."""
+import functools
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Dict, Optional
@@ -10,7 +12,7 @@ import streamlit as st
 from espn_scraper import CURRENT_SEASON, SEASONS
 from daily_snapshot import SUPERBET_COOLDOWN, claim_superbet, superbet_wait  # noqa: F401  (pages import them here)
 from espn_scraper.storage import (checked_through, latest_fetch, latest_snapshot, load_games, load_player_gamelogs,
-                                  load_snapshot, snapshot_signature)
+                                  load_snapshot, snapshot_signature, stats_files)
 from name_resolver import NameResolver
 
 from models import DEFAULT_SEASON_TYPES, prepare_logs
@@ -65,6 +67,44 @@ def snapshot_history(name: str) -> pd.DataFrame:
 
 
 snapshot_history.clear = _snapshot_history.clear
+
+
+# --- results computed from the saved data: recomputed when what they read changes, not every 10 minutes ---
+
+def inputs_signature(*datasets: str, stats: bool = True, calibration: bool = True) -> tuple:
+    """What a result computed from saved data depends on, cheaply: each snapshot dataset's signature
+    (storage.snapshot_signature), with stats the game logs, games and checked-through files of every season, with
+    calibration the calibration file (its 🟢 threshold gives the signals). Any of them changing changes it."""
+    from models import CALIBRATION_FILE
+    mtime = lambda path: os.path.getmtime(path) if os.path.exists(path) else 0.0
+    sig = [(name, snapshot_signature(name, CURRENT_SEASON)) for name in datasets]
+    if stats:
+        sig += [(path, mtime(path)) for path in stats_files(sorted(SEASONS))]
+    if calibration:
+        sig.append((CALIBRATION_FILE, mtime(CALIBRATION_FILE)))
+    return tuple(sig)
+
+
+def cached_on(*datasets: str, stats: bool = True, calibration: bool = True, spinner=False, max_entries: int = 8):
+    """st.cache_data keyed on inputs_signature(datasets, stats, calibration) instead of a TTL: the result is
+    computed again the moment a fetch is saved, the stats are updated or the calibration is refitted, and never in
+    between (a ttl=600 recomputed every 10 minutes, and showed a new fetch only after that). The decorated
+    function keeps its arguments and gets .clear()."""
+    def wrap(fn):
+        # both are hashed into the key (st.cache_data skips arguments named with a leading underscore)
+        def compute(function: str, signature: tuple, *args, **kwargs):
+            return fn(*args, **kwargs)
+        # st.cache_data tells functions apart by module, name and source; every compute() shares the source
+        compute.__module__, compute.__qualname__ = fn.__module__, f"{fn.__qualname__}__cached"
+        cached = st.cache_data(show_spinner=spinner, max_entries=max_entries)(compute)
+        name = f"{fn.__module__}.{fn.__qualname__}"
+
+        @functools.wraps(fn)
+        def call(*args, **kwargs):
+            return cached(name, inputs_signature(*datasets, stats=stats, calibration=calibration), *args, **kwargs)
+        call.clear = cached.clear
+        return call
+    return wrap
 
 
 # --- the run log: every scraper run and Superbet fetch (daily_snapshot.log_run, shared with the scheduled fetches) ---
