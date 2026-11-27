@@ -588,6 +588,23 @@ def star_scorecard(settled: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def star_nights(settled: pd.DataFrame, level: int = 4) -> pd.DataFrame:
+    """Night by night, the lines rated `level`★ (settle_stars): game_date, bets (decided), won, won %, price % (the
+    margin-free price's average chance of the same sides) and won − price pp. Pushes and voids are left out;
+    nights with no decided line of that level too."""
+    columns = ['game_date', 'bets', 'won', 'won %', 'price %', 'won − price pp']
+    if settled.empty:
+        return pd.DataFrame(columns=columns)
+    decided = settled[(settled['stars'] == level) & settled['result'].isin(['win', 'loss'])]
+    if decided.empty:
+        return pd.DataFrame(columns=columns)
+    out = decided.assign(win=decided['result'] == 'win').groupby('game_date').agg(
+        bets=('win', 'size'), won=('win', 'sum'), **{'price %': ('side market %', 'mean')}).reset_index()
+    out['won %'] = 100 * out['won'] / out['bets']
+    out['won − price pp'] = out['won %'] - out['price %']
+    return out[columns]
+
+
 def paper_accumulators(settled: pd.DataFrame, legs: int = ACCUMULATOR_LEGS) -> pd.DataFrame:
     """A virtual accumulator (AKO) a night: the `legs` best 4★ lines (one per game already), 1 unit at the
     product of their odds. Superbet takes its 12% tax once, from the coupon's stake, so a win pays alpha × Π odds −

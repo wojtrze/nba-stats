@@ -8,6 +8,7 @@ import requests
 
 from bet_fetcher import NORMALIZED_TEAM_NAME
 from http_polite import PoliteClient, RunDeadline
+from name_resolver import display_name
 
 log = logging.getLogger(__name__)
 
@@ -117,7 +118,7 @@ def event_props(event: Dict) -> List[Dict]:
         if over_under is None:
             log.warning("Unknown outcome %r in event %s", odd['name'], event['eventId'])
             continue
-        props.append({"name": name,
+        props.append({"name": display_name(name),
                       "name_ESPN": superbet_name_to_ESPN(name),
                       "odds": odd['price'],
                       "line": float(odd['specifiers']['total']),

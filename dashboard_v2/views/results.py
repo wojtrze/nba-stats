@@ -14,7 +14,7 @@ from i18n import label, t, value
 from loaders import filtered_logs, games, player_logs, snapshot_history
 import night_view
 from tracking import (EVERY_LINE, RECOMPUTED, RECORDED, calibration, edge_bucket, paper_accumulators,
-                      results_table, settle_games, star_scorecard, threshold_table)
+                      results_table, settle_games, star_nights, star_scorecard, threshold_table)
 from decisions import star_text
 
 lang = language()
@@ -237,6 +237,13 @@ with saved_tab:
             rates(scorecard.assign(stars=[star_text(n) if isinstance(n, int) else
                                           t('results.every_line', lang) if n == EVERY_LINE else n
                                           for n in scorecard['stars']]))
+            per_night = star_nights(record)
+            if len(per_night):
+                charts.show(charts.star_nights(per_night, {'won': t('results.star_nights.won', lang),
+                                                           'price': t('results.star_nights.price', lang),
+                                                           'overall': t('results.star_nights.overall', lang)},
+                                               t('results.star_nights.title', lang)), key='star_nights')
+                st.caption(t('results.star_nights.note', lang))
             st.markdown(f"**{t('results.ako', lang)}**")
             st.caption(t('results.ako_intro', lang))
             ako = paper_accumulators(record)

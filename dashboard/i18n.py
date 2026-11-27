@@ -3050,11 +3050,10 @@ TEXTS: Dict[str, Dict[str, str]] = {
 
     # Overview
     'overview.title': _w("Overview", "Przegląd"),
-    'overview.purpose': _w("Tonight's decisions and best rated lines, how last night's lines, bets and games resolved, "
-                           "its curiosities, and tonight's players on a streak against Superbet's lines.",
-                           "Dzisiejsze decyzje i najwyżej ocenione linie, jak rozliczyły się linie, zakłady i mecze "
-                           "ostatniego wieczoru, jego ciekawostki oraz dzisiejsi zawodnicy z serią wobec linii "
-                           "Superbetu."),
+    'overview.purpose': _w("Tonight's decisions and best rated lines, and how last night's lines, bets and games "
+                           "resolved. The research blocks are on Tonight's research.",
+                           "Dzisiejsze decyzje i najwyżej ocenione linie oraz jak rozliczyły się linie, zakłady i "
+                           "mecze ostatniego wieczoru. Bloki analizy są w Analizie wieczoru."),
     'slate.title': _w("Tonight's games", "Dzisiejsze mecze"),
     'slate.purpose': _w("The games in the next 36 hours: one decision for each game's team markets and one for its "
                         "players, with the time of the odds and lineups behind them.",
@@ -3298,6 +3297,41 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                     "każda linia {every:+.1f}."),
     'overview.shortlist_empty': _w("No line can be rated yet: no priced line without a warning.",
                                    "Nie ma jeszcze czego ocenić: brak wycenionej linii bez ostrzeżenia."),
+    'nav.research_page': _w("Tonight's research", "Analiza wieczoru"),
+    'research.title': _w("Tonight's research", "Analiza wieczoru"),
+    'research.purpose': _w("What used to sit on the Overview below the picks: the lines nearest to break-even after "
+                           "tax, tonight's players in their last game, the news window, big chances against "
+                           "Superbet, last night's curiosities and tonight's streaks. Research only: nothing here "
+                           "changes a rating or a decision.",
+                           "To, co było na Przeglądzie pod liniami 4★: linie najbliżej progu opłacalności po "
+                           "podatku, dzisiejsi zawodnicy w ostatnim meczu, okno newsów, duże szanse przeciw "
+                           "Superbetowi, ciekawostki wczorajszego wieczoru i dzisiejsze serie. Tylko analiza: nic "
+                           "tu nie zmienia oceny ani decyzji."),
+    'overview.research_link': _w("Break-even, look-back, news window, big chances, curiosities and streaks: "
+                                 "Tonight's research",
+                                 "Próg opłacalności, ostatni mecz, okno newsów, duże szanse, ciekawostki i serie: "
+                                 "Analiza wieczoru"),
+    'results.star_nights.title': _w("4★ night by night: how many won, against what the price said",
+                                    "4★ wieczór po wieczorze: ile wygrało, wobec tego, co mówił kurs"),
+    'results.star_nights.won': _w("won %", "wygrane %"),
+    'results.star_nights.price': _w("the price said %", "kurs mówił %"),
+    'results.star_nights.overall': _w("all nights {v:.0f}%", "wszystkie wieczory {v:.0f}%"),
+    'results.star_nights.note': _w("About 8 lines a night: a single night swings from about 30% to 85% by chance "
+                                   "alone. Judge the level by all nights together (the dashed line) and by how "
+                                   "often the bars clear the price line, not by the best nights.",
+                                   "Około 8 linii na wieczór: sam przypadek daje pojedynczy wieczór od ok. 30% do "
+                                   "85%. Oceniaj poziom po wszystkich wieczorach razem (linia przerywana) i po tym, "
+                                   "jak często słupki są nad linią kursu, nie po najlepszych wieczorach."),
+    'card.expect': _w("we expect {proj:.1f} against the line {line:g}", "oczekujemy {proj:.1f} przy linii {line:g}"),
+    'card.last': _w("{side} in {hits} of his last {n}", "{side} w {hits} z ost. {n} {n|meczu|meczów|meczów}"),
+    'card.ours': _w("our chance {p:.0f}%", "nasza szansa {p:.0f}%"),
+    'card.superbet': _w("Superbet's {p:.0f}%", "Superbetu {p:.0f}%"),
+    'card.needed': _w("needed after tax {p:.0f}%", "potrzeba po podatku {p:.0f}%"),
+    'card.open': _w("Open in Props", "Otwórz w zakładach"),
+    'overview.picks': _w("Tonight's 4★ lines: the best of tonight, not: worth betting",
+                         "Dzisiejsze linie 4★: najlepsze dziś, nie: opłacalne"),
+    'overview.last_night_stars': _w("Last night 4★: {won} of {n} won (the price said {price:.1f}).",
+                                    "Wczoraj 4★: {won} z {n} wygranych (kurs mówił {price:.1f})."),
     'overview.shortlist_more': _w("Show tonight's 3★ lines ({n})", "Pokaż dzisiejsze linie 3★ ({n})"),
     'overview.kpi.lineups': _w("Lineups listed", "Podane składy"),
     'overview.kpi.lineups_value': _w("{n} {n|team|teams|teams}", "{n} {n|drużyna|drużyny|drużyn}"),

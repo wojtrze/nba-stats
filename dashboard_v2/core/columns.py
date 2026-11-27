@@ -1,12 +1,14 @@
 """The columns the props tables show, kept here so their headers and tooltips (i18n.TERMS) can be tested."""
 
-# the props table, in reading order: which line, the decision for its game, the evaluated side and its price after
-# the stake tax. One side column only: no 'our pick', 'better side' and 'projection leans' next to each other
-PROPS_MAIN = ['stars', 'name', 'game', 'tip-off', 'bet_type', 'line', 'decision', 'side', 'side odds', 'p win %',
-              'break-even net %', 'edge net pp', 'ev net 100', 'proj avg', 'gap sd', 'pick % L10', 'RotoWire', 'red flag']
+# the props table, in reading order: which line, what we expect, the evaluated side, its odds and the two chances
+# side by side (ours, Superbet's margin-free one), his record on that side and his role. One side column only: no
+# 'our pick', 'better side' and 'projection leans' next to each other. The after-tax numbers (break-even, edge,
+# expected return) and the decision are under More: tonight they say the same for every line
+PROPS_MAIN = ['stars', 'name', 'game', 'tip-off', 'bet_type', 'line', 'proj avg', 'side', 'side odds', 'p win %',
+              'side market %', 'pick % L10', 'RotoWire', 'red flag']
 # Props → More → Show every column
-PROPS_MORE = ['p push %', 'line move', 'open line', 'adj avg', 'avg', 'avg L5', 'matchup', 'spread',
-              'game total', 'percentile', 'pick %', 'games', 'min L5', 'raw model %', 'over_odds', 'under_odds']
+PROPS_MORE = ['decision', 'break-even net %', 'edge net pp', 'ev net 100', 'gap sd', 'p push %', 'line move',
+              'open line', 'adj avg', 'avg', 'avg L5', 'matchup', 'spread', 'game total', 'percentile', 'pick %', 'games', 'min L5', 'raw model %', 'over_odds', 'under_odds']
 # Overview: the offers to bet, only those of a 'Bet' decision (none while no threshold is recorded)
 OVERVIEW_PROPS = ['name', 'game', 'bet_type', 'line', 'side', 'side odds', 'p win %', 'edge net pp', 'ev net 100',
                   'RotoWire']

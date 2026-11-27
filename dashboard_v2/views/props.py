@@ -30,7 +30,7 @@ table_all = priced_props(seasons, season_types)
 decided = player_decisions(table_all)
 # every line's stars (decisions.stars): its place among tonight's lines, ★★★★☆; 'star count' sorts and filters
 if len(table_all):
-    rated = stars(table_all, decided)[PROP_KEY + ['stars']].rename(columns={'stars': 'star count'})
+    rated = stars(table_all, decided)[PROP_KEY + ['stars', 'side market %']].rename(columns={'stars': 'star count'})
     table_all = table_all.merge(rated, on=PROP_KEY, how='left')
     table_all['stars'] = table_all['star count'].map(star_text)
     table_all = whatif.night_gaps(table_all)        # gap sd and distance pp: the gap sort and the whole-night chart
@@ -38,7 +38,8 @@ if warning := calibration_warning(table_all['calibration'].iloc[0] if len(table_
     st.warning(warning, icon="⚠️")
 
 DEFAULT_TYPES = ['PTS', 'REB', 'AST', '3PM', 'PA', 'PR', 'RA', 'ARP']
-FORMATS = {'raw model %': '%.0f', 'line': '%g', 'side odds': '%.2f', 'p win %': '%.0f', 'p push %': '%.0f',
+FORMATS = {'raw model %': '%.0f', 'line': '%g', 'side odds': '%.2f', 'p win %': '%.0f', 'side market %': '%.0f',
+           'p push %': '%.0f',
            'break-even net %': '%.1f', 'edge net pp': '%+.1f', 'ev net 100': '%+.1f',
            'proj avg': '%.1f', 'pick % L10': '%.0f', 'pick %': '%.0f',
            'avg': '%.1f', 'adj avg': '%.1f', 'avg L5': '%.1f', 'min L5': '%.1f', 'percentile': '%.0f',

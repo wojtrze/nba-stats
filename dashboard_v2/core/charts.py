@@ -138,3 +138,23 @@ def night_map(rows: pd.DataFrame, labels: Optional[dict] = None, title: str = ''
     fig.add_vline(x=0, line_color='#cbd5e1')
     return layout(fig, 380, title, xaxis=dict(title=labels.get('x', 'gap in spreads'), zeroline=False),
                   yaxis=dict(title=labels.get('y', 'pp'), zeroline=False))
+
+
+def star_nights(nights: pd.DataFrame, labels: Optional[dict] = None, title: str = '') -> go.Figure:
+    """tracking.star_nights as bars of won % a night (green when above what the price said, red when below), the
+    price's % as a line and each night's number of lines above its bar; the overall won % dashed."""
+    labels = labels or {}
+    fig = go.Figure()
+    x = pd.to_datetime(nights['game_date']).dt.strftime('%d.%m')
+    colours = np.where(nights['won %'] >= nights['price %'], OVER, UNDER)
+    fig.add_bar(x=x, y=nights['won %'], marker_color=colours, name=labels.get('won', 'won %'),
+                text=[f"{w}/{n}" for w, n in zip(nights['won'], nights['bets'])], textposition='outside',
+                hovertemplate="%{x}: %{y:.0f}% (%{text})<extra></extra>")
+    fig.add_scatter(x=x, y=nights['price %'], mode='lines+markers', name=labels.get('price', 'price said %'),
+                    line=dict(color=AVERAGE), marker=dict(size=5),
+                    hovertemplate="%{x}: %{y:.0f}%<extra></extra>")
+    if nights['bets'].sum():
+        overall = 100 * nights['won'].sum() / nights['bets'].sum()
+        fig.add_hline(y=overall, line_dash='dash', line_color='#64748b',
+                      annotation_text=labels.get('overall', 'all nights {v:.0f}%').format(v=overall))
+    return layout(fig, 340, title, xaxis=dict(type='category'), yaxis=dict(title='%', range=[0, 115]))
