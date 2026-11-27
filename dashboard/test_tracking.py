@@ -286,3 +286,16 @@ def test_close_coverage_of_the_last_started_night():
         'night': pd.Timestamp('2026-10-22'), 'valid': 1, 'games': 2}
     assert close_coverage(reads, pd.Timestamp('2026-10-22T12:00:00Z')) is None
     assert close_coverage(pd.DataFrame(), pd.Timestamp('2026-10-23T12:00:00Z')) is None
+
+
+def test_star_nights_counts_each_nights_4_star_lines():
+    from tracking import star_nights
+    settled = pd.DataFrame({'game_date': ['d1', 'd1', 'd1', 'd2', 'd2', 'd2'],
+                            'stars': [4, 4, 3, 4, 4, 4],
+                            'result': ['win', 'loss', 'win', 'win', 'win', 'push'],
+                            'side market %': [60.0, 50.0, 55.0, 52.0, 58.0, 50.0]})
+    out = star_nights(settled).set_index('game_date')
+    assert out.loc['d1', 'bets'] == 2 and out.loc['d1', 'won'] == 1 and out.loc['d1', 'won %'] == 50
+    assert out.loc['d1', 'price %'] == 55
+    assert out.loc['d2', 'bets'] == 2 and out.loc['d2', 'won %'] == 100 and out.loc['d2', 'won − price pp'] == 45
+    assert star_nights(settled.iloc[0:0]).empty

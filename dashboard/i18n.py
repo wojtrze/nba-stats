@@ -3311,6 +3311,17 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                  "Tonight's research",
                                  "Próg opłacalności, ostatni mecz, okno newsów, duże szanse, ciekawostki i serie: "
                                  "Analiza wieczoru"),
+    'results.star_nights.title': _w("4★ night by night: how many won, against what the price said",
+                                    "4★ wieczór po wieczorze: ile wygrało, wobec tego, co mówił kurs"),
+    'results.star_nights.won': _w("won %", "wygrane %"),
+    'results.star_nights.price': _w("the price said %", "kurs mówił %"),
+    'results.star_nights.overall': _w("all nights {v:.0f}%", "wszystkie wieczory {v:.0f}%"),
+    'results.star_nights.note': _w("About 8 lines a night: a single night swings from about 30% to 85% by chance "
+                                   "alone. Judge the level by all nights together (the dashed line) and by how "
+                                   "often the bars clear the price line, not by the best nights.",
+                                   "Około 8 linii na wieczór: sam przypadek daje pojedynczy wieczór od ok. 30% do "
+                                   "85%. Oceniaj poziom po wszystkich wieczorach razem (linia przerywana) i po tym, "
+                                   "jak często słupki są nad linią kursu, nie po najlepszych wieczorach."),
     'card.expect': _w("we expect {proj:.1f} against the line {line:g}", "oczekujemy {proj:.1f} przy linii {line:g}"),
     'card.last': _w("{side} in {hits} of his last {n}", "{side} w {hits} z ost. {n} {n|meczu|meczów|meczów}"),
     'card.ours': _w("our chance {p:.0f}%", "nasza szansa {p:.0f}%"),
