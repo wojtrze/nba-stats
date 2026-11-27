@@ -299,3 +299,15 @@ def test_star_nights_counts_each_nights_4_star_lines():
     assert out.loc['d1', 'price %'] == 55
     assert out.loc['d2', 'bets'] == 2 and out.loc['d2', 'won %'] == 100 and out.loc['d2', 'won − price pp'] == 45
     assert star_nights(settled.iloc[0:0]).empty
+
+
+def test_star_splits_by_side_and_stat_group():
+    from tracking import star_splits
+    settled = pd.DataFrame({'game_date': ['d1'] * 4, 'stars': [4, 4, 4, 3], 'pick': ['Over', 'Under', 'Under', 'Over'],
+                            'bet_type': ['PTS', 'BLK', 'ARP', 'REB'], 'result': ['loss', 'win', 'win', 'win'],
+                            'side market %': [50.0, 60.0, 50.0, 50.0], 'profit': [-1, .6, 1, 1],
+                            'profit std': [-1, .4, .8, .8]})
+    out = star_splits(settled).set_index('group')
+    assert out.loc['Over', 'bets'] == 1 and out.loc['Under', 'bets'] == 2 and out.loc['Under', 'hit %'] == 100
+    assert out.loc['main', 'bets'] == 2 and out.loc['counting', 'bets'] == 1
+    assert out.loc['counting', 'won − price pp'] == 40

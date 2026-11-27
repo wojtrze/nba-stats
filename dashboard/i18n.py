@@ -3322,6 +3322,16 @@ TEXTS: Dict[str, Dict[str, str]] = {
                                    "Około 8 linii na wieczór: sam przypadek daje pojedynczy wieczór od ok. 30% do "
                                    "85%. Oceniaj poziom po wszystkich wieczorach razem (linia przerywana) i po tym, "
                                    "jak często słupki są nad linią kursu, nie po najlepszych wieczorach."),
+    'results.star_splits': _w("4★ by side and by stat", "4★ według strony i statystyki"),
+    'results.star_splits_help': _w(
+        "The same 4★ lines split two ways: Over against Under, and the main stats (points and its sums: PTS, PA, PR, "
+        "PRA, RA) against the counting stats (rebounds, assists, blocks, steals, fouls, threes, free throws, "
+        "turnovers). Watch whether a group keeps beating its price night after night; it doesn't change the stars.",
+        "Te same linie 4★ podzielone na dwa sposoby: Powyżej wobec Poniżej oraz główne statystyki (punkty i ich "
+        "sumy: PTS, PA, PR, PRA, RA) wobec statystyk liczonych (zbiórki, asysty, bloki, przechwyty, faule, trójki, "
+        "rzuty wolne, straty). Patrz, czy grupa dalej wygrywa częściej, niż mówi kurs; to nie zmienia gwiazdek."),
+    'results.star_splits.main': _w("main stats (points and sums)", "główne (punkty i sumy)"),
+    'results.star_splits.counting': _w("counting stats", "statystyki liczone"),
     'card.expect': _w("we expect {proj:.1f} against the line {line:g}", "oczekujemy {proj:.1f} przy linii {line:g}"),
     'card.last': _w("{side} in {hits} of his last {n}", "{side} w {hits} z ost. {n} {n|meczu|meczów|meczów}"),
     'card.ours': _w("our chance {p:.0f}%", "nasza szansa {p:.0f}%"),
