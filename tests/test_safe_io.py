@@ -127,5 +127,5 @@ def test_two_dashboards_save_one_lineup_change_once(tmp_path):
     procs = [_start(code.format(pct=0, at=f'2026-10-27T12:00:0{i}Z'), tmp_path) for i in range(3)]
     saved_by = [p.communicate(timeout=120)[0].strip() for p in procs]
     assert saved_by.count('True') == 1                                              # the change, saved once
-    saved = pd.read_csv(tmp_path / 'data' / '2026' / 'rotowire_lineups.csv')
+    saved = pd.read_parquet(tmp_path / 'data' / '2026' / 'rotowire_lineups')   # one day's file
     assert saved['fetched_at'].nunique() == 2 and saved['play_pct'].tolist() == [50, 0]

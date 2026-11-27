@@ -99,11 +99,10 @@ def report(cases: List) -> str:
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    from espn_scraper import CURRENT_SEASON, SEASONS
-    from espn_scraper.storage import load_player_gamelogs, read_snapshot, snapshot_file
+    from espn_scraper import SEASONS
+    from espn_scraper.storage import load_player_gamelogs, load_snapshot
     from name_resolver import NameResolver
-    read = lambda name: read_snapshot(snapshot_file(CURRENT_SEASON, name)) \
-        if os.path.exists(snapshot_file(CURRENT_SEASON, name)) else pd.DataFrame()
+    read = load_snapshot
     logs = load_player_gamelogs(sorted(SEASONS))
     logs = logs[logs['season_type'] != 'pre'].assign(Date=lambda x: pd.to_datetime(x['Date']))
     logs['player_id_ESPN'] = logs['player_id_ESPN'].astype('Int64')

@@ -1,5 +1,4 @@
 """How fresh each data source is (no Streamlit, so it can be tested): ok, stale or missing, with a short label."""
-import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Optional
 from zoneinfo import ZoneInfo
@@ -9,7 +8,7 @@ import pandas as pd
 from decisions import MAX_ODDS_AGE
 from espn_scraper import CURRENT_SEASON
 from i18n import t
-from espn_scraper.storage import checked_through, snapshot_file
+from espn_scraper.storage import checked_through, latest_fetch
 
 ET = ZoneInfo('US/Eastern')
 PL = ZoneInfo('Europe/Warsaw')
@@ -68,11 +67,8 @@ def live_status(live: Optional[bool], fetched_at: Optional[datetime], rows: Opti
 
 def last_snapshot(name: str, season: int = CURRENT_SEASON) -> Optional[datetime]:
     """Time of the newest saved snapshot of 'superbet_props', 'superbet_game_odds' or 'rotowire_lineups'."""
-    path = snapshot_file(season, name)
-    if not os.path.exists(path):
-        return None
-    fetched = pd.read_csv(path, usecols=['fetched_at'])['fetched_at']
-    return pd.to_datetime(fetched.max(), utc=True).to_pydatetime() if len(fetched) else None
+    fetched = latest_fetch(name, season)
+    return pd.to_datetime(fetched, utc=True).to_pydatetime() if fetched else None
 
 
 def overview(live: Dict[str, Dict], now: Optional[datetime] = None, lang: str = 'en') -> Dict[str, Dict]:

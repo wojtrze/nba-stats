@@ -20,8 +20,9 @@ from typing import Optional
 import pandas as pd
 
 from espn_scraper import CURRENT_SEASON, SEASONS
-from espn_scraper.storage import load_games, load_player_gamelogs, read_snapshot, snapshot_file
-from safe_io import append_csv, atomic_to_csv, atomic_write_text, locked
+from espn_scraper.storage import (append_snapshot, dataset_lock, load_games, load_player_gamelogs, load_snapshot,
+                                  write_replay)
+from safe_io import append_csv, atomic_write_text, locked
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dashboard'))
 
@@ -39,21 +40,12 @@ def merge_over_under(props: pd.DataFrame) -> pd.DataFrame:
 
 
 def _append(name: str, df: pd.DataFrame, fetched_at: str) -> int:
-    """Append df to a snapshot file with fetched_at first, under the file's lock and atomically (safe_io)."""
+    """Append df to a snapshot dataset with fetched_at first (storage.append_snapshot: under the dataset's lock,
+    atomically, the saved rows unchanged, new columns at the end)."""
     if df.empty:
         return 0
-    path = snapshot_file(CURRENT_SEASON, name)
     df.insert(0, 'fetched_at', fetched_at)
-    with locked(path):
-        if os.path.exists(path):
-            # keep the file's column order; new columns go at the end
-            existing = list(pd.read_csv(path, nrows=0).columns)
-            if set(df.columns) - set(existing):
-                # as text, so the saved rows are written back unchanged (ids with gaps would otherwise become floats)
-                old = pd.read_csv(path, dtype=str, keep_default_na=False)
-                atomic_to_csv(pd.concat([old, df], ignore_index=True), path)
-                return len(df)
-        return append_csv(df, path)
+    return append_snapshot(name, df)
 
 
 # --- Superbet blocks frequent requests: one shared cooldown for the dashboards and the scheduled runs ---
@@ -157,13 +149,14 @@ def lineup_changes(old: pd.DataFrame, new: pd.DataFrame) -> list:
 
 
 def save_lineups_if_changed(lineups: pd.DataFrame, fetched_at: str) -> str:
-    """Append a RotoWire fetch to rotowire_lineups.csv when it's the first of its day (game_date) or differs
-    from the last saved version of that day. Returns what was saved ('' when nothing was)."""
+    """Append a RotoWire fetch to the saved lineups (rotowire_lineups) when it's the first of its day (game_date)
+    or differs from the last saved version of that day. Returns what was saved ('' when nothing was)."""
     if lineups.empty:
         return ''
-    path = snapshot_file(CURRENT_SEASON, 'rotowire_lineups')
-    with locked(path):      # two dashboards seeing the same change save it once
-        saved = pd.read_csv(path) if os.path.exists(path) else pd.DataFrame(columns=['fetched_at'] + LINEUP_COLUMNS)
+    with dataset_lock('rotowire_lineups'):      # two dashboards seeing the same change save it once
+        saved = load_snapshot('rotowire_lineups', display_names=False)
+        if saved.empty:
+            saved = pd.DataFrame(columns=['fetched_at'] + LINEUP_COLUMNS)
         days = set(lineups['game_date'].astype(str))
         same_day = saved[saved['game_date'].astype(str).isin(days)]
         last = same_day[same_day['fetched_at'] == same_day['fetched_at'].max()] if len(same_day) else same_day
@@ -342,21 +335,20 @@ def log_reasons(evaluation: dict) -> int:
 def reprice_snapshots() -> int:
     """Price every saved Superbet line again with the current model and defaults, as of its fetch: the games
     finished before that day, the RotoWire version saved by then and the game odds of the same fetch
-    (nightly.recompute_props). Writes them to superbet_props_replay.csv (the saved lines with the new model
-    columns, prediction_origin historical_replay), replacing that file's rows of the current MODEL_VERSION and
-    keeping other versions'; superbet_props.csv, the record of what each fetch showed, is left as it is. Returns
-    the rows of the current version."""
+    (nightly.recompute_props). Writes them to the replay (storage.write_replay: the saved lines with the new model
+    columns, prediction_origin historical_replay), replacing the current MODEL_VERSION's and keeping other
+    versions'; superbet_props, the record of what each fetch showed, is left as it is. Returns the rows of the
+    current version."""
     from models import prepare_logs
     from name_resolver import NameResolver
     from nightly import (DECISION_COLUMN, HISTORICAL_REPLAY, LINEAGE_COLUMNS, MODEL_COLUMNS, MODEL_VERSION,
                          SHORTLIST_COLUMNS, et_night, lineage, lineups_before_tip, recompute_props)
 
-    path = snapshot_file(CURRENT_SEASON, 'superbet_props')
     model_cols = ['player_id_ESPN', *MODEL_COLUMNS, DECISION_COLUMN, *SHORTLIST_COLUMNS, 'tier', *LINEAGE_COLUMNS]
-    saved = pd.read_csv(path, dtype=str, keep_default_na=False).drop(columns=model_cols, errors='ignore')
-    props = read_snapshot(path).drop(columns=model_cols, errors='ignore')
-    odds = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))
-    rotowire = pd.read_csv(snapshot_file(CURRENT_SEASON, 'rotowire_lineups'))
+    saved = load_snapshot('superbet_props', display_names=False).drop(columns=model_cols, errors='ignore')
+    props = load_snapshot('superbet_props').drop(columns=model_cols, errors='ignore')
+    odds = load_snapshot('superbet_game_odds')
+    rotowire = load_snapshot('rotowire_lineups', display_names=False)
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
     games = load_games(sorted(SEASONS))
     resolver = NameResolver(logs)
@@ -373,16 +365,10 @@ def reprice_snapshots() -> int:
 
     out = saved.assign(player_id_ESPN=pd.array(props['player_id_ESPN'], dtype='Int64'))
     for col in MODEL_COLUMNS:
-        out[col] = model[col].values
+        out[col] = pd.Series(model[col].values, index=out.index).infer_objects()
     out = out.assign(**lineage(HISTORICAL_REPLAY))
-    # one block per model version, so several models can be compared on the same lines; this one's is replaced
-    replay = snapshot_file(CURRENT_SEASON, 'superbet_props_replay')
-    if os.path.exists(replay):
-        others = pd.read_csv(replay, dtype=str, keep_default_na=False)
-        others = others[others['model_version'] != MODEL_VERSION]
-        out = pd.concat([others, out.astype(str).replace({'<NA>': '', 'nan': ''})], ignore_index=True)
-    atomic_to_csv(out, replay)
-    return int((out['model_version'] == MODEL_VERSION).sum())
+    # one folder per model version, so several models can be compared on the same lines; this one's is replaced
+    return write_replay(MODEL_VERSION, out)
 
 
 # what a rebuilt reason record keeps of the line as the snapshot saved it (beside the rebuilt numbers)
@@ -406,12 +392,12 @@ def reconstruct_reasons(fetched_at: str) -> dict:
     from nightly import et_night, lineups_before_tip, recompute_props
     from reasons import lift_status
 
-    props = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_props'))
+    props = load_snapshot('superbet_props', since=fetched_at[:10])
     props = props[props['fetched_at'] == fetched_at]
     if props.empty:
         raise ValueError(f"no saved fetch at {fetched_at}")
-    odds = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))
-    rotowire = pd.read_csv(snapshot_file(CURRENT_SEASON, 'rotowire_lineups'))
+    odds = load_snapshot('superbet_game_odds', since=fetched_at[:10])
+    rotowire = load_snapshot('rotowire_lineups', display_names=False)
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
     games = load_games(sorted(SEASONS))
     resolver = NameResolver(logs)
@@ -448,8 +434,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--tomorrow', action='store_true', help="RotoWire's lineups for tomorrow")
     parser.add_argument('--reprice', action='store_true',
-                        help="price every saved Superbet line again with the current model, into "
-                             "superbet_props_replay.csv")
+                        help="price every saved Superbet line again with the current model, into the replay "
+                             "(data/<season>/superbet_props_replay/<model_version>/)")
     parser.add_argument('--log-reasons', action='append', default=[], metavar='FETCHED_AT',
                         help="rebuild a saved fetch's reason log (reconstructed or counterfactual; never over the "
                              "recorded one)")
@@ -459,7 +445,7 @@ if __name__ == '__main__':
             print(f"reason log {fetched}: {reconstruct_reasons(fetched)} records added")
         sys.exit()
     if args.reprice:
-        print(f"superbet_props_replay: {reprice_snapshots()} rows repriced (superbet_props.csv unchanged)")
+        print(f"superbet_props_replay: {reprice_snapshots()} rows repriced (superbet_props unchanged)")
         sys.exit()
     for name, n in take_snapshot('tomorrow' if args.tomorrow else 'today').items():
         print(f"{name}: {'failed' if n is None else f'{n} rows'}")

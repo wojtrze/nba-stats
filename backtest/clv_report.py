@@ -135,12 +135,11 @@ def report(snapshots: pd.DataFrame, quotes: pd.DataFrame, reads: pd.DataFrame, l
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    from espn_scraper import CURRENT_SEASON, SEASONS
-    from espn_scraper.storage import load_games, load_player_gamelogs, read_snapshot, snapshot_file
+    from espn_scraper import SEASONS
+    from espn_scraper.storage import load_games, load_player_gamelogs, load_snapshot
     from models import prepare_logs
     from name_resolver import NameResolver
-    read = lambda name: read_snapshot(snapshot_file(CURRENT_SEASON, name)) \
-        if os.path.exists(snapshot_file(CURRENT_SEASON, name)) else pd.DataFrame()
+    read = load_snapshot
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
     rotowire = read('rotowire_lineups')
     if len(rotowire):

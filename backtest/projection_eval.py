@@ -223,8 +223,8 @@ def score(t: pd.DataFrame, candidates, reference: str, with_line: bool) -> pd.Da
 
 
 def load(refresh: bool = False):
-    from espn_scraper import CURRENT_SEASON, SEASONS
-    from espn_scraper.storage import load_player_gamelogs, read_snapshot, snapshot_file
+    from espn_scraper import SEASONS
+    from espn_scraper.storage import load_player_gamelogs, load_snapshot
     from models import prepare_logs
     from name_resolver import NameResolver
     from nightly import et_night
@@ -233,13 +233,13 @@ def load(refresh: bool = False):
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
     features = game_features(logs)
     components = superbet_components(refresh=refresh)
-    snaps = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_props'))
+    snaps = load_snapshot('superbet_props')
     resolver = NameResolver(logs)
     last = last_pretip_lines(snaps)
     last = resolver.add_ids(last.drop(columns=['player_id_ESPN'], errors='ignore'), team_cols=('home', 'away')) \
         .rename(columns={'player_id_ESPN': 'player_id'})
     last['night'] = et_night(last['start_time'])
-    rotowire = resolver.add_ids(pd.read_csv(snapshot_file(CURRENT_SEASON, 'rotowire_lineups')))
+    rotowire = resolver.add_ids(load_snapshot('rotowire_lineups', display_names=False))
     starter = rotowire_roles(last, rotowire)
     return logs_source(features), superbet_source(last, components, features, starter)
 

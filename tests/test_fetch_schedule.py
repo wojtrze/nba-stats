@@ -6,6 +6,7 @@ import pandas as pd
 
 import fetch_loop
 import fetch_schedule
+from espn_scraper.storage import load_snapshot
 from fetch_schedule import due, night_slots
 
 UTC = timezone.utc
@@ -74,10 +75,10 @@ def test_quotes_record_only_changes_and_withdrawals(tmp_path, monkeypatch):
     assert fetch_loop.save_quotes(offers(1.9), '2026-11-02T22:20:00Z', 'T-40')['prop_quotes'] == 0
     counts = fetch_loop.save_quotes(offers(2.0, also_ast=False), '2026-11-02T22:40:00Z', 'T-20')
     assert counts['prop_quotes'] == 2                                   # PTS repriced, AST withdrawn
-    quotes = pd.read_csv(os.path.join('data', '2026', 'superbet_prop_quotes.csv'))
+    quotes = load_snapshot('superbet_prop_quotes')
     last = quotes[quotes['fetched_at'] == '2026-11-02T22:40:00Z'].set_index('bet_type')
     assert last.loc['PTS', 'over_odds'] == 2.0 and pd.isna(last.loc['AST', 'over_odds'])
-    fetches = pd.read_csv(os.path.join('data', '2026', 'superbet_event_fetches.csv'))
+    fetches = load_snapshot('superbet_event_fetches')
     assert list(fetches['run_kind']) == ['T-60', 'T-40', 'T-20']        # every read is on record, changed or not
 
 

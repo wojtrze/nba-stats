@@ -9,7 +9,7 @@ from core.data import LAST_FETCH, clear_live, game_odds, lineups, props, rotowir
 from core.state import language
 from core.ui import page_header
 from espn_scraper import CURRENT_SEASON, SEASONS
-from espn_scraper.storage import snapshot_file
+from espn_scraper.storage import load_snapshot, snapshot_dir, snapshot_exists
 from glossary import column_config
 from i18n import t
 from metrics import score_check
@@ -241,8 +241,8 @@ def schedule_card():
             st.warning(t('dc.schedule_blocked', lang, when=f"{pd.Timestamp(until).tz_convert(freshness.PL):%H:%M}"))
         st.caption(t('dc.schedule_budget', lang, n=requests_today(superbet_fetcher.HOST),
                      budget=DAILY_REQUEST_BUDGET))
-        reads = snapshot_file(CURRENT_SEASON, 'superbet_event_fetches')
-        cover = close_coverage(pd.read_csv(reads), pd.Timestamp.now(tz='UTC')) if os.path.exists(reads) else None
+        reads = load_snapshot('superbet_event_fetches')
+        cover = close_coverage(reads, pd.Timestamp.now(tz='UTC')) if len(reads) else None
         if cover:
             st.caption(t('dc.schedule_closes', lang, night=f"{cover['night']:%d.%m}", n=cover['valid'],
                          games=cover['games'], minutes=CLOSE_MAX_AGE_MIN))
@@ -261,13 +261,11 @@ def _collection(stamp: str):
     `stamp` (the run log's size and the hour) refreshes it."""
     import fetch_loop
     from daily_snapshot import RUN_LOG
-    reads_path = snapshot_file(CURRENT_SEASON, 'superbet_event_fetches')
-    props_path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    if not (os.path.exists(reads_path) and os.path.exists(RUN_LOG)):
+    if not (snapshot_exists('superbet_event_fetches') and os.path.exists(RUN_LOG)):
         return None
-    reads = pd.read_csv(reads_path)
-    known = pd.read_csv(props_path, usecols=['event_id', 'start_time']).drop_duplicates() \
-        if os.path.exists(props_path) else reads[['event_id', 'start_time']]
+    reads = load_snapshot('superbet_event_fetches')
+    known = load_snapshot('superbet_props', columns=['event_id', 'start_time']).drop_duplicates() \
+        if snapshot_exists('superbet_props') else reads[['event_id', 'start_time']]
     report = collection_report(reads, known, pd.read_csv(RUN_LOG), pd.Timestamp.now(tz='UTC'))
     if report and report['gaps']:
         events = power_events.sleep_events(report['gaps'][0][0] - pd.Timedelta(hours=2))
@@ -380,8 +378,8 @@ with stored_tab:
                  column_config=column_config(seasons.columns, lang=lang, context='data'))
     rows = []
     for name in ['superbet_props', 'superbet_game_odds', 'rotowire_lineups']:
-        path = snapshot_file(CURRENT_SEASON, name)
-        fetched = pd.read_csv(path, usecols=['fetched_at'])['fetched_at'] if os.path.exists(path) else pd.Series()
+        path = snapshot_dir(CURRENT_SEASON, name)
+        fetched = load_snapshot(name, columns=['fetched_at'])['fetched_at']
         rows.append({'file': path, 'rows': len(fetched), 'snapshots': fetched.nunique(),
                      'first': fetched.min() if len(fetched) else None, 'last': fetched.max() if len(fetched) else None})
     snapshots = pd.DataFrame(rows)

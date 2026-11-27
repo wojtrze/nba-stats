@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 
@@ -9,7 +8,7 @@ from loaders import (SUPERBET_COOLDOWN, clear_rotowire, games, name_resolver, pl
                      reload_superbet_snapshot, rotowire_lineups, season_label, season_status, snapshot_history,
                      superbet_wait, today_props)
 from espn_scraper import CURRENT_SEASON
-from espn_scraper.storage import snapshot_file
+from espn_scraper.storage import load_snapshot, snapshot_dir, snapshot_exists
 from glossary import column_config
 from metrics import score_check
 
@@ -33,9 +32,9 @@ if st.button(f"Update stats for {season_label(CURRENT_SEASON)}", type="primary")
 st.subheader("RotoWire & Superbet snapshots")
 rows = []
 for name in ['rotowire_lineups', 'superbet_props', 'superbet_game_odds']:
-    path = snapshot_file(CURRENT_SEASON, name)
-    if os.path.exists(path):
-        fetched = pd.read_csv(path, usecols=['fetched_at'])['fetched_at']
+    path = snapshot_dir(CURRENT_SEASON, name)
+    if snapshot_exists(name):
+        fetched = load_snapshot(name, columns=['fetched_at'])['fetched_at']
         rows.append({'file': path, 'rows': len(fetched), 'snapshots': fetched.nunique(), 'last': fetched.max()})
     else:
         rows.append({'file': path, 'rows': 0, 'snapshots': 0, 'last': None})

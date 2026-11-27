@@ -269,14 +269,14 @@ def superbet_components(refresh: bool = False) -> pd.DataFrame:
     that fetch (nightly.recompute_props, full table) and settled. Saved as superbet_props_components.csv (with
     model_version) and reused while the model version and the lines are the same."""
     from espn_scraper import CURRENT_SEASON, SEASONS
-    from espn_scraper.storage import load_games, load_player_gamelogs, read_snapshot, snapshot_file
+    from espn_scraper.storage import load_games, load_player_gamelogs, load_snapshot, snapshot_file
     from models import MODEL_VERSION, prepare_logs
     from name_resolver import NameResolver
     from nightly import et_night, lineups_before_tip, recompute_props
     from tracking import settle_props
 
     cache = snapshot_file(CURRENT_SEASON, 'superbet_props_components')
-    snaps = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_props'))
+    snaps = load_snapshot('superbet_props')
     last = last_pretip_lines(snaps)
     if not refresh and os.path.exists(cache):
         saved = pd.read_csv(cache, parse_dates=['game_date'])
@@ -286,8 +286,8 @@ def superbet_components(refresh: bool = False) -> pd.DataFrame:
     games = load_games(sorted(SEASONS))
     resolver = NameResolver(logs)
     lines = resolver.add_ids(last.drop(columns=['player_id_ESPN'], errors='ignore'), team_cols=('home', 'away'))
-    rotowire = resolver.add_ids(pd.read_csv(snapshot_file(CURRENT_SEASON, 'rotowire_lineups')))
-    odds = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))
+    rotowire = resolver.add_ids(load_snapshot('rotowire_lineups', display_names=False))
+    odds = load_snapshot('superbet_game_odds')
     priced = []
     for (fetched_at, night), rows in lines.groupby(['fetched_at', et_night(lines['start_time'])]):
         lineups = lineups_before_tip(rotowire, night, pd.Timestamp(fetched_at) + pd.Timedelta(seconds=1))

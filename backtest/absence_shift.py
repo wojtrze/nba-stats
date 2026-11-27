@@ -179,12 +179,11 @@ def main():
     parser.add_argument('--d', default=D, help="D, the last recognition night (default %(default)s)")
     parser.add_argument('--skip-2022', action='store_true', help="leave out the 2022/23 history (slow)")
     args = parser.parse_args()
-    from espn_scraper import CURRENT_SEASON, SEASONS
-    from espn_scraper.storage import load_player_gamelogs, read_snapshot, snapshot_file
+    from espn_scraper import SEASONS
+    from espn_scraper.storage import load_player_gamelogs, load_snapshot
     from name_resolver import NameResolver
     from tracking import closing_props
-    read = lambda name: read_snapshot(snapshot_file(CURRENT_SEASON, name)) \
-        if os.path.exists(snapshot_file(CURRENT_SEASON, name)) else pd.DataFrame()
+    read = load_snapshot
 
     history = None
     if not args.skip_2022 and os.path.exists(LINES_2022):

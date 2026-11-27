@@ -39,9 +39,9 @@ from typing import Callable, Dict, List, Optional
 import pandas as pd
 
 import fetch_schedule
-from espn_scraper import CURRENT_SEASON
-from espn_scraper.storage import snapshot_file
-from safe_io import append_csv, atomic_write_text, locked
+from espn_scraper.storage import (append_snapshot, dataset_lock, latest_fetch, latest_snapshot, load_snapshot,
+                                  snapshot_exists)
+from safe_io import atomic_write_text, locked
 
 log = logging.getLogger(__name__)
 
@@ -72,10 +72,10 @@ def _stamp(at: datetime) -> str:
 
 # --- quotes: only what changed ---
 
-def _last_quotes(path: str, key: List[str], events) -> pd.DataFrame:
-    if not os.path.exists(path):
-        return pd.DataFrame()
-    saved = pd.read_csv(path)
+def _last_quotes(name: str, key: List[str], events) -> pd.DataFrame:
+    saved = load_snapshot(name, display_names=False)
+    if saved.empty:
+        return saved
     saved = saved[saved['event_id'].isin(events)]
     return saved.sort_values('fetched_at', kind='stable').drop_duplicates(key, keep='last')
 
@@ -114,19 +114,17 @@ def save_quotes(offers: Dict, fetched_at: str, run_kind: str) -> Dict[str, int]:
     counts = {}
     for name, new, key, columns in (('superbet_prop_quotes', props, PROP_QUOTE_KEY, PROP_QUOTE_COLUMNS),
                                     ('superbet_game_quotes', games, GAME_QUOTE_KEY, GAME_QUOTE_COLUMNS)):
-        path = snapshot_file(CURRENT_SEASON, name)
         values = [c for c in columns[1:] if c not in key]
-        with locked(path):
-            rows = _changes(new, _last_quotes(path, key, read), key, values)
+        with dataset_lock(name):
+            rows = _changes(new, _last_quotes(name, key, read), key, values)
             rows.insert(0, 'fetched_at', fetched_at)
-            counts[name.replace('superbet_', '')] = append_csv(rows[columns], path, columns) if len(rows) else 0
+            counts[name.replace('superbet_', '')] = append_snapshot(name, rows[columns]) if len(rows) else 0
     starts = {e['event_id']: e['start_time'] for e in offers.get('events') or []}
     per_event = pd.DataFrame([{'fetched_at': fetched_at, 'event_id': e, 'start_time': starts.get(e),
                                'n_props': int((props['event_id'] == e).sum()),
                                'n_game_odds': int((games['event_id'] == e).sum()), 'run_kind': run_kind}
                               for e in sorted(read)], columns=EVENT_FETCH_COLUMNS)
-    counts['event_fetches'] = append_csv(per_event, snapshot_file(CURRENT_SEASON, 'superbet_event_fetches'),
-                                         EVENT_FETCH_COLUMNS)
+    counts['event_fetches'] = append_snapshot('superbet_event_fetches', per_event)
     return counts
 
 
@@ -134,20 +132,13 @@ def save_quotes(offers: Dict, fetched_at: str, run_kind: str) -> Dict[str, int]:
 
 def _saved_lineups_at() -> Optional[str]:
     """When the latest saved RotoWire version was fetched (None without one)."""
-    path = snapshot_file(CURRENT_SEASON, 'rotowire_lineups')
-    if not os.path.exists(path):
-        return None
-    last = pd.read_csv(path, usecols=['fetched_at'])['fetched_at'].max()
-    return last if isinstance(last, str) else None
+    return latest_fetch('rotowire_lineups')
 
 
 def _saved_lineups() -> pd.DataFrame:
     """The latest saved RotoWire version (when a live fetch failed), without fetched_at."""
-    path = snapshot_file(CURRENT_SEASON, 'rotowire_lineups')
-    if not os.path.exists(path):
-        return pd.DataFrame()
-    saved = pd.read_csv(path)
-    return saved[saved['fetched_at'] == saved['fetched_at'].max()].drop(columns='fetched_at')
+    saved = latest_snapshot('rotowire_lineups', display_names=False)
+    return saved.drop(columns='fetched_at') if len(saved) else pd.DataFrame()
 
 
 def run_slot(slot: fetch_schedule.Slot, now: Callable[[], datetime] = _utc_now, progress: Optional[Dict] = None,
@@ -302,10 +293,10 @@ def _last_scheduled_run() -> Optional[datetime]:
 
 def _saved_tips() -> List:
     """(event_id, tip-off) of the games the scheduled fetches have read, for slots of games no longer listed."""
-    path = snapshot_file(CURRENT_SEASON, 'superbet_event_fetches')
-    if not os.path.exists(path):
+    if not snapshot_exists('superbet_event_fetches'):
         return []
-    saved = pd.read_csv(path, usecols=['event_id', 'start_time']).dropna().drop_duplicates('event_id', keep='last')
+    saved = load_snapshot('superbet_event_fetches', columns=['event_id', 'start_time']).dropna() \
+        .drop_duplicates('event_id', keep='last')
     return [(e, pd.Timestamp(t).to_pydatetime()) for e, t in zip(saved['event_id'], saved['start_time'])]
 
 
@@ -388,11 +379,8 @@ def _keep_awake(on: bool):
 
 
 def _snapshot_age(now: datetime) -> timedelta:
-    path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    if not os.path.exists(path):
-        return timedelta.max
-    last = pd.read_csv(path, usecols=['fetched_at'])['fetched_at'].max()
-    return now - pd.Timestamp(last).to_pydatetime() if isinstance(last, str) else timedelta.max
+    last = latest_fetch('superbet_props')
+    return now - pd.Timestamp(last).to_pydatetime() if last else timedelta.max
 
 
 def _list_events() -> List[Dict]:
@@ -492,10 +480,9 @@ def known_tips() -> List:
     """(event_id, tip-off) of the games in the latest saved snapshot and the scheduled reads, without contacting
     anything."""
     tips = []
-    path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    if os.path.exists(path):
-        saved = pd.read_csv(path, usecols=['fetched_at', 'event_id', 'start_time'])
-        latest = saved[saved['fetched_at'] == saved['fetched_at'].max()].drop_duplicates('event_id')
+    latest = latest_snapshot('superbet_props', columns=['event_id', 'start_time'], display_names=False)
+    if len(latest):
+        latest = latest.drop_duplicates('event_id')
         tips = _tips([{'event_id': e, 'start_time': s} for e, s in zip(latest['event_id'], latest['start_time'])])
     return list({e: t for e, t in tips + _saved_tips()}.items())
 

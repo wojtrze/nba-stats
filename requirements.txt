@@ -1,5 +1,7 @@
 requests~=2.34.2
 pandas~=3.0.6
+# the snapshot datasets are Parquet files (espn_scraper/storage.py)
+pyarrow~=21.0
 numpy~=2.4.6
 beautifulsoup4~=4.15.0
 pandasgui~=0.2.15

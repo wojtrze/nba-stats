@@ -9,8 +9,14 @@ import daily_snapshot
 import models
 import name_resolver
 import nightly
+from espn_scraper.storage import append_snapshot, load_snapshot, snapshot_dir, write_replay
 
-PATH = os.path.join('data', '2026', 'superbet_props.csv')
+FOLDER = os.path.join('data', '2026', 'superbet_props')
+
+
+def _record_bytes():
+    """Every byte of the saved record (superbet_props), file by file."""
+    return {f: open(os.path.join(FOLDER, f), 'rb').read() for f in sorted(os.listdir(FOLDER))}
 
 
 @pytest.fixture
@@ -27,27 +33,29 @@ def _line(fetched, pid, name='A', start='2026-10-21T23:30:00Z', **kw):
 
 
 def test_a_new_column_keeps_the_saved_rows_as_they_were(data_dir):
-    with open(PATH, 'w') as f:
-        f.write("fetched_at,name,player_id_ESPN\n2026-10-20T10:00:00Z,A,4397475\n2026-10-20T10:00:00Z,B,\n")
-    new = pd.DataFrame([{'name': 'C', 'player_id_ESPN': 7, 'signal': ''}])
+    append_snapshot('superbet_props', pd.DataFrame({'fetched_at': ['2026-10-20T10:00:00Z'] * 2, 'name': ['A', 'B'],
+                                                    'player_id_ESPN': [4397475, None]}))
+    before = _record_bytes()
+    new = pd.DataFrame([{'name': 'C', 'player_id_ESPN': 7, 'signal': 'x'}])
     assert daily_snapshot._append('superbet_props', new, '2026-10-21T10:00:00Z') == 1
-    with open(PATH) as f:
-        text = f.read().splitlines()
-    assert text[0] == 'fetched_at,name,player_id_ESPN,signal'
-    assert text[1:3] == ['2026-10-20T10:00:00Z,A,4397475,', '2026-10-20T10:00:00Z,B,,']
+    after = _record_bytes()
+    assert after['2026-10-20.parquet'] == before['2026-10-20.parquet']      # an earlier day is never rewritten
+    saved = load_snapshot('superbet_props')
+    assert list(saved.columns) == ['fetched_at', 'name', 'player_id_ESPN', 'signal']
+    assert saved['name'].tolist() == ['A', 'B', 'C'] and saved['player_id_ESPN'].tolist()[::2] == [4397475, 7]
+    assert pd.isna(saved.loc[1, 'player_id_ESPN']) and saved['signal'].isna().tolist() == [True, True, False]
 
 
 def test_reprice_writes_a_replay_and_leaves_the_record_alone(data_dir, monkeypatch):
     saved = pd.DataFrame([_line('2026-10-21T10:00:00Z', 4397475.0, pick='Under', model_pct=51.0, signal='🔴'),
                           _line('2026-10-21T10:00:00Z', None, name='Nobody'),
                           _line('2026-10-21T20:00:00Z', 4397475.0, pick='Under', model_pct=52.0)])
-    saved.to_csv(PATH, index=False)
-    with open(PATH, 'rb') as f:
-        record = f.read()
+    append_snapshot('superbet_props', saved)
+    record = _record_bytes()
     odds = pd.DataFrame([{'fetched_at': f, 'event_id': 1, 'market': 'ML'} for f in saved['fetched_at'].unique()])
-    odds.to_csv(os.path.join('data', '2026', 'superbet_game_odds.csv'), index=False)
-    pd.DataFrame([{'fetched_at': '2026-10-21T09:00:00Z', 'game_date': '2026-10-21', 'team': 'bos', 'name': 'X'}]) \
-        .to_csv(os.path.join('data', '2026', 'rotowire_lineups.csv'), index=False)
+    append_snapshot('superbet_game_odds', odds)
+    append_snapshot('rotowire_lineups', pd.DataFrame([{'fetched_at': '2026-10-21T09:00:00Z', 'game_date': '2026-10-21',
+                                                       'team': 'bos', 'name': 'X'}]))
 
     class Resolver:
         def __init__(self, logs):
@@ -73,26 +81,24 @@ def test_reprice_writes_a_replay_and_leaves_the_record_alone(data_dir, monkeypat
 
     assert daily_snapshot.reprice_snapshots() == 3
     assert calls == [('2026-10-21T10:00:00Z', 1, 1, '2026-10-21'), ('2026-10-21T20:00:00Z', 1, 1, '2026-10-21')]
-    with open(PATH, 'rb') as f:
-        assert f.read() == record   # what each fetch showed is never priced again in place
-    out = pd.read_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), dtype=str, keep_default_na=False)
-    assert out['player_id_ESPN'].tolist() == ['4397475', '', '4397475']
+    assert _record_bytes() == record   # what each fetch showed is never priced again in place
+    out = load_snapshot('superbet_props_replay', display_names=False)
+    assert out['player_id_ESPN'].tolist()[::2] == [4397475, 4397475] and pd.isna(out.loc[1, 'player_id_ESPN'])
     assert out['pick'].tolist() == ['Over'] * 3 and out['signal'].tolist() == ['🟢'] * 3
-    assert out['raw_over_pct'].tolist() == ['63.5'] * 3 and out['market_over_pct'].tolist() == ['49.2'] * 3
+    assert out['raw_over_pct'].tolist() == [63.5] * 3 and out['market_over_pct'].tolist() == [49.2] * 3
     assert out['fetched_at'].tolist() == saved['fetched_at'].tolist() and out['name'].tolist() == ['A', 'Nobody', 'A']
-    assert out['line'].tolist() == ['20.5'] * 3 and out['under_odds'].tolist() == ['1.85'] * 3
+    assert out['line'].tolist() == [20.5] * 3 and out['under_odds'].tolist() == [1.85] * 3
     assert out['prediction_origin'].tolist() == ['historical_replay'] * 3
     assert out['model_version'].tolist() == [nightly.MODEL_VERSION] * 3
     assert out['calibration_id'].tolist() == ['none'] * 3   # no calibration file in the test folder
 
     # another model's replay is kept next to this one's, which a second reprice replaces
-    out.assign(model_version='old', raw_over_pct='70.0').to_csv(
-        os.path.join('data', '2026', 'superbet_props_replay.csv'), index=False)
-    pd.concat([pd.read_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), dtype=str), out])         .to_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), index=False)
+    write_replay('old', out.assign(model_version='old', raw_over_pct=70.0))
     assert daily_snapshot.reprice_snapshots() == 3
-    both = pd.read_csv(os.path.join('data', '2026', 'superbet_props_replay.csv'), dtype=str, keep_default_na=False)
+    both = load_snapshot('superbet_props_replay', display_names=False)
     assert both.groupby('model_version').size().to_dict() == {nightly.MODEL_VERSION: 3, 'old': 3}
-    assert set(both.loc[both['model_version'] == 'old', 'raw_over_pct']) == {'70.0'}
+    assert set(both.loc[both['model_version'] == 'old', 'raw_over_pct']) == {70.0}
+    assert sorted(os.listdir(snapshot_dir(2026, 'superbet_props_replay'))) == sorted([nightly.MODEL_VERSION, 'old'])
 
 
 def test_lineage_names_the_model_and_the_calibration(data_dir):
