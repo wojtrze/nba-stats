@@ -152,12 +152,11 @@ def main():
                         % MIN_JUDGED_NIGHTS)
     args = parser.parse_args()
     from backtest.calibrate import _superbet_sources
-    from espn_scraper import CURRENT_SEASON, SEASONS
-    from espn_scraper.storage import load_games, load_player_gamelogs, read_snapshot, snapshot_file
+    from espn_scraper import SEASONS
+    from espn_scraper.storage import load_games, load_player_gamelogs, load_snapshot
     from models import prepare_logs
     from tracking import closing_props
-    read = lambda name: read_snapshot(snapshot_file(CURRENT_SEASON, name)) \
-        if os.path.exists(snapshot_file(CURRENT_SEASON, name)) else pd.DataFrame()
+    read = load_snapshot
     t = _superbet_sources(prepare_logs(load_player_gamelogs(sorted(SEASONS))), load_games(sorted(SEASONS)))
     text = report(t, args.until, closing_props(read('superbet_prop_quotes'), read('superbet_event_fetches')))
     atomic_write_text(REPORT_FILE, text)

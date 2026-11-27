@@ -27,8 +27,8 @@ def data_dir(tmp_path, monkeypatch):
 
 
 def _saved(name):
-    path = os.path.join('data', '2026', f'{name}.csv')
-    return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame()
+    from espn_scraper.storage import load_snapshot
+    return load_snapshot(name, display_names=False)
 
 
 def test_every_fetch_is_saved(data_dir, monkeypatch):

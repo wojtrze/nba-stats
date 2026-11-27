@@ -31,16 +31,16 @@ os.chdir(ROOT)
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from espn_scraper import CURRENT_SEASON, SEASONS  # noqa: E402
-from espn_scraper.storage import load_games, load_player_gamelogs, read_snapshot, snapshot_file  # noqa: E402
+from espn_scraper import SEASONS  # noqa: E402
+from espn_scraper.storage import load_games, load_player_gamelogs, load_snapshot  # noqa: E402
 
 
 def load():
     from models import prepare_logs
     from name_resolver import NameResolver
-    props = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_props'))
-    odds = read_snapshot(snapshot_file(CURRENT_SEASON, 'superbet_game_odds'))
-    rotowire = pd.read_csv(snapshot_file(CURRENT_SEASON, 'rotowire_lineups'))
+    props = load_snapshot('superbet_props')
+    odds = load_snapshot('superbet_game_odds')
+    rotowire = load_snapshot('rotowire_lineups', display_names=False)
     logs = prepare_logs(load_player_gamelogs(sorted(SEASONS)))
     games = load_games(sorted(SEASONS))
     resolver = NameResolver(logs)

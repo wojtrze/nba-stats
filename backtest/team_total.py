@@ -224,11 +224,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument('--d', default=D, help="D, the last recognition night (default %(default)s)")
     args = parser.parse_args()
-    from espn_scraper import CURRENT_SEASON
-    from espn_scraper.storage import read_snapshot, snapshot_file
+    from espn_scraper.storage import load_snapshot
     from tracking import closing_props
-    read = lambda name: read_snapshot(snapshot_file(CURRENT_SEASON, name)) \
-        if os.path.exists(snapshot_file(CURRENT_SEASON, name)) else pd.DataFrame()
+    read = load_snapshot
     x = load(read)
     out = detect(x['offered'], x['games'], x['logs'], x['versions'], x['teams'])
     log.info("%d team reads, %d PTS line reads", len(out['teams']), len(out['lines']))

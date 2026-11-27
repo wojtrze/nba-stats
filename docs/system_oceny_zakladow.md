@@ -40,8 +40,8 @@ rozwoju: poprawek modelu, przejrzystości interfejsu i nowych funkcji.*
 | Źródło | Co dostarcza | Jak często | Plik |
 |---|---|---|---|
 | **ESPN** (JSON API) | Każdy mecz sezonu i linijka statystyk każdego zawodnika (PTS, REB, AST, 3PM, MIN, FGA, FTA, TO, PF, STL, BLK, +/-, pozycja, czy w pierwszej piątce) | rano (scraper dopisuje tylko nowe mecze) | `data/<sezon>/player_gamelogs.csv`, `games.csv` |
-| **Superbet** | Linie zawodników z kursami Over i Under, rynki meczowe ze wszystkimi liniami | harmonogram w działającym dashboardzie v2 (co godzinę oraz T−60/40/20/10/5 min przed każdym meczem) i na żądanie (przycisk, najczęściej co 5 min) | `superbet_props.csv`, `superbet_game_odds.csv` (snapshot z wyceną), `superbet_prop_quotes.csv`, `superbet_game_quotes.csv`, `superbet_event_fetches.csv` (notowania, 8.1) |
-| **RotoWire** | Przewidywane i potwierdzone piątki, gracze „may not play” z szansą gry (%) i rodzajem urazu | przy każdym pobraniu z harmonogramu i na żywo co 30 min, zapis przy każdej zmianie | `rotowire_lineups.csv` |
+| **Superbet** | Linie zawodników z kursami Over i Under, rynki meczowe ze wszystkimi liniami | harmonogram w działającym dashboardzie v2 (co godzinę oraz T−60/40/20/10/5 min przed każdym meczem) i na żądanie (przycisk, najczęściej co 5 min) | `superbet_props/`, `superbet_game_odds/` (snapshot z wyceną), `superbet_prop_quotes/`, `superbet_game_quotes/`, `superbet_event_fetches/` (notowania, 8.1); w każdym folderze jeden plik Parquet na dzień UTC (`espn_scraper/storage.py`) |
+| **RotoWire** | Przewidywane i potwierdzone piątki, gracze „may not play” z szansą gry (%) i rodzajem urazu | przy każdym pobraniu z harmonogramu i na żywo co 30 min, zapis przy każdej zmianie | `rotowire_lineups/` |
 | Historia | Linie Unibet 2022/23 (~40 000) z wynikami, dzienniki graczy z lat 2022–2026 | statycznie | `offers_resolved.csv`, `2022-players-logs.csv` |
 
 Każdy pobrany zestaw kursów zapisuje się **razem z wyceną modelu z tamtej chwili** (typ, szansa, przewaga, sygnał,
@@ -522,9 +522,9 @@ nie są edytowalne.
   się w jeden; termin spóźniony o ponad 3 min (uśpiony komputer) jest pomijany i logowany, a nie nadrabiany;
 - przy starcie programu jedno pobranie wszystkich meczów (z wyceną, gdy snapshot jest starszy niż godzina).
 
-**Co się zapisuje.** Każde pobranie: notowania tylko zmienionych linii (`superbet_prop_quotes.csv`,
-`superbet_game_quotes.csv`; wycofana linia = wiersz z pustymi kursami) i wiersz na każdy odczytany mecz
-(`superbet_event_fetches.csv`), żeby „bez zmian” odróżnić od „nie odczytano”. Pełny snapshot z wyceną (czytany przez
+**Co się zapisuje.** Każde pobranie: notowania tylko zmienionych linii (`superbet_prop_quotes`,
+`superbet_game_quotes`; wycofana linia = wiersz z pustymi kursami) i wiersz na każdy odczytany mecz
+(`superbet_event_fetches`), żeby „bez zmian” odróżnić od „nie odczytano”. Pełny snapshot z wyceną (czytany przez
 strony) co 2 godziny i w T−60. Każdy przebieg trafia do `data/run_log.csv` (job `quotes` lub `snapshot`,
 `scheduled T-5` itd., z liczbą zapytań, kodami odpowiedzi i ponowieniami).
 

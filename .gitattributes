@@ -1,0 +1,2 @@
+# the snapshot datasets (espn_scraper/storage.py): binary, never diffed or line-ending converted
+*.parquet binary

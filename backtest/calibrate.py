@@ -387,11 +387,9 @@ def calibrate(sources: Dict[str, pd.DataFrame], out: str = CALIBRATION_FILE,
 def _superbet_sources(logs: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
     """superbet_lines of every saved line priced by the current model (nightly.priced_by)."""
     from espn_scraper import CURRENT_SEASON
-    from espn_scraper.storage import snapshot_file
+    from espn_scraper.storage import load_snapshot
     from nightly import priced_by
-    def read(name):
-        path = snapshot_file(CURRENT_SEASON, name)
-        return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame()
+    read = lambda name: load_snapshot(name, CURRENT_SEASON, display_names=False)
     return superbet_lines(priced_by(read('superbet_props'), read('superbet_props_replay')), logs, games)
 
 
@@ -399,10 +397,10 @@ def _game_sources(games: pd.DataFrame) -> Optional[pd.DataFrame]:
     """game_lines of the saved Superbet game odds; None when they can't be read or settled (the props calibration
     goes on without the game report)."""
     from espn_scraper import CURRENT_SEASON
-    from espn_scraper.storage import read_snapshot, snapshot_file
-    path = snapshot_file(CURRENT_SEASON, 'superbet_game_odds')
+    from espn_scraper.storage import load_snapshot, snapshot_exists
     try:
-        return game_lines(read_snapshot(path), games) if os.path.exists(path) else pd.DataFrame()
+        return game_lines(load_snapshot('superbet_game_odds', CURRENT_SEASON), games) \
+            if snapshot_exists('superbet_game_odds', CURRENT_SEASON) else pd.DataFrame()
     except Exception as e:
         log.warning("Game markets left out of the report: %s", e)
         return None

@@ -1,6 +1,5 @@
 """Cached data loading for the dashboard."""
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from typing import Dict, Optional
@@ -10,7 +9,8 @@ import streamlit as st
 
 from espn_scraper import CURRENT_SEASON, SEASONS
 from daily_snapshot import SUPERBET_COOLDOWN, claim_superbet, superbet_wait  # noqa: F401  (pages import them here)
-from espn_scraper.storage import checked_through, load_games, load_player_gamelogs, read_snapshot, snapshot_file
+from espn_scraper.storage import (checked_through, latest_fetch, latest_snapshot, load_games, load_player_gamelogs,
+                                  load_snapshot, snapshot_signature)
 from name_resolver import NameResolver
 
 from models import DEFAULT_SEASON_TYPES, prepare_logs
@@ -49,18 +49,22 @@ def name_resolver() -> NameResolver:
 
 def _latest_snapshot(name: str) -> pd.DataFrame:
     """The last fetch stored by daily_snapshot.py, used when a live source fails."""
-    path = snapshot_file(CURRENT_SEASON, name)
-    if not os.path.exists(path):
-        return pd.DataFrame()
-    df = read_snapshot(path)
-    return df[df['fetched_at'] == df['fetched_at'].max()].drop(columns='fetched_at')
+    df = latest_snapshot(name)
+    return df.drop(columns='fetched_at') if len(df) else pd.DataFrame()
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=24)
+def _snapshot_history(name: str, signature) -> pd.DataFrame:
+    return load_snapshot(name)
+
+
 def snapshot_history(name: str) -> pd.DataFrame:
-    """Every fetch stored by daily_snapshot.py (empty if none), for line movement and settling bets."""
-    path = snapshot_file(CURRENT_SEASON, name)
-    return read_snapshot(path) if os.path.exists(path) else pd.DataFrame()
+    """Every fetch stored by daily_snapshot.py (empty if none), for line movement and settling bets. Cached until
+    the dataset changes (storage.snapshot_signature): a new fetch is read at once, nothing is read again before."""
+    return _snapshot_history(name, snapshot_signature(name, CURRENT_SEASON))
+
+
+snapshot_history.clear = _snapshot_history.clear
 
 
 # --- the run log: every scraper run and Superbet fetch (daily_snapshot.log_run, shared with the scheduled fetches) ---
@@ -87,22 +91,20 @@ def _superbet_store() -> Dict:
     return {}
 
 
-def _snapshot_mtime() -> float:
-    path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    return os.path.getmtime(path) if os.path.exists(path) else 0.0
+def _snapshot_mtime():
+    return snapshot_signature('superbet_props', CURRENT_SEASON)
 
 
-@st.cache_data(show_spinner="Reading the latest Superbet fetch...")
-def _superbet_snapshot(mtime: float) -> Dict:
+@st.cache_data(show_spinner="Reading the latest Superbet fetch...", max_entries=4)
+def _superbet_snapshot(mtime) -> Dict:
     """Every line and game odd of the newest fetch (props with ESPN ids) and when it was fetched; mtime is the
-    file's, so a new fetch is read again."""
-    path = snapshot_file(CURRENT_SEASON, 'superbet_props')
-    fetched = pd.read_csv(path, usecols=['fetched_at'])['fetched_at'] if os.path.exists(path) else pd.Series()
+    dataset's signature, so a new fetch is read again."""
+    fetched = latest_fetch('superbet_props', CURRENT_SEASON)
     props = _latest_snapshot('superbet_props').drop(columns=_MODEL_COLUMNS, errors='ignore')
     if not props.empty:
         props = name_resolver().add_ids(props, team_cols=('home', 'away'))
     return {'props': props, 'game_odds': _latest_snapshot('superbet_game_odds'),
-            'fetched_at': pd.to_datetime(fetched.max(), utc=True).to_pydatetime() if len(fetched) else None}
+            'fetched_at': pd.to_datetime(fetched, utc=True).to_pydatetime() if fetched else None}
 
 
 def superbet_offers() -> dict:
@@ -203,7 +205,7 @@ LINEUP_COLUMNS = ['game_date', 'tip_et', 'away', 'home', 'team', 'side', 'lineup
 @st.cache_data(ttl=1800, show_spinner="Checking RotoWire lineups...")
 def fetch_rotowire() -> Dict:
     """RotoWire's expected/confirmed lineups for today, fetched live at most every 30 minutes for both
-    dashboards. A live fetch is saved to rotowire_lineups.csv when it's the day's first or something changed
+    dashboards. A live fetch is saved to rotowire_lineups when it's the day's first or something changed
     (daily_snapshot.save_lineups_if_changed), and logged. When the page can't be read, the latest saved version
     is used. Returns 'lineups' (with ESPN ids; empty with the usual columns when there's nothing), 'live',
     'fetched_at', 'error' and 'saved' (what was saved, '' when nothing)."""
